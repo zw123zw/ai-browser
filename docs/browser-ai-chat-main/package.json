@@ -1,0 +1,57 @@
+{
+  "name": "browser-ai-chat",
+  "description": "AI Chat Browser Extension",
+  "private": true,
+  "version": "0.1.1",
+  "type": "module",
+  "author": {
+    "name": "zwf1110",
+    "url": "https://github.com/zwf1110"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/zwf1110/browser-ai-chat#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zwf1110/browser-ai-chat.git"
+  },
+  "bugs": {
+    "url": "https://github.com/zwf1110/browser-ai-chat/issues"
+  },
+  "keywords": [
+    "browser-extension",
+    "chrome-extension",
+    "ai",
+    "chat",
+    "wxt",
+    "vue3",
+    "openai",
+    "manifest-v3"
+  ],
+  "scripts": {
+    "dev": "wxt",
+    "dev:firefox": "wxt -b firefox",
+    "build": "wxt build",
+    "build:firefox": "wxt build -b firefox",
+    "zip": "wxt zip",
+    "compile": "vue-tsc --noEmit",
+    "postinstall": "wxt prepare"
+  },
+  "dependencies": {
+    "vue": "^3.5.13",
+    "pinia": "^2.3.0",
+    "markdown-it": "^14.1.0",
+    "highlight.js": "^11.10.0",
+    "katex": "^0.16.11",
+    "markdown-it-katex": "^2.0.3",
+    "uuid": "^11.0.3"
+  },
+  "devDependencies": {
+    "@types/markdown-it": "^14.1.2",
+    "@types/uuid": "^10.0.0",
+    "@types/katex": "^0.16.7",
+    "@wxt-dev/module-vue": "^1.0.2",
+    "typescript": "^5.7.2",
+    "vue-tsc": "^2.1.10",
+    "wxt": "^0.19.21"
+  }
+}

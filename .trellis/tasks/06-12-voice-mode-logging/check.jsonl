@@ -1,0 +1,5 @@
+{"file": ".trellis/tasks/06-12-voice-mode-logging/prd.md", "reason": "验收标准对照：检查所有 Acceptance Criteria 是否满足"}
+{"file": "src/utils/logger.ts", "reason": "日志系统实现是否完整，级别/前缀/时间戳是否正确"}
+{"file": "src/voice/broadcast.ts", "reason": "TTS模块是否实现 speak/cancel，播报完成回调是否正确"}
+{"file": "src/voice/session.ts", "reason": "状态机是否覆盖完整流程，状态转换是否正确"}
+{"file": "entrypoints/content/components/VoicePanel.vue", "reason": "是否移除输入框，波纹动画是否生效，纯语音交互是否完整"}
