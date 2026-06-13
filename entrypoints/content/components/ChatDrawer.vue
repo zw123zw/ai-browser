@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, ref, onMounted, onUnmounted } from 'vue';
 import { useConversationsStore } from '@/src/stores/conversations';
 import { useSettingsStore } from '@/src/stores/settings';
 import { useToast } from '@/src/composables/useToast';
@@ -20,6 +20,43 @@ const showConfirm = ref(false);
 
 /** 当前模式：chat 或 voice */
 const activeMode = ref<'chat' | 'voice'>('chat');
+
+/* ---- 左侧拖拽调整宽度 ---- */
+const savedWidth = settingsStore.settings.drawerWidth;
+const drawerWidth = ref(savedWidth && savedWidth >= 380 ? savedWidth : 480);
+const MIN_WIDTH = 380;
+const MAX_WIDTH = typeof window !== 'undefined' ? window.innerWidth : 1920;
+let dragging = false;
+
+function onDragStart(e: MouseEvent) {
+  e.preventDefault();
+  dragging = true;
+  document.addEventListener('mousemove', onDragMove);
+  document.addEventListener('mouseup', onDragEnd);
+  document.body.style.cursor = 'col-resize';
+  document.body.style.userSelect = 'none';
+}
+
+function onDragMove(e: MouseEvent) {
+  if (!dragging) return;
+  const newWidth = Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, window.innerWidth - e.clientX));
+  drawerWidth.value = newWidth;
+}
+
+function onDragEnd() {
+  if (!dragging) return;
+  dragging = false;
+  document.removeEventListener('mousemove', onDragMove);
+  document.removeEventListener('mouseup', onDragEnd);
+  document.body.style.cursor = '';
+  document.body.style.userSelect = '';
+  settingsStore.update({ drawerWidth: drawerWidth.value });
+}
+
+onUnmounted(() => {
+  document.removeEventListener('mousemove', onDragMove);
+  document.removeEventListener('mouseup', onDragEnd);
+});
 
 /** 切换到语音模式 */
 function switchToVoice() {
@@ -46,7 +83,9 @@ const drawerClass = computed(() => ({ 'zwf-open': props.open }));
 
 <template>
   <div class="zwf-drawer-mask" />
-  <div :class="['zwf-drawer', drawerClass]" @click.stop>
+  <div :class="['zwf-drawer', drawerClass]" :style="{ width: drawerWidth + 'px' }" @click.stop>
+    <!-- 左侧拖拽条 -->
+    <div class="zwf-drag-handle" @mousedown="onDragStart" />
     <div class="zwf-drawer-header">
       <div class="zwf-header-left">
         <!-- 语音模式：返回按钮 + 标题 -->
@@ -143,5 +182,21 @@ const drawerClass = computed(() => ({ 'zwf-open': props.open }));
 .zwf-back-btn:hover {
   background: var(--zwf-bg-hover);
   color: var(--zwf-primary);
+}
+
+.zwf-drag-handle {
+  position: absolute;
+  top: 0;
+  left: -4px;
+  width: 8px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 1;
+}
+
+.zwf-drag-handle:hover,
+.zwf-drag-handle:active {
+  background: var(--zwf-primary);
+  opacity: 0.3;
 }
 </style>

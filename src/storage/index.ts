@@ -34,7 +34,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   apiFormat: localModels[0]?.apiFormat || 'open-chat',
   authField: localModels[0]?.authField || 'bearer',
   defaultModelId: localModels[0]?.id || '',
-  drawerWidth: 80,
+  drawerWidth: 480,
   primaryColor: '#4f46e5',
   theme: 'classic',
   shortcut: 'Ctrl+Shift+M',

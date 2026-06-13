@@ -28,7 +28,6 @@ function onMessage(msg: any) {
   if (msg?.type === 'zwf-toggle') toggle();
   // 接收其他标签页的抽屉状态同步
   if (msg?.type === 'zwf-drawer-sync') {
-    console.log('[App] 收到跨标签页抽屉状态同步:', msg.open);
     if (msg.open !== open.value) {
       syncingFromRemote = true;
       open.value = msg.open;
@@ -104,9 +103,7 @@ watch(
 let syncingFromRemote = false;
 watch(open, async (val) => {
   if (syncingFromRemote) return;
-  console.log('[App] 抽屉状态变化，写入 storage:', val);
   await drawerOpenStorage.setValue(val);
-  // 广播给其他标签页
   chrome.runtime?.sendMessage?.({ type: 'zwf-drawer-changed', open: val }).catch?.(() => {});
 });
 
@@ -123,11 +120,7 @@ onMounted(async () => {
   // 从持久化存储恢复抽屉展开状态（异步读取，确保从磁盘加载）
   try {
     const savedOpen = await drawerOpenStorage.getValue();
-    console.log('[App] 读取抽屉状态:', savedOpen);
-    if (savedOpen) {
-      open.value = true;
-      console.log('[App] 抽屉已恢复为展开状态');
-    }
+    if (savedOpen) open.value = true;
   } catch (error) {
     console.error('[App] 读取抽屉状态失败:', error);
   }
