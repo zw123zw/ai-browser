@@ -1,0 +1,41 @@
+✅ 1. ChromePilot（最稳、中文、全能，强推）功能：语音控制标签 / 切换 / 关闭、点击、填表、总结、AI 聊天，完全本机控制。
+商店直达（复制到地址栏）：
+plaintexthttps://chromewebstore.google.com/detail/chromepilot-ai-browser-agent/hdcehjaodheipickeopncehaikamghjk
+
+
+官网：https://chromepilot.org/
+中文指令例子：
+
+“切换到 B 站标签”
+“关闭当前标签”
+“打开新标签页”
+“滚动到页面底部”
+
+
+✅ 2. Do Browser（自然语言控制标签，国内好搜）功能：纯自然语言 / 语音控制浏览器，标签管理、点击、导航。
+商店直达：
+plaintexthttps://chromewebstore.google.com/detail/do-browser/hjcibkpfgnljonndnnanhkholafmgmip
+
+
+特点：Ctrl+K 一键呼出，中文识别强。
+✅ 3. LipSurf（老牌、纯语音、标签控制最成熟）功能：无 AI 也能语音切标签、关标签、滚动、播放暂停，简单稳定。
+商店直达：
+plaintexthttps://chromewebstore.google.com/detail/lipsurf/mipakcajhhkofmbmakkhknelgjckbip
+
+
+中文指令：
+
+“next tab”（下一个标签）
+“close tab”（关闭标签）
+“scroll down”（向下滚动）
+
+
+✅ 4. VoxSight（Gemini 视觉，精准点击任意页面）功能：语音 + 截屏 + AI 视觉分析→精准点击 / 输入 / 切标签，不用适配网站。
+商店直达：
+plaintexthttps://chromewebstore.google.com/detail/voxsight/dfepmfcgbaceajaapbbakoikpfebeiic
+
+
+中文指令：“点击搜索框”“切换到微信标签”。
+✅ 5. Voice Everything（简单直接，标签 + 语音输入）功能：语音切标签、打字、搜索、AI 聊天，轻量好用。
+商店搜索：Voice Everything
+指令：“find 淘宝”（切到淘宝标签）、“open 知乎”。

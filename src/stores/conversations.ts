@@ -175,11 +175,11 @@ export const useConversationsStore = defineStore('zwf-conversations', () => {
     if (!conv) return;
 
     const settings = useSettingsStore().settings;
-    if (!settings.apiKey) {
-      throw new Error('请先在设置中配置 API Key');
-    }
     const model = settings.models.find((m) => m.id === conv.modelId);
     if (!model) throw new Error('未找到当前会话使用的模型');
+    if (!model.apiKey && !settings.apiKey) {
+      throw new Error('请先在设置中配置 API Key');
+    }
 
     log.info('发送消息', { convId, provider: model.provider, model: model.modelName, hasImages: images.length > 0 });
 
@@ -218,8 +218,8 @@ export const useConversationsStore = defineStore('zwf-conversations', () => {
     try {
       await adapter.chat(
         {
-          baseUrl: settings.baseUrl,
-          apiKey: settings.apiKey,
+          baseUrl: model.baseUrl || settings.baseUrl,
+          apiKey: model.apiKey || settings.apiKey,
           modelName: model.modelName,
           messages: buildRequestMessages(conv).filter((m) => m.id !== aiMsg.id),
           signal: ac.signal,

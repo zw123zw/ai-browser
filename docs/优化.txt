@@ -1,0 +1,341 @@
+最终优化版方案：纯语音交互 + 全局日志（精简播报、多指令有序执行、常驻等待会话）
+结合你的需求做三层核心优化：
+精简 TTS 播报：解析出合法指令直接执行，不再播报指令执行结果；仅保留系统提示类播报
+支持多条有序指令：Prompt 强制要求 AI 按语音语义顺序罗列多条指令，解析器按顺序串行执行
+会话常驻等待：单次会话闭环完成后自动切回等待指令状态，无需手动触发，持续待命
+保留原有架构：移除置信度、AI 携带页面上下文、解析失败重试、无历史会话上下文、全局日志等能力不变
+一、新版整体业务流程图
+plaintext
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           常驻式语音交互主循环（自动持续等待）                │
+│                                                                             │
+│  ① 持续等待指令(IDLE) ──→ ② 语音识别(STT) ──→ ③ 界面展示识别文字             │
+│         ↑                                          │                        │
+│         │                                   ┌──────┴──────┐                   │
+│         │                                   │             │                   │
+│         │                              识别失败       识别成功                │
+│         │                                   │             │                   │
+│         │                                   ↓             ↓                   │
+│         │                      播报提示「请再说一次」  ④ AI分析(URL+HTML+多指令规则)
+│         │                                   │             │                   │
+│         │                                   └──────┬──────┘                   │
+│         │                                        │                          │
+│         │                                        ↓                          │
+│         │                                ⑤ 指令解析器批量解析多条指令         │
+│         │                                        │                          │
+│         │                           ┌────────────┴────────────┐              │
+│         │                           │                        │              │
+│         │                    ⑥ 解析失败                ⑦ 解析成功(单/多条指令) │
+│         │                           │                        │              │
+│         │ 【容错闭环】              ↓                        ↓              │
+│         │ 错误详情+原文 → ⑧ AI二次重分析        ⑨ 按顺序串行执行全部指令     │
+│         │                           │                        │              │
+│         │                           └──────────┬─────────────┘              │
+│         │                                      │                            │
+│         │                                      ↓                            │
+│         │                          ⑩ 单次会话全部完成                       │
+│         │                                      │                            │
+│         └──────────────────────────────────────┘                            │
+│                     自动回到 ① 等待指令（常驻待命）                           │
+└─────────────────────────────────────────────────────────────────────────────┘
+核心变更说明
+指令执行成功无 TTS 播报，仅识别失败、解析异常、系统提示做语音播报
+AI 支持解析多条顺序指令，解析器严格按输出顺序串行执行
+整轮会话（识别→分析→解析→执行）结束后永久自动回到等待状态，持续监听下一条语音
+保留解析失败→AI 重试闭环、页面上下文入参、无会话历史、格式强约束
+二、分层详细优化设计
+2.1 语音识别层（STT）
+完全沿用上一版：移除置信度，仅区分「识别成功 / 识别失败」
+识别成功：传递文本进入 AI 分析流程
+识别失败 / 无语音 / 报错：TTS 播报 没有检测到语音，请再说一次，播报完毕自动切回等待监听
+接口、回调定义不变，无额外改动
+2.2 TTS 语音播报层（重点精简）
+2.2.1 播报规则（核心：指令执行结果不播报）
+仅保留系统提示、异常、解析错误类播报，正常指令执行静默运行。
+表格
+触发场景	播报文案	说明
+初始启动 / 轮次就绪	请说出指令	进入聆听状态提示
+语音识别失败 / 无语音	没有检测到语音，请再说一次	识别异常提示
+指令解析失败（重试超限）	指令解析失败，请重新下达指令	重试 3 次仍失败时播报
+AI 返回纯对话文本（非指令）	直接播报 AI 对话内容	闲聊、答疑类内容正常播报
+关键约束：
+合法自动化指令执行全程静默，无语音播报
+TTS 播报期间，暂停语音监听，播报结束立即恢复监听
+播报优先级、VoiceBroadcast 类代码完全沿用，仅调整调用时机与文案
+2.2.2 VoiceBroadcast 类（代码不变）
+typescript
+运行
+class VoiceBroadcast {
+  speak(text: string): Promise<void>
+  cancel(): void
+  onEnd: () => void
+}
+2.3 AI 调用层（重点优化：新增多有序指令规则）
+2.3.1 基础规则（延续不变）
+每次请求不携带历史会话上下文，独立单次分析
+必传上下文：当前页面URL + 页面原始HTML
+解析失败时，携带错误详情回流 AI 重试（最大重试 3 次，防死循环）
+2.3.2 新版系统 Prompt（强化「多条指令 + 顺序执行 + 格式约束」）
+text
+你是浏览器语音指令助手，根据用户语音、页面URL和页面HTML生成可执行指令。
+严格遵守以下规则：
+1. 所有可执行指令必须使用【code】和【/code】包裹；多条指令分行书写，**严格按照用户语音语义顺序排列**，一条指令占一行。
+2. 单条指令格式：指令类型:参数；无参指令直接写指令类型。
+3. 支持指令列表：
+open_site:网址        打开指定网站
+search:关键词        全局搜索关键词
+site_search:关键词   站内搜索
+open_item:名称       打开页面指定内容
+page_next            下一页
+page_prev            上一页
+video_play           视频播放
+video_pause          视频暂停
+4. 若用户同时说出多个操作，必须逐条分行输出有序指令，不可合并、不可打乱顺序。
+5. 若语音无法转为指令、属于闲聊对话，直接输出简短口语回复（100字内，无Markdown、无代码块），适合语音播报。
+6. 仅输出指令或对话，禁止多余解释、注释、符号。
+
+示例1（单指令）：
+【code】open_site:https://www.baidu.com【/code】
+
+示例2（多条有序指令）：
+【code】open_site:https://www.bilibili.com【/code】
+【code】video_play【/code】
+【code】page_next【/code】
+2.3.3 AI 请求体（不变）
+依旧拼接：语音文本 + URL + 页面 HTML，无历史会话。
+解析失败重试时，追加错误原因、原始文本、上一轮 AI 输出。
+2.4 指令解析器（重点升级：支持批量解析多条有序指令）
+在原有单指令解析基础上，改造为批量解析、顺序存储，保证执行顺序和 AI 输出一致。
+2.4.1 类型定义扩展
+typescript
+运行
+// src/command/parser.ts
+export type CommandType =
+  | "open_site" | "search" | "site_search" | "open_item"
+  | "page_next" | "page_prev" | "video_play" | "video_pause";
+
+export interface CommandInfo {
+  type: CommandType;
+  params: string;
+}
+
+// 单条解析结果
+export interface SingleParseResult {
+  success: boolean;
+  command?: CommandInfo;
+  error?: string;
+}
+
+// 批量解析结果（对外暴露）
+export interface BatchParseResult {
+  total: number;               // 总指令条数
+  commandList: CommandInfo[];  // 有序指令列表
+  hasError: boolean;          // 是否存在解析错误
+  errorMsg?: string;           // 全局错误信息
+  plainText?: string;         // 纯对话文本
+}
+2.4.2 新版批量解析器完整代码
+typescript
+运行
+// src/command/parser.ts
+import { Logger } from "@/utils/logger";
+
+const log = new Logger("CommandParser");
+const CMD_START = "【code】";
+const CMD_END = "【/code】";
+
+export type CommandType =
+  | "open_site"
+  | "search"
+  | "site_search"
+  | "open_item"
+  | "page_next"
+  | "page_prev"
+  | "video_play"
+  | "video_pause";
+
+export interface CommandInfo {
+  type: CommandType;
+  params: string;
+}
+
+export interface SingleParseResult {
+  success: boolean;
+  command?: CommandInfo;
+  error?: string;
+}
+
+export interface BatchParseResult {
+  total: number;
+  commandList: CommandInfo[];
+  hasError: boolean;
+  errorMsg?: string;
+  plainText?: string;
+}
+
+/**
+ * 解析单条指令片段
+ */
+function parseSingleCmd(cmdContent: string): SingleParseResult {
+  const content = cmdContent.trim();
+  if (!content) return { success: false, error: "指令内容为空" };
+
+  const [type, ...paramArr] = content.split(":");
+  const params = paramArr.join(":").trim();
+
+  const validTypes: CommandType[] = [
+    "open_site", "search", "site_search", "open_item",
+    "page_next", "page_prev", "video_play", "video_pause"
+  ];
+  if (!validTypes.includes(type as CommandType)) {
+    return { success: false, error: `非法指令类型：${type}` };
+  }
+
+  const noParamCmds: CommandType[] = ["page_next", "page_prev", "video_play", "video_pause"];
+  if (!noParamCmds.includes(type as CommandType) && !params) {
+    return { success: false, error: `指令 ${type} 缺少必填参数` };
+  }
+
+  return {
+    success: true,
+    command: { type: type as CommandType, params }
+  };
+}
+
+/**
+ * 批量解析AI返回文本，支持多条有序指令
+ * @param rawText AI 原始输出
+ * @returns 批量解析结果
+ */
+export function parseBatchCommand(rawText: string): BatchParseResult {
+  log.info("开始批量解析指令", { rawText });
+  const result: BatchParseResult = {
+    total: 0,
+    commandList: [],
+    hasError: false
+  };
+
+  // 1. 分割所有指令块（按结束标记拆分）
+  const cmdBlocks = rawText.split(CMD_END).filter(blk => blk.includes(CMD_START));
+  // 无指令标记 = 纯对话文本
+  if (cmdBlocks.length === 0) {
+    result.plainText = rawText.trim();
+    log.info("未识别指令，判定为纯对话");
+    return result;
+  }
+
+  // 2. 逐条解析，保留原有顺序
+  for (const block of cmdBlocks) {
+    const startIdx = block.indexOf(CMD_START);
+    const cmdContent = block.slice(startIdx + CMD_START.length).trim();
+    const singleRes = parseSingleCmd(cmdContent);
+
+    if (!singleRes.success) {
+      result.hasError = true;
+      result.errorMsg = singleRes.error;
+      log.error("单条指令解析失败", singleRes.error);
+      continue;
+    }
+
+    if (singleRes.command) {
+      result.commandList.push(singleRes.command);
+      result.total++;
+    }
+  }
+
+  log.info("批量解析完成", { total: result.total, hasError: result.hasError });
+  return result;
+}
+2.4.3 解析后分流逻辑（新版）
+存在纯对话文本（无指令）：播报对话内容，播报结束 → 自动回到等待指令
+解析存在错误：触发 AI 重试（最多 3 次）；重试超限则播报错误提示，回到等待指令
+解析成功 + 指令列表非空：按列表顺序串行执行所有指令（静默无播报），全部执行完毕 → 自动回到等待指令
+2.5 语音会话状态机 src/voice/session.ts（优化常驻等待 + 流程闭环）
+2.5.1 状态定义（精简后，保留 4 个状态）
+表格
+状态	枚举	含义	UI 表现
+IDLE	空闲 / 等待指令	常驻待命，等待下一次语音	麦克风默认样式
+LISTENING	聆听中	正在接收用户语音	麦克风激活 + 波纹动画
+PROCESSING	处理中	AI 分析 + 指令解析 + 执行指令	处理中加载动画
+SPEAKING	播报中	系统提示 / 对话 / 错误播报	播报中状态文字
+2.5.2 新版状态流转（核心：会话结束永久回归 IDLE 等待）
+plaintext
+【常驻循环入口】IDLE（等待指令）
+       │ 触发语音监听
+       ↓
+LISTENING（聆听语音）
+       │
+   ┌───┴───┐
+   │       │
+识别成功  识别失败
+   │       │
+   ↓       ↓
+PROCESSING  SPEAKING（播报：请再说一次）
+   │           │
+   │           └─────┐
+   ↓                 │
+批量解析指令         │
+   │                 │
+┌──┴──┐              │
+│解析错│ 解析成功     │
+│误/重│  ↓           │
+│试   │  串行执行多条指令
+└──┬──┘  ↓
+   │     会话全部完成
+   └─────┴───────────┘
+           │
+           ↓
+       自动回到 IDLE
+    （继续等待下一条指令）
+2.5.3 Session 新增核心逻辑
+取消「连续模式开关」依赖：整轮会话结束后强制自动切回 IDLE 等待状态，永久持续监听
+管控多条指令串行执行：上一条指令执行完毕，再执行下一条，保证顺序
+统一重试计数：记录 AI 解析失败重试次数，达到 3 次上限终止重试
+全流程串行：识别、AI 请求、解析、执行、播报互不并发
+2.6 VoicePanel UI （无改动，沿用原有设计）
+永久移除文字输入框，纯语音交互
+保留：麦克风按钮、波纹动画、识别文字 / 对话 / 操作记录展示区、清空按钮
+移除「连续模式开关」（因为现在默认常驻等待，无需手动开启）
+波纹动画 CSS 保持不变：
+css
+@keyframes voice-ripple {
+  0% { transform: scale(1); opacity: 0.6; }
+  100% { transform: scale(2.5); opacity: 0; }
+}
+2.7 全局日志系统（补充埋点）
+日志格式、级别、颜色、输出规则不变，新增埋点：
+批量解析：指令总条数、每条指令内容、解析错误
+多指令执行：执行顺序、单条指令开始 / 执行完成
+重试流程：当前重试次数、超限终止日志
+日志示例：
+plaintext
+[16:10:20] [INFO] [CommandParser] 开始批量解析指令
+[16:10:21] [INFO] [CommandParser] 批量解析完成 { total: 2, hasError: false }
+[16:10:22] [INFO] [VoiceSession] 开始执行第1条指令 open_site
+[16:10:23] [INFO] [VoiceSession] 第1条指令执行完成
+[16:10:24] [INFO] [VoiceSession] 开始执行第2条指令 video_play
+[16:10:25] [INFO] [VoiceSession] 本轮会话结束，自动回到等待指令状态
+三、核心规则汇总（最终版）
+无置信度：彻底移除置信度相关所有逻辑
+TTS 精简：合法自动化指令执行静默无播报；仅识别失败、解析错误、闲聊对话、系统提示播报语音
+多指令有序：AI 按语音语义顺序输出多条指令，解析器、执行器严格按顺序串行运行
+AI 入参：每次独立请求，不带历史会话，强制携带当前页面 URL + 原始 HTML
+格式强约束：指令必须用 【code】【/code】 包裹，多条指令分行
+容错重试：解析失败自动回流 AI 重分析，最大重试 3 次，超限终止流程
+常驻等待：每一轮语音会话全部结束后，自动回到等待指令状态，持续待命，无需手动操作
+纯语音 UI：无文字输入框，仅界面展示识别文本、对话、日志记录
+四、验收标准（同步更新）
+ 完全移除置信度判断与相关代码
+ 识别成功并解析出合法指令时，执行过程无语音播报
+ AI 可正确识别多条语音指令，按顺序输出；解析器按顺序解析、串行执行
+ AI 请求携带页面 URL+HTML，不携带历史会话上下文
+ 指令解析失败触发 AI 重试，3 次重试上限生效
+ 识别失败、解析错误、闲聊对话正常触发 TTS 播报
+ 单轮会话执行完毕后，自动切回等待指令状态，持续监听语音
+ 麦克风波纹动画、状态文字、界面展示正常
+ 全局 Logger 覆盖所有流程、分支、异常、多指令执行节点
+ npm run dev 启动无报错，TypeScript 类型检查通过
+五、迭代范围（Out of Scope 不变）
+不做 Firefox、移动端浏览器适配
+不开发离线语音识别、语音唤醒功能
+第三方模型 / 语音服务商适配器（讯飞、Ollama）后续单独迭代

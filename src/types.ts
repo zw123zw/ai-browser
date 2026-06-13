@@ -1,6 +1,15 @@
 // 通用类型定义
 
-export type Provider = 'openai' | 'anthropic' | 'gemini' | 'custom' | 'qwen' | 'wenxin';
+export type Provider =
+  | 'openai'        // OpenAI 兼容
+  | 'anthropic'     // Anthropic Claude
+  | 'gemini'        // Google Gemini
+  | 'custom'        // 自定义
+  | 'qwen'          // 通义千问（阿里）
+  | 'wenxin'        // 文心一言（百度）
+  | 'zhipu'         // 智谱清言
+  | 'deepseek'      // DeepSeek
+  | 'moonshot'      // Moonshot (Kimi)
 
 /** 单条聊天消息（标准化结构） */
 export interface ChatMessage {
@@ -34,6 +43,11 @@ export interface ModelConfig {
   reasoning?: boolean;
   /** 是否支持图片 */
   vision?: boolean;
+  /** 每模型独立 API 配置（可选，不填则用全局） */
+  baseUrl?: string;
+  apiKey?: string;
+  apiFormat?: string;
+  authField?: string;
 }
 
 /** 单个会话 */
@@ -62,10 +76,10 @@ export interface AppSettings {
   baseUrl: string;
   /** 密钥 */
   apiKey: string;
-  /** 最大上下文条数 */
-  maxContext: number;
-  /** 最大会话数 */
-  maxConversations: number;
+  /** API 格式 */
+  apiFormat?: string;
+  /** 认证字段 */
+  authField?: string;
   /** 可选模型列表 */
   models: ModelConfig[];
   /** 默认模型 id */
@@ -74,6 +88,8 @@ export interface AppSettings {
   drawerWidth: number;
   /** 主题色（hex） */
   primaryColor: string;
+  /** 主题 id */
+  theme?: string;
   /** 唤起插件的快捷键，如 "Ctrl+Shift+B" */
   shortcut: string;
 }

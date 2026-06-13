@@ -156,6 +156,7 @@ export class VoiceRecognition {
         return;
       }
 
+      // 麦克风权限错误
       if (event.error === 'not-allowed') {
         this.updateStatus('error');
         this.options.onError?.('麦克风权限被拒绝，请在浏览器设置中允许');
@@ -163,6 +164,15 @@ export class VoiceRecognition {
         return;
       }
 
+      // 网络错误 - 语音识别需要联网（Chrome 使用 Google 服务）
+      if (event.error === 'network') {
+        console.warn('[VoiceRecognition] 网络错误，语音识别需要联网');
+        this.scheduleRestart(3000);
+        return;
+      }
+
+      // 其他错误
+      console.warn('[VoiceRecognition] 未知错误:', event.error);
       this.scheduleRestart(2000);
     };
 

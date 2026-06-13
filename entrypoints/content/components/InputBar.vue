@@ -4,13 +4,14 @@ import { fileToDataURL } from '@/src/utils/file';
 import type { Conversation, ModelConfig } from '@/src/types';
 
 const props = defineProps<{
-  conversation: Conversation;
+  conversation: Conversation | null | undefined;
   models: ModelConfig[];
 }>();
 
 const emit = defineEmits<{
   (e: 'send', payload: { text: string; images: string[]; reasoning: boolean }): void;
   (e: 'abort'): void;
+  (e: 'switch-voice'): void;
 }>();
 
 const fileInput = ref<HTMLInputElement | null>(null);
@@ -20,23 +21,22 @@ const modelMenuRef = ref<HTMLDivElement | null>(null);
 
 /** 所有 state 都从 conversation 读写，保证会话间相互独立 */
 const text = computed({
-  get: () => props.conversation.draftText || '',
+  get: () => props.conversation?.draftText || '',
   set: (v) => {
-    props.conversation.draftText = v;
+    if (props.conversation) props.conversation.draftText = v;
   },
 });
-const images = computed(() => props.conversation.draftImages || []);
-const reasoning = computed(() => props.conversation.reasoningEnabled || false);
+const images = computed(() => props.conversation?.draftImages || []);
+const reasoning = computed(() => props.conversation?.reasoningEnabled || false);
 const currentModel = computed(
   () =>
-    props.models.find((m) => m.id === props.conversation.modelId) ||
+    props.models.find((m) => m.id === props.conversation?.modelId) ||
     props.models[0]
 );
 
 /** 当前会话是否处于流式响应中 */
 const isStreaming = computed(() => {
-  const last =
-    props.conversation.messages[props.conversation.messages.length - 1];
+  const last = props.conversation?.messages[props.conversation.messages.length - 1];
   return last?.status === 'streaming';
 });
 
@@ -49,11 +49,11 @@ function onSendOrAbort() {
 }
 
 function setDraftImages(arr: string[]) {
-  props.conversation.draftImages = arr;
+  if (props.conversation) props.conversation.draftImages = arr;
 }
 
 function toggleReasoning() {
-  props.conversation.reasoningEnabled = !reasoning.value;
+  if (props.conversation) props.conversation.reasoningEnabled = !reasoning.value;
 }
 
 async function pickImages(e: Event) {
@@ -101,7 +101,7 @@ function autoResize() {
 }
 
 watch(() => text.value, () => nextTick(autoResize));
-watch(() => props.conversation.id, () => nextTick(autoResize));
+watch(() => props.conversation?.id, () => nextTick(autoResize));
 
 function send() {
   const t = text.value.trim();
@@ -112,8 +112,10 @@ function send() {
     reasoning: reasoning.value,
   });
   // 发送后清空 draft，但保留 reasoning toggle 状态
-  props.conversation.draftText = '';
-  props.conversation.draftImages = [];
+  if (props.conversation) {
+    props.conversation.draftText = '';
+    props.conversation.draftImages = [];
+  }
   nextTick(autoResize);
 }
 
@@ -125,7 +127,7 @@ function onKeydown(e: KeyboardEvent) {
 }
 
 function pickModel(id: string) {
-  props.conversation.modelId = id;
+  if (props.conversation) props.conversation.modelId = id;
   modelMenuOpen.value = false;
 }
 
@@ -177,20 +179,6 @@ onUnmounted(() => document.removeEventListener('click', onDocClick));
           @change="pickImages"
         />
 
-        <button
-          class="zwf-tool-pill"
-          :class="{ 'zwf-pill-active': reasoning }"
-          title="开启后追加深度思考提示"
-          @click="toggleReasoning"
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96.44 2.5 2.5 0 0 1-2.96-3.08 3 3 0 0 1-.34-5.58 2.5 2.5 0 0 1 1.32-4.24 2.5 2.5 0 0 1 1.98-3A2.5 2.5 0 0 1 9.5 2z"/>
-            <path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96.44 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0 .34-5.58 2.5 2.5 0 0 0-1.32-4.24 2.5 2.5 0 0 0-1.98-3A2.5 2.5 0 0 0 14.5 2z"/>
-          </svg>
-          深度思考
-        </button>
-
         <div ref="modelMenuRef" class="zwf-model-pill-wrap">
           <button class="zwf-tool-pill" @click="modelMenuOpen = !modelMenuOpen">
             {{ currentModel?.label || '选择模型' }}
@@ -204,7 +192,7 @@ onUnmounted(() => document.removeEventListener('click', onDocClick));
               v-for="m in models"
               :key="m.id"
               class="zwf-model-item"
-              :class="{ 'zwf-model-active': m.id === conversation.modelId }"
+              :class="{ 'zwf-model-active': m.id === conversation?.modelId }"
               @click="pickModel(m.id)"
             >
               {{ m.label }}
@@ -214,6 +202,15 @@ onUnmounted(() => document.removeEventListener('click', onDocClick));
       </div>
 
       <div class="zwf-toolbar-right">
+        <button class="zwf-tool-btn" title="语音模式" @click="emit('switch-voice')">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+            <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+            <line x1="12" y1="19" x2="12" y2="23" />
+            <line x1="8" y1="23" x2="16" y2="23" />
+          </svg>
+        </button>
         <button
           class="zwf-send-btn"
           :class="{ 'zwf-send-btn-stop': isStreaming }"

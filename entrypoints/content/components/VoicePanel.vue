@@ -1,157 +1,164 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue';
-import { useVoiceStore } from '@/src/stores/voice';
-import { useSettingsStore } from '@/src/stores/settings';
-import { useToast } from '@/src/composables/useToast';
-import { VoiceSession } from '@/src/voice/session';
-import { Logger } from '@/src/utils/logger';
-import type { SessionState } from '@/src/stores/voice';
+import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue'
+import { useVoiceStore } from '@/src/stores/voice'
+import { useSettingsStore } from '@/src/stores/settings'
+import { useToast } from '@/src/composables/useToast'
+import { VoiceSession } from '@/src/voice/session'
+import { Logger } from '@/src/utils/logger'
+import type { SessionState } from '@/src/stores/voice'
 
-const log = new Logger('VoicePanel');
-const voiceStore = useVoiceStore();
-const settingsStore = useSettingsStore();
-const toast = useToast();
+const emit = defineEmits<{ (e: 'switch-chat'): void }>()
+const log = new Logger('VoicePanel')
+const voiceStore = useVoiceStore()
+const settingsStore = useSettingsStore()
+const toast = useToast()
 
-const messagesRef = ref<HTMLElement | null>(null);
-let session: VoiceSession | null = null;
+const messagesRef = ref<HTMLElement | null>(null)
+let session: VoiceSession | null = null
 
 /** 自动滚动到底部 */
 function scrollToBottom() {
   nextTick(() => {
     if (messagesRef.value) {
-      messagesRef.value.scrollTop = messagesRef.value.scrollHeight;
+      messagesRef.value.scrollTop = messagesRef.value.scrollHeight
     }
-  });
+  })
+}
+
+/** 获取当前页面上下文（URL + 清洗后 HTML） */
+async function getPageContext(): Promise<{ url: string; html: string }> {
+  try {
+    const url = window.location.href
+
+    // 跳过特殊页面
+    if (
+      url.startsWith('chrome://') ||
+      url.startsWith('chrome-extension://') ||
+      url.startsWith('edge://')
+    ) {
+      log.warn('特殊页面，跳过 HTML 获取', { url })
+      return { url, html: '' }
+    }
+
+    // 清洗当前页面 HTML
+    const clone = document.documentElement.cloneNode(true) as HTMLElement
+    clone
+      .querySelectorAll('script, style, noscript, link[rel="stylesheet"], meta')
+      .forEach((el) => el.remove())
+    clone.querySelectorAll('[hidden]').forEach((el) => el.remove())
+    clone.querySelectorAll('[style]').forEach((el) => el.removeAttribute('style'))
+
+    log.debug('获取页面上下文', { url, htmlLength: clone.innerHTML.length })
+    return { url, html: clone.innerHTML }
+  } catch (error) {
+    log.error('获取页面上下文失败', error)
+    return { url: window.location.href, html: '' }
+  }
 }
 
 /** 初始化语音会话 */
 function initSession() {
-  log.info('初始化语音会话');
+  log.info('初始化语音会话')
   session = new VoiceSession({
     getSettings: () => settingsStore.settings,
     getRecentMessages: () => voiceStore.messages,
     onStateChange: (state: SessionState) => {
-      voiceStore.setSessionState(state);
-      if (state === 'processing') voiceStore.setProcessing(true);
-      else voiceStore.setProcessing(false);
-      if (state === 'speaking') voiceStore.setSpeaking(true);
-      else voiceStore.setSpeaking(false);
+      voiceStore.setSessionState(state)
+      voiceStore.setProcessing(state === 'processing')
+      voiceStore.setSpeaking(state === 'speaking')
     },
-    onTextUpdate: (text, isFinal, confidence) => {
-      voiceStore.updateText(text, isFinal, confidence);
+    onTextUpdate: (text, isFinal) => {
+      voiceStore.updateText(text, isFinal)
     },
     onUserMessage: (text) => {
-      voiceStore.addUserMessage(text);
-      scrollToBottom();
+      voiceStore.addUserMessage(text)
+      scrollToBottom()
     },
     onAssistantMessage: (content, actionResult) => {
-      voiceStore.addAssistantMessage(content, actionResult);
-      scrollToBottom();
+      voiceStore.addAssistantMessage(content, actionResult)
+      scrollToBottom()
     },
     onSystemMessage: (content) => {
-      voiceStore.addSystemMessage(content);
-      scrollToBottom();
+      voiceStore.addSystemMessage(content)
+      scrollToBottom()
     },
     executeAutomation: async (action, params) => {
       try {
-        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
         if (!tab?.id) {
-          return { success: false, message: '无法获取当前标签页' };
+          return { success: false, message: '无法获取当前标签页' }
         }
         await chrome.scripting.executeScript({
           target: { tabId: tab.id },
           files: ['content-scripts/content.js'],
-        });
+        })
         const response = await chrome.tabs.sendMessage(tab.id, {
           type: 'automation',
           action,
           params,
-        });
+        })
         return {
           success: response?.success ?? true,
           message: response?.message || '操作已执行',
-        };
+        }
       } catch (error) {
-        log.error('自动化执行异常', error);
-        return { success: false, message: String(error) };
+        log.error('自动化执行异常', error)
+        return { success: false, message: String(error) }
       }
     },
-  });
+    getPageContext,
+  })
 }
 
 /** 切换语音识别 */
 async function toggleRecognition() {
   if (!session) {
-    initSession();
+    initSession()
   }
 
   if (voiceStore.sessionState === 'idle') {
-    await session?.start();
+    await session?.start()
   } else {
-    session?.stop();
+    session?.stop()
   }
 }
 
 /** 清空对话 */
 function clearVoiceChat() {
-  voiceStore.clearMessages();
-  log.info('清空语音对话');
+  voiceStore.clearMessages()
+  log.info('清空语音对话')
 }
 
 /** 获取状态文字 */
 function getStatusText(state: SessionState): string {
   switch (state) {
-    case 'listening': return '正在聆听...';
-    case 'evaluating': return '正在分析...';
-    case 'processing': return '处理中...';
-    case 'speaking': return '播报中...';
-    default: return '点击麦克风开始';
+    case 'listening':
+      return '正在聆听...'
+    case 'processing':
+      return '处理中...'
+    case 'speaking':
+      return '播报中...'
+    default:
+      return '点击麦克风开始'
   }
 }
 
 // 自动滚动
-watch(
-  () => voiceStore.messages.length,
-  () => scrollToBottom()
-);
+watch(() => voiceStore.messages.length, () => scrollToBottom())
 
 onMounted(() => {
-  log.info('VoicePanel 已挂载');
-});
+  log.info('VoicePanel 已挂载')
+})
 
 onUnmounted(() => {
-  log.info('VoicePanel 已卸载');
-  session?.destroy();
-  session = null;
-});
+  log.info('VoicePanel 已卸载')
+  session?.destroy()
+  session = null
+})
 </script>
 
 <template>
   <div class="zwf-voice-panel">
-    <!-- 顶部状态栏 -->
-    <div class="zwf-voice-header">
-      <div class="zwf-voice-title">
-        <span class="zwf-voice-icon">🎤</span>
-        <span>AI 语音助手</span>
-      </div>
-      <div class="zwf-voice-actions">
-        <label class="zwf-continuous-toggle">
-          <input
-            type="checkbox"
-            :checked="voiceStore.continuousMode"
-            @change="voiceStore.toggleContinuousMode()"
-          />
-          <span>连续</span>
-        </label>
-        <button class="zwf-clear-btn" title="清空对话" @click="clearVoiceChat">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polyline points="3 6 5 6 21 6" />
-            <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-          </svg>
-        </button>
-      </div>
-    </div>
-
     <!-- 状态指示器 -->
     <div class="zwf-voice-status">
       <div :class="['zwf-status-dot', voiceStore.sessionState]" />
@@ -209,7 +216,6 @@ onUnmounted(() => {
           <div class="zwf-ripple zwf-ripple-2" />
           <div class="zwf-ripple zwf-ripple-3" />
         </div>
-        <!-- 麦克风按钮 -->
         <button
           :class="['zwf-mic-btn', { active: voiceStore.sessionState !== 'idle' }]"
           title="点击开始/停止语音"
@@ -232,7 +238,7 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   height: 100%;
-  background: var(--zwf-bg, #fff);
+  background: var(--zwf-bg);
 }
 
 /* ========== 顶部栏 ========== */
@@ -241,7 +247,8 @@ onUnmounted(() => {
   align-items: center;
   justify-content: space-between;
   padding: 10px 16px;
-  border-bottom: 1px solid var(--zwf-border, #e8e8e8);
+  border-bottom: 1px solid var(--zwf-border);
+  background: var(--zwf-bg-soft);
 }
 
 .zwf-voice-title {
@@ -250,11 +257,7 @@ onUnmounted(() => {
   gap: 6px;
   font-size: 14px;
   font-weight: 600;
-  color: var(--zwf-text, #333);
-}
-
-.zwf-voice-icon {
-  font-size: 18px;
+  color: var(--zwf-primary);
 }
 
 .zwf-voice-actions {
@@ -269,52 +272,55 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 8px;
-  border-bottom: 1px solid var(--zwf-border, #e8e8e8);
+  border-bottom: 1px solid var(--zwf-border);
   min-height: 36px;
-  background: var(--zwf-bg-secondary, #fafafa);
+  background: var(--zwf-bg-soft);
 }
 
 .zwf-status-dot {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #ccc;
+  background: var(--zwf-text-faint);
   flex-shrink: 0;
 }
 
 .zwf-status-dot.listening {
-  background: #52c41a;
+  background: #34d399;
+  box-shadow: 0 0 8px rgba(52,211,153,0.5);
   animation: pulse 1.5s infinite;
 }
 
-.zwf-status-dot.evaluating {
-  background: #faad14;
-  animation: pulse 1s infinite;
-}
-
 .zwf-status-dot.processing {
-  background: #1890ff;
+  background: var(--zwf-primary);
+  box-shadow: 0 0 8px var(--zwf-primary-glow);
   animation: pulse 1s infinite;
 }
 
 .zwf-status-dot.speaking {
-  background: #722ed1;
+  background: #8b5cf6;
+  box-shadow: 0 0 8px rgba(139,92,246,0.5);
   animation: pulse 1.2s infinite;
 }
 
 @keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.4; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
 }
 
 .zwf-status-text {
   font-size: 12px;
-  color: var(--zwf-text-secondary, #666);
+  color: var(--zwf-text-soft);
 }
 
 .zwf-interim-text {
   font-size: 12px;
-  color: var(--zwf-text-hint, #999);
+  color: var(--zwf-text-faint);
   margin-left: auto;
   max-width: 50%;
   overflow: hidden;
@@ -338,7 +344,7 @@ onUnmounted(() => {
   align-items: center;
   justify-content: center;
   height: 100%;
-  color: var(--zwf-text-hint, #999);
+  color: var(--zwf-text-faint);
   text-align: center;
 }
 
@@ -350,7 +356,7 @@ onUnmounted(() => {
 .zwf-empty-hint {
   font-size: 12px;
   margin-top: 8px;
-  color: var(--zwf-text-hint, #bbb);
+  color: var(--zwf-text-faint);
 }
 
 .zwf-voice-msg {
@@ -364,33 +370,35 @@ onUnmounted(() => {
 
 .zwf-msg-role {
   font-size: 11px;
-  color: var(--zwf-text-hint, #999);
+  color: var(--zwf-text-faint);
   margin-bottom: 4px;
 }
 
 .zwf-user {
   align-self: flex-end;
-  background: var(--zwf-primary, #1890ff);
-  color: #fff;
+  background: var(--zwf-primary-soft);
+  color: var(--zwf-text);
+  border: 1px solid var(--zwf-border-strong);
   border-bottom-right-radius: 4px;
 }
 
 .zwf-user .zwf-msg-role {
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--zwf-primary);
   text-align: right;
 }
 
 .zwf-assistant {
   align-self: flex-start;
-  background: var(--zwf-bg-secondary, #f5f5f5);
-  color: var(--zwf-text, #333);
+  background: var(--zwf-bg-card);
+  color: var(--zwf-text);
+  border: 1px solid var(--zwf-border);
   border-bottom-left-radius: 4px;
 }
 
 .zwf-system {
   align-self: center;
   background: transparent;
-  color: var(--zwf-text-hint, #999);
+  color: var(--zwf-text-faint);
   font-size: 12px;
   padding: 4px 8px;
 }
@@ -399,15 +407,15 @@ onUnmounted(() => {
   margin-top: 4px;
   font-size: 12px;
   padding-top: 4px;
-  border-top: 1px solid rgba(0, 0, 0, 0.06);
+  border-top: 1px solid var(--zwf-border);
 }
 
 .zwf-success {
-  color: #52c41a;
+  color: #34d399;
 }
 
 .zwf-error {
-  color: #ff4d4f;
+  color: #f87171;
 }
 
 .zwf-typing {
@@ -420,16 +428,29 @@ onUnmounted(() => {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: var(--zwf-text-hint, #999);
+  background: var(--zwf-text-faint);
   animation: typing 1.4s infinite;
 }
 
-.zwf-dot:nth-child(2) { animation-delay: 0.2s; }
-.zwf-dot:nth-child(3) { animation-delay: 0.4s; }
+.zwf-dot:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.zwf-dot:nth-child(3) {
+  animation-delay: 0.4s;
+}
 
 @keyframes typing {
-  0%, 60%, 100% { opacity: 0.3; transform: translateY(0); }
-  30% { opacity: 1; transform: translateY(-4px); }
+  0%,
+  60%,
+  100% {
+    opacity: 0.3;
+    transform: translateY(0);
+  }
+  30% {
+    opacity: 1;
+    transform: translateY(-4px);
+  }
 }
 
 /* ========== 底部麦克风 ========== */
@@ -456,9 +477,9 @@ onUnmounted(() => {
   width: 64px;
   height: 64px;
   border-radius: 50%;
-  border: 3px solid var(--zwf-border, #e8e8e8);
-  background: var(--zwf-bg, #fff);
-  color: var(--zwf-text, #333);
+  border: 2px solid var(--zwf-border);
+  background: var(--zwf-bg-card);
+  color: var(--zwf-text-soft);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -467,16 +488,17 @@ onUnmounted(() => {
 }
 
 .zwf-mic-btn:hover {
-  border-color: var(--zwf-primary, #1890ff);
-  color: var(--zwf-primary, #1890ff);
+  border-color: var(--zwf-primary);
+  color: var(--zwf-primary);
   transform: scale(1.05);
+  box-shadow: 0 0 16px var(--zwf-primary-glow);
 }
 
 .zwf-mic-btn.active {
-  background: var(--zwf-primary, #1890ff);
-  border-color: var(--zwf-primary, #1890ff);
-  color: #fff;
-  box-shadow: 0 4px 16px rgba(24, 144, 255, 0.3);
+  background: var(--zwf-primary);
+  border-color: var(--zwf-primary);
+  color: #000;
+  box-shadow: 0 0 24px var(--zwf-primary-glow);
 }
 
 /* ========== 波纹动画 ========== */
@@ -497,14 +519,22 @@ onUnmounted(() => {
   width: 100%;
   height: 100%;
   border-radius: 50%;
-  border: 2px solid var(--zwf-primary, #1890ff);
+  border: 2px solid var(--zwf-primary);
   opacity: 0;
   animation: voice-ripple 2s infinite;
 }
 
-.zwf-ripple-1 { animation-delay: 0s; }
-.zwf-ripple-2 { animation-delay: 0.6s; }
-.zwf-ripple-3 { animation-delay: 1.2s; }
+.zwf-ripple-1 {
+  animation-delay: 0s;
+}
+
+.zwf-ripple-2 {
+  animation-delay: 0.6s;
+}
+
+.zwf-ripple-3 {
+  animation-delay: 1.2s;
+}
 
 @keyframes voice-ripple {
   0% {
@@ -518,28 +548,13 @@ onUnmounted(() => {
 }
 
 /* ========== 控件 ========== */
-.zwf-continuous-toggle {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 12px;
-  color: var(--zwf-text-secondary, #666);
-  cursor: pointer;
-}
-
-.zwf-continuous-toggle input {
-  accent-color: var(--zwf-primary, #1890ff);
-  width: 14px;
-  height: 14px;
-}
-
 .zwf-clear-btn {
   width: 32px;
   height: 32px;
   border-radius: 6px;
   border: none;
   background: transparent;
-  color: var(--zwf-text-secondary, #666);
+  color: var(--zwf-text-soft);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -548,7 +563,24 @@ onUnmounted(() => {
 }
 
 .zwf-clear-btn:hover {
-  background: var(--zwf-bg-secondary, #f5f5f5);
-  color: #ff4d4f;
+  background: rgba(248,113,113,0.1);
+  color: #f87171;
+}
+
+.zwf-switch-text-btn {
+  border: none;
+  background: transparent;
+  color: var(--zwf-text-faint);
+  font-size: 13px;
+  cursor: pointer;
+  font-family: inherit;
+  padding: 4px 8px;
+  border-radius: 6px;
+  transition: all 0.15s ease;
+}
+
+.zwf-switch-text-btn:hover {
+  color: var(--zwf-primary);
+  background: var(--zwf-primary-soft);
 }
 </style>

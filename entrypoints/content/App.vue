@@ -7,6 +7,9 @@ import ToastContainer from './components/ToastContainer.vue';
 import { useSettingsStore } from '@/src/stores/settings';
 import { useConversationsStore } from '@/src/stores/conversations';
 import { matchShortcut } from '@/src/utils/shortcut';
+import { getThemeById } from '@/src/themes';
+
+console.log('[App] Vue 组件初始化');
 
 const open = ref(false);
 const showSettings = ref(false);
@@ -16,53 +19,62 @@ const settingsStore = useSettingsStore();
 const convStore = useConversationsStore();
 
 function toggle() {
+  console.log('[App] toggle() 被调用，当前状态:', open.value);
   open.value = !open.value;
 }
 
 function onMessage(msg: any) {
+  console.log('[App] 收到消息:', msg);
   if (msg?.type === 'zwf-toggle') toggle();
 }
 
 function onKeydown(e: KeyboardEvent) {
   const sc = settingsStore.settings.shortcut;
   if (matchShortcut(e, sc)) {
+    console.log('[App] 快捷键触发:', sc);
     e.preventDefault();
     e.stopPropagation();
     toggle();
   }
 }
 
-/** 把主题色 / 抽屉宽度等写到 shadow host，确保 :host 选择器内引用的 css var 也能动态变 */
+/** 应用主题 CSS 变量到 shadow host */
 function applyTheme() {
   const el = rootEl.value;
   if (!el) return;
   const root = el.getRootNode();
   const host = root instanceof ShadowRoot ? (root.host as HTMLElement) : el;
-  const { primaryColor, drawerWidth } = settingsStore.settings;
-  host.style.setProperty('--zwf-primary', primaryColor);
-  host.style.setProperty(
-    '--zwf-primary-soft',
-    `color-mix(in srgb, ${primaryColor} 12%, white)`
-  );
-  host.style.setProperty('--zwf-drawer-width', `${drawerWidth}vw`);
+  const theme = getThemeById(settingsStore.settings.theme);
+  for (const [key, value] of Object.entries(theme.vars)) {
+    host.style.setProperty(key, value);
+  }
+  // 兼容旧版 primaryColor
+  host.style.setProperty('--zwf-primary', theme.vars['--zwf-primary'] || settingsStore.settings.primaryColor);
+  host.style.setProperty('--zwf-drawer-width', '480px');
+  console.log('[App] 主题已应用:', theme.name);
 }
 
 watch(
-  [
-    () => settingsStore.settings.primaryColor,
-    () => settingsStore.settings.drawerWidth,
-  ],
+  () => settingsStore.settings.theme,
   () => applyTheme()
 );
 
 onMounted(async () => {
-  await Promise.all([settingsStore.init(), convStore.init()]);
+  console.log('[App] onMounted 开始');
+  try {
+    await Promise.all([settingsStore.init(), convStore.init()]);
+    console.log('[App] Store 初始化完成');
+  } catch (error) {
+    console.error('[App] Store 初始化失败:', error);
+  }
   applyTheme();
   chrome.runtime?.onMessage?.addListener(onMessage);
   document.addEventListener('keydown', onKeydown, true);
+  console.log('[App] onMounted 完成，事件监听器已注册');
 });
 
 onUnmounted(() => {
+  console.log('[App] onUnmounted，清理事件监听器');
   chrome.runtime?.onMessage?.removeListener?.(onMessage);
   document.removeEventListener('keydown', onKeydown, true);
 });

@@ -1,5 +1,6 @@
 import { BaseAdapter } from './base';
 import { Logger } from '@/src/utils/logger';
+import { proxyFetchStream, proxyFetch } from './proxy';
 import type { ChatMessage, ChatRequestOptions, StreamChunk } from '@/src/types';
 
 const log = new Logger('Adapter:OpenAI');
@@ -43,17 +44,73 @@ export class OpenAIAdapter extends BaseAdapter {
     log.info('请求开始', { url, model: opts.modelName, messageCount: opts.messages.length });
 
     const startTime = Date.now();
+    const headers = {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${opts.apiKey}`,
+    };
+    const body = JSON.stringify({
+      model: opts.modelName,
+      messages: this.toRequestMessages(opts.messages),
+      stream: true,
+    });
+
+    let chunkCount = 0;
+    let doneFired = false;
+    const fireDone = () => {
+      if (doneFired) return;
+      doneFired = true;
+      onChunk({ done: true });
+    };
+
+    // 解析 SSE 数据块
+    const processChunk = (data: string) => {
+      try {
+        const json = JSON.parse(data);
+        const choice = json.choices?.[0];
+        if (!choice) return;
+
+        const delta = choice.delta || choice.message || {};
+        const reasoning = delta.reasoning_content ?? delta.reasoning ?? delta.thinking;
+        const content = delta.content ?? delta.text;
+        const chunk: StreamChunk = {};
+        if (reasoning) chunk.reasoningDelta = reasoning;
+        if (content) chunk.delta = content;
+        if (chunk.delta || chunk.reasoningDelta) {
+          chunkCount++;
+          onChunk(chunk);
+        }
+        if (choice.finish_reason) fireDone();
+      } catch {
+        // 跳过非法 chunk
+      }
+    };
+
+    // 尝试通过代理请求（避免 CORS）
+    try {
+      let buffer = '';
+      await proxyFetchStream({ url, method: 'POST', headers, body }, (chunk) => {
+        buffer += chunk;
+        // 按行分割处理
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || ''; // 保留最后不完整的行
+        for (const line of lines) {
+          if (line.startsWith('data: ') && line !== 'data: [DONE]') {
+            processChunk(line.slice(6));
+          }
+        }
+      });
+      fireDone();
+      log.info('代理请求完成', { chunks: chunkCount, duration: `${Date.now() - startTime}ms` });
+      return;
+    } catch (proxyError) {
+      log.warn('代理请求失败，尝试直接请求:', proxyError);
+    }
+
+    // 直接请求（降级方案）
     const res = await fetch(url, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${opts.apiKey}`,
-      },
-      body: JSON.stringify({
-        model: opts.modelName,
-        messages: this.toRequestMessages(opts.messages),
-        stream: true,
-      }),
+      headers,
+      body,
       signal: opts.signal,
     });
 
@@ -64,46 +121,15 @@ export class OpenAIAdapter extends BaseAdapter {
         const j = JSON.parse(text);
         if (j?.error?.message) msg = j.error.message;
         else if (j?.message) msg = j.message;
-      } catch {
-        // 非 JSON，使用原文
-      }
+      } catch {}
       log.error('请求失败', { status: res.status, message: msg });
       throw new Error(`HTTP ${res.status}：${msg}`);
     }
 
-    log.info('响应状态', { status: res.status });
-
-    let doneFired = false;
-    const fireDone = () => {
-      if (doneFired) return;
-      doneFired = true;
-      onChunk({ done: true });
-    };
-
-    let chunkCount = 0;
     for await (const data of this.parseSSE(res)) {
-      let json: any;
-      try {
-        json = JSON.parse(data);
-      } catch {
-        // 跳过非法 chunk（如 keep-alive 心跳）
-        continue;
-      }
-      const choice = json.choices?.[0];
-      if (!choice) continue;
-      const delta = choice.delta || choice.message || {};
-      const reasoning = delta.reasoning_content ?? delta.reasoning ?? delta.thinking;
-      const content = delta.content ?? delta.text;
-      const chunk: StreamChunk = {};
-      if (reasoning) chunk.reasoningDelta = reasoning;
-      if (content) chunk.delta = content;
-      if (chunk.delta || chunk.reasoningDelta) {
-        chunkCount++;
-        onChunk(chunk);
-      }
-      if (choice.finish_reason) fireDone();
+      processChunk(data);
     }
     fireDone();
-    log.info('请求完成', { chunks: chunkCount, duration: `${Date.now() - startTime}ms` });
+    log.info('直接请求完成', { chunks: chunkCount, duration: `${Date.now() - startTime}ms` });
   }
 }

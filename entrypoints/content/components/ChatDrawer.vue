@@ -21,16 +21,21 @@ const showConfirm = ref(false);
 /** 当前模式：chat 或 voice */
 const activeMode = ref<'chat' | 'voice'>('chat');
 
-/** 标题：动态展示当前会话标题，无会话时显示插件名 */
+/** 切换到语音模式 */
+function switchToVoice() {
+  activeMode.value = 'voice';
+}
+
+/** 切换到文字模式 */
+function switchToChat() {
+  activeMode.value = 'chat';
+}
+
+/** 标题：动态展示当前会话标题 */
 const title = computed(() => {
   if (activeMode.value === 'voice') return '语音助手';
-  const t = store.active?.title?.trim();
-  return t || 'AI 对话助手';
+  return store.active?.title?.trim() || '';
 });
-
-function newConv() {
-  store.createConversation();
-}
 
 function askClear() {
   showConfirm.value = true;
@@ -50,60 +55,39 @@ const drawerClass = computed(() => ({ 'zwf-open': props.open }));
   <div :class="['zwf-drawer-mask', drawerClass]" @click="emit('close')" />
   <div :class="['zwf-drawer', drawerClass]" @click.stop>
     <div class="zwf-drawer-header">
-      <span class="zwf-drawer-title">{{ title }}</span>
+      <div class="zwf-header-left">
+        <!-- 语音模式：返回按钮 + 标题 -->
+        <template v-if="activeMode === 'voice'">
+          <button class="zwf-back-btn" title="返回文字模式" @click="switchToChat">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M19 12H5M12 19l-7-7 7-7" />
+            </svg>
+          </button>
+          <span class="zwf-drawer-title">🎤 语音助手</span>
+        </template>
+        <!-- 文字模式：标题 -->
+        <template v-else-if="title">
+          <span class="zwf-drawer-title">{{ title }}</span>
+        </template>
+        <template v-else>
+          <span class="zwf-brand">
+            <span class="zwf-brand-ai">ai</span><span class="zwf-brand-sep">-</span><span class="zwf-brand-browser">browser</span>
+            <span class="zwf-brand-shine" />
+          </span>
+        </template>
+      </div>
       <div class="zwf-header-actions">
-        <!-- 模式切换 -->
-        <button
-          :class="['zwf-mode-btn', { active: activeMode === 'chat' }]"
-          title="文字对话"
-          @click="activeMode = 'chat'"
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-          </svg>
-        </button>
-        <button
-          :class="['zwf-mode-btn', { active: activeMode === 'voice' }]"
-          title="语音助手"
-          @click="activeMode = 'voice'"
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
-            <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-            <line x1="12" y1="19" x2="12" y2="23" />
-          </svg>
-        </button>
-        <span class="zwf-header-divider" />
-        <button class="zwf-icon-btn" title="新建会话" @click="newConv">
-          <!-- message-square-plus -->
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-            stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-            <line x1="9" y1="10" x2="15" y2="10" />
-            <line x1="12" y1="7" x2="12" y2="13" />
-          </svg>
-        </button>
-        <button class="zwf-icon-btn" title="清除缓存" @click="askClear">
-          <!-- eraser -->
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-            stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-            <path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21" />
-            <path d="M22 21H7" />
-            <path d="m5 11 9 9" />
-          </svg>
-        </button>
-        <a
-          class="zwf-icon-btn"
-          href="https://github.com/zwf1110/browser-ai-chat"
-          target="_blank"
-          rel="noopener noreferrer"
-          title="GitHub 仓库"
-        >
-          <!-- github -->
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-            <path d="M12 .5C5.73.5.99 5.24.99 11.51c0 4.86 3.15 8.98 7.52 10.43.55.1.75-.24.75-.53 0-.26-.01-.95-.02-1.86-3.06.66-3.71-1.47-3.71-1.47-.5-1.27-1.22-1.61-1.22-1.61-.99-.68.08-.67.08-.67 1.1.08 1.68 1.13 1.68 1.13.98 1.68 2.57 1.2 3.2.92.1-.71.38-1.2.69-1.48-2.44-.28-5.01-1.22-5.01-5.43 0-1.2.43-2.18 1.13-2.95-.11-.28-.49-1.4.11-2.92 0 0 .92-.29 3.02 1.13.88-.24 1.82-.36 2.76-.37.94.01 1.88.13 2.76.37 2.1-1.42 3.02-1.13 3.02-1.13.6 1.52.22 2.64.11 2.92.7.77 1.13 1.75 1.13 2.95 0 4.22-2.58 5.15-5.03 5.42.39.34.74 1 .74 2.02 0 1.46-.01 2.64-.01 3 0 .29.2.64.76.53 4.36-1.46 7.5-5.57 7.5-10.43C23.01 5.24 18.27.5 12 .5z"/>
-          </svg>
-        </a>
+        <template v-if="activeMode === 'chat'">
+          <button class="zwf-icon-btn" title="清除缓存" @click="askClear">
+            <!-- eraser -->
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21" />
+              <path d="M22 21H7" />
+              <path d="m5 11 9 9" />
+            </svg>
+          </button>
+        </template>
         <button class="zwf-icon-btn" title="设置" @click="emit('open-settings')">
           <!-- settings (gear) -->
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -123,8 +107,8 @@ const drawerClass = computed(() => ({ 'zwf-open': props.open }));
       </div>
     </div>
     <div class="zwf-drawer-body">
-      <ChatPanel v-if="open && activeMode === 'chat'" />
-      <VoicePanel v-if="open && activeMode === 'voice'" />
+      <ChatPanel v-if="open && activeMode === 'chat'" @switch-voice="switchToVoice" />
+      <VoicePanel v-if="open && activeMode === 'voice'" @switch-chat="switchToChat" />
     </div>
 
     <!-- 清除缓存确认 -->
@@ -149,3 +133,25 @@ const drawerClass = computed(() => ({ 'zwf-open': props.open }));
     </ConfirmDialog>
   </div>
 </template>
+
+<style scoped>
+.zwf-back-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: var(--zwf-text-soft);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  margin-right: 4px;
+}
+
+.zwf-back-btn:hover {
+  background: var(--zwf-bg-hover);
+  color: var(--zwf-primary);
+}
+</style>

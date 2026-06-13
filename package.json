@@ -34,21 +34,23 @@
     "build:firefox": "wxt build -b firefox",
     "zip": "wxt zip",
     "compile": "vue-tsc --noEmit",
-    "postinstall": "wxt prepare"
+    "postinstall": "wxt prepare",
+    "download-model": "bash scripts/download-model.sh"
   },
   "dependencies": {
-    "vue": "^3.5.13",
-    "pinia": "^2.3.0",
-    "markdown-it": "^14.1.0",
     "highlight.js": "^11.10.0",
     "katex": "^0.16.11",
+    "markdown-it": "^14.1.0",
     "markdown-it-katex": "^2.0.3",
-    "uuid": "^11.0.3"
+    "pinia": "^2.3.0",
+    "sherpa-onnx": "^1.13.2",
+    "uuid": "^11.0.3",
+    "vue": "^3.5.13"
   },
   "devDependencies": {
+    "@types/katex": "^0.16.7",
     "@types/markdown-it": "^14.1.2",
     "@types/uuid": "^10.0.0",
-    "@types/katex": "^0.16.7",
     "@wxt-dev/module-vue": "^1.0.2",
     "typescript": "^5.7.2",
     "vue-tsc": "^2.1.10",

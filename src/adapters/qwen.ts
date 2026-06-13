@@ -7,6 +7,7 @@
 
 import { BaseAdapter } from './base';
 import { Logger } from '@/src/utils/logger';
+import { proxyFetchStream } from './proxy';
 import type { ChatMessage, ChatRequestOptions, StreamChunk } from '@/src/types';
 
 const log = new Logger('Adapter:Qwen');
@@ -29,40 +30,20 @@ export class QwenAdapter extends BaseAdapter {
     log.info('请求开始', { url, model: opts.modelName });
 
     const startTime = Date.now();
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${opts.apiKey}`,
+    const headers = {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${opts.apiKey}`,
+    };
+    const body = JSON.stringify({
+      model: opts.modelName,
+      input: {
+        messages: this.toRequestMessages(opts.messages),
       },
-      body: JSON.stringify({
-        model: opts.modelName,
-        input: {
-          messages: this.toRequestMessages(opts.messages),
-        },
-        parameters: {
-          result_format: 'message',
-          incremental_output: true,
-        },
-      }),
-      signal: opts.signal,
+      parameters: {
+        result_format: 'message',
+        incremental_output: true,
+      },
     });
-
-    if (!res.ok) {
-      const text = await res.text().catch(() => '');
-      let msg = text || res.statusText;
-      try {
-        const j = JSON.parse(text);
-        if (j?.message) msg = j.message;
-        else if (j?.error?.message) msg = j.error.message;
-      } catch {
-        // 非 JSON，使用原文
-      }
-      log.error('请求失败', { status: res.status, message: msg });
-      throw new Error(`HTTP ${res.status}：${msg}`);
-    }
-
-    log.info('响应状态', { status: res.status });
 
     let doneFired = false;
     const fireDone = () => {
@@ -71,29 +52,66 @@ export class QwenAdapter extends BaseAdapter {
       onChunk({ done: true });
     };
 
-    for await (const data of this.parseSSE(res)) {
-      let json: any;
+    // 解析 Qwen 特有的响应格式
+    const processChunk = (data: string) => {
       try {
-        json = JSON.parse(data);
-      } catch {
-        continue;
-      }
+        const json = JSON.parse(data);
+        const output = json.output;
+        if (!output) return;
 
-      const output = json.output;
-      if (!output) continue;
+        const choices = output.choices;
+        if (choices && choices.length > 0) {
+          const choice = choices[0];
+          const content = choice.message?.content;
+          if (content) {
+            onChunk({ delta: content });
+          }
+          if (choice.finish_reason) {
+            fireDone();
+          }
+        }
+      } catch {}
+    };
 
-      const choices = output.choices;
-      if (choices && choices.length > 0) {
-        const choice = choices[0];
-        const content = choice.message?.content;
-        if (content) {
-          onChunk({ delta: content });
+    // 尝试通过代理请求
+    try {
+      let buffer = '';
+      await proxyFetchStream({ url, method: 'POST', headers, body }, (chunk) => {
+        buffer += chunk;
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+        for (const line of lines) {
+          if (line.startsWith('data: ') && line !== 'data: [DONE]') {
+            processChunk(line.slice(6));
+          }
         }
-        if (choice.finish_reason) {
-          fireDone();
-        }
-      }
+      });
+      fireDone();
+      log.info('代理请求完成', { duration: `${Date.now() - startTime}ms` });
+      return;
+    } catch (proxyError) {
+      log.warn('代理请求失败，尝试直接请求:', proxyError);
+    }
+
+    // 直接请求
+    const res = await fetch(url, { method: 'POST', headers, body, signal: opts.signal });
+
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      let msg = text || res.statusText;
+      try {
+        const j = JSON.parse(text);
+        if (j?.message) msg = j.message;
+        else if (j?.error?.message) msg = j.error.message;
+      } catch {}
+      log.error('请求失败', { status: res.status, message: msg });
+      throw new Error(`HTTP ${res.status}：${msg}`);
+    }
+
+    for await (const data of this.parseSSE(res)) {
+      processChunk(data);
     }
     fireDone();
+    log.info('直接请求完成', { duration: `${Date.now() - startTime}ms` });
   }
 }

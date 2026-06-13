@@ -7,6 +7,7 @@
 
 import { BaseAdapter } from './base';
 import { Logger } from '@/src/utils/logger';
+import { proxyFetchStream } from './proxy';
 import type { ChatMessage, ChatRequestOptions, StreamChunk } from '@/src/types';
 
 const log = new Logger('Adapter:Wenxin');
@@ -25,40 +26,15 @@ export class WenxinAdapter extends BaseAdapter {
     opts: ChatRequestOptions,
     onChunk: (chunk: StreamChunk) => void
   ): Promise<void> {
-    // 文心一言使用 access_token 认证
-    // 这里假设 baseUrl 已经包含 access_token 参数
-    // 或者使用 API Key + Secret Key 动态获取
     const url = `${opts.baseUrl.replace(/\/$/, '')}/chat/completions`;
     log.info('请求开始', { url });
 
     const startTime = Date.now();
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        messages: this.toRequestMessages(opts.messages),
-        stream: true,
-      }),
-      signal: opts.signal,
+    const headers = { 'Content-Type': 'application/json' };
+    const body = JSON.stringify({
+      messages: this.toRequestMessages(opts.messages),
+      stream: true,
     });
-
-    if (!res.ok) {
-      const text = await res.text().catch(() => '');
-      let msg = text || res.statusText;
-      try {
-        const j = JSON.parse(text);
-        if (j?.error_msg) msg = j.error_msg;
-        else if (j?.error?.message) msg = j.error.message;
-      } catch {
-        // 非 JSON，使用原文
-      }
-      log.error('请求失败', { status: res.status, message: msg });
-      throw new Error(`HTTP ${res.status}：${msg}`);
-    }
-
-    log.info('响应状态', { status: res.status });
 
     let doneFired = false;
     const fireDone = () => {
@@ -67,28 +43,66 @@ export class WenxinAdapter extends BaseAdapter {
       onChunk({ done: true });
     };
 
-    for await (const data of this.parseSSE(res)) {
-      let json: any;
+    // 解析文心一言响应格式
+    const processChunk = (data: string) => {
       try {
-        json = JSON.parse(data);
-      } catch {
-        continue;
+        const json = JSON.parse(data);
+        if (json.error_code) {
+          throw new Error(`文心一言错误: ${json.error_msg || json.error_code}`);
+        }
+        const result = json.result;
+        if (result) {
+          onChunk({ delta: result });
+        }
+        if (json.is_end) {
+          fireDone();
+        }
+      } catch (e) {
+        if (e instanceof Error && e.message.includes('文心一言错误')) {
+          throw e;
+        }
       }
+    };
 
-      // 文心一言流式响应格式
-      if (json.error_code) {
-        throw new Error(`文心一言错误: ${json.error_msg || json.error_code}`);
-      }
+    // 尝试通过代理请求
+    try {
+      let buffer = '';
+      await proxyFetchStream({ url, method: 'POST', headers, body }, (chunk) => {
+        buffer += chunk;
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+        for (const line of lines) {
+          if (line.startsWith('data: ') && line !== 'data: [DONE]') {
+            processChunk(line.slice(6));
+          }
+        }
+      });
+      fireDone();
+      log.info('代理请求完成', { duration: `${Date.now() - startTime}ms` });
+      return;
+    } catch (proxyError) {
+      log.warn('代理请求失败，尝试直接请求:', proxyError);
+    }
 
-      const result = json.result;
-      if (result) {
-        onChunk({ delta: result });
-      }
+    // 直接请求
+    const res = await fetch(url, { method: 'POST', headers, body, signal: opts.signal });
 
-      if (json.is_end) {
-        fireDone();
-      }
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      let msg = text || res.statusText;
+      try {
+        const j = JSON.parse(text);
+        if (j?.error_msg) msg = j.error_msg;
+        else if (j?.error?.message) msg = j.error.message;
+      } catch {}
+      log.error('请求失败', { status: res.status, message: msg });
+      throw new Error(`HTTP ${res.status}：${msg}`);
+    }
+
+    for await (const data of this.parseSSE(res)) {
+      processChunk(data);
     }
     fireDone();
+    log.info('直接请求完成', { duration: `${Date.now() - startTime}ms` });
   }
 }
