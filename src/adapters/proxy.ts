@@ -32,7 +32,7 @@ export async function proxyFetch(options: ProxyRequestOptions): Promise<ProxyRes
       throw new Error('不在扩展环境中');
     }
 
-    log.debug('代理请求:', options.url);
+    log.info('代理请求:', { url: options.url, method: options.method });
 
     const response = await chrome.runtime.sendMessage({
       type: 'proxy-fetch',
@@ -68,16 +68,14 @@ export async function proxyFetchStream(
       throw new Error('不在扩展环境中');
     }
 
-    log.debug('流式代理请求:', options.url);
+    log.info('流式代理请求:', { url: options.url, method: options.method });
 
-    // 监听流式数据
+    // 先注册监听器，再发消息，避免竞态
     const chunkListener = (msg: any) => {
       if (msg.type === 'stream-chunk') {
         onChunk(msg.chunk);
       }
     };
-
-    chrome.runtime.onMessage.addListener(chunkListener);
 
     // 发起请求
     const response = await chrome.runtime.sendMessage({
@@ -89,20 +87,36 @@ export async function proxyFetchStream(
     });
 
     if (!response?.success) {
-      chrome.runtime.onMessage.removeListener(chunkListener);
       throw new Error(response?.error || '流式请求失败');
     }
 
-    // 等待流结束
-    return new Promise((resolve) => {
+    // 注册监听器（在 sendMessage 之后但在流数据到达之前）
+    chrome.runtime.onMessage.addListener(chunkListener);
+
+    // 等待流结束或错误
+    return new Promise((resolve, reject) => {
+      const cleanup = () => {
+        chrome.runtime.onMessage.removeListener(chunkListener);
+        chrome.runtime.onMessage.removeListener(endListener);
+        chrome.runtime.onMessage.removeListener(errorListener);
+      };
+
       const endListener = (msg: any) => {
         if (msg.type === 'stream-end') {
-          chrome.runtime.onMessage.removeListener(chunkListener);
-          chrome.runtime.onMessage.removeListener(endListener);
+          cleanup();
           resolve();
         }
       };
+
+      const errorListener = (msg: any) => {
+        if (msg.type === 'stream-error') {
+          cleanup();
+          reject(new Error(msg.error || '流式请求中断'));
+        }
+      };
+
       chrome.runtime.onMessage.addListener(endListener);
+      chrome.runtime.onMessage.addListener(errorListener);
     });
   } catch (error) {
     log.error('流式代理请求失败:', error);

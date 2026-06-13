@@ -327,6 +327,26 @@ async function saveGeneral() {
   });
   emit('close');
 }
+
+// 导出当前模型配置（可粘贴到 local-config.ts）
+const exportNotice = ref(false);
+function exportConfig() {
+  const config = localModels.value.map((m) => ({
+    id: m.id,
+    label: m.label,
+    provider: m.provider,
+    modelName: m.modelName,
+    baseUrl: m.baseUrl || '',
+    apiKey: m.apiKey || '',
+    apiFormat: m.apiFormat || 'open-chat',
+    authField: m.authField || 'bearer',
+  }));
+  const code = `export const DEFAULT_MODEL_ID = '${selectedModelId.value}';\n\nexport const LOCAL_MODELS = ${JSON.stringify(config, null, 2)};`;
+  navigator.clipboard.writeText(code).then(() => {
+    exportNotice.value = true;
+    setTimeout(() => (exportNotice.value = false), 2000);
+  });
+}
 </script>
 
 <template>

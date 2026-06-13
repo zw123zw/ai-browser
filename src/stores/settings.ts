@@ -17,6 +17,12 @@ export const useSettingsStore = defineStore('zwf-settings', () => {
     if (!Array.isArray(merged.models) || merged.models.length === 0) {
       merged.models = DEFAULT_SETTINGS.models;
     }
+    // 修复无 id 的模型
+    merged.models = merged.models.map((m, i) => ({
+      ...m,
+      id: m.id || m.modelName || `model-${i}`,
+      label: m.label || m.modelName || `模型 ${i + 1}`,
+    }));
     if (
       !merged.defaultModelId ||
       !merged.models.find((m) => m.id === merged.defaultModelId)
@@ -37,22 +43,38 @@ export const useSettingsStore = defineStore('zwf-settings', () => {
     },
   });
 
-  /** 初始化：读取本地 */
+  /** 初始化：读取本地存储，无数据则使用 DEFAULT_SETTINGS（含 local-config.json） */
   async function init() {
     log.info('初始化设置');
     const v = await settingsStorage.getValue();
-    if (v && typeof v === 'object' && !Array.isArray(v)) {
+    const hasValidData =
+      v &&
+      typeof v === 'object' &&
+      !Array.isArray(v) &&
+      Array.isArray((v as any).models) &&
+      (v as any).models.length > 0;
+
+    if (hasValidData) {
       settings.value = mergeSettings(v as any);
+      log.info('从 storage 加载设置', { modelCount: settings.value.models.length });
     } else {
-      settings.value = { ...DEFAULT_SETTINGS };
+      settings.value = mergeSettings(DEFAULT_SETTINGS);
       sync.markSelfWrite();
       await settingsStorage.setValue(plain(settings.value));
+      log.info('首次加载默认设置（含 local-config.json 模型）', {
+        modelCount: settings.value.models.length,
+      });
     }
+
     ready.value = true;
-    log.info('设置加载完成', { provider: settings.value.provider, modelCount: settings.value.models.length });
+    log.info('设置加载完成', {
+      provider: settings.value.provider,
+      modelCount: settings.value.models.length,
+      defaultModel: settings.value.defaultModelId,
+    });
   }
 
-  /** 显式更新：立即 await 持久化，避免在用户关闭弹窗后丢失 */
+  /** 显式更新：立即 await 持久化 */
   async function update(partial: Partial<AppSettings>) {
     log.info('更新设置', { keys: Object.keys(partial) });
     settings.value = mergeSettings({ ...settings.value, ...partial });

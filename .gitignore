@@ -29,3 +29,6 @@ Thumbs.db
 
 # Archives / generated packages
 *.zip
+
+# Local config (API keys, sensitive data)
+src/local-config.json

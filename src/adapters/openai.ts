@@ -41,7 +41,7 @@ export class OpenAIAdapter extends BaseAdapter {
     onChunk: (chunk: StreamChunk) => void
   ): Promise<void> {
     const url = `${opts.baseUrl.replace(/\/$/, '')}/chat/completions`;
-    log.info('请求开始', { url, model: opts.modelName, messageCount: opts.messages.length });
+    log.info('请求开始', { url, model: opts.modelName, messageCount: opts.messages.length, hasApiKey: !!opts.apiKey, hasSignal: !!opts.signal });
 
     const startTime = Date.now();
     const headers = {

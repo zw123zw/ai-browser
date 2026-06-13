@@ -13,50 +13,49 @@ const convStore = useConversationsStore();
 const settingsStore = useSettingsStore();
 const toast = useToast();
 
+/** 会话是否存在且有消息 */
+const hasMessages = computed(() => {
+  return convStore.conversation && convStore.conversation.messages.length > 0;
+});
+
 async function onSend(payload: { text: string; images: string[]; reasoning: boolean }) {
-  // 如果没有活跃会话，先创建一个
-  if (!convStore.active) {
-    convStore.createConversation();
+  console.log('[ChatPanel] onSend 收到', { text: payload.text.slice(0, 50), hasImages: payload.images.length > 0, reasoning: payload.reasoning });
+  if (!convStore.conversation) {
+    console.error('[ChatPanel] 无会话');
+    return;
   }
-  const conv = convStore.active;
-  if (!conv) return;
   const text = payload.reasoning
     ? `[请按深度思考的方式作答，先给出完整推理过程，再给出最终答案]\n\n${payload.text}`
     : payload.text;
   try {
-    await convStore.send(conv.id, text, payload.images, payload.reasoning);
+    await convStore.send(text, payload.images, payload.reasoning);
   } catch (e: any) {
     toast.error(e?.message || '发送失败');
   }
 }
 
 function onAbort() {
-  if (!convStore.active) return;
-  convStore.abort(convStore.active.id);
+  convStore.abort();
 }
 
 function onPick(text: string) {
-  // 创建新会话并发送
-  convStore.createConversation();
-  setTimeout(() => {
-    const conv = convStore.active;
-    if (!conv) return;
-    convStore.send(conv.id, text, [], false);
-  }, 50);
+  // 直接发送建议文本到当前会话
+  if (!convStore.conversation) return;
+  convStore.send(text, [], false);
 }
 </script>
 
 <template>
   <div class="zwf-centered-panel">
-    <div v-if="convStore.active" class="zwf-centered-body">
-      <MessageList :conversation="convStore.active" />
+    <div v-if="hasMessages" class="zwf-centered-body">
+      <MessageList :conversation="convStore.conversation!" />
     </div>
     <div v-else class="zwf-centered-welcome">
       <EmptyChat @pick="onPick" />
     </div>
     <footer class="zwf-centered-footer">
       <InputBar
-        :conversation="convStore.active"
+        :conversation="convStore.conversation"
         :models="settingsStore.settings.models"
         @send="onSend"
         @abort="onAbort"

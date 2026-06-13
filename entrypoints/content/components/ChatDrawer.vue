@@ -42,10 +42,9 @@ function askClear() {
 }
 
 async function doClear() {
-  await store.clearAll();
-  await settingsStore.init();
+  await store.clearCurrent();
   showConfirm.value = false;
-  toast.success('缓存已清除');
+  toast.success('对话已清除');
 }
 
 const drawerClass = computed(() => ({ 'zwf-open': props.open }));
@@ -78,7 +77,7 @@ const drawerClass = computed(() => ({ 'zwf-open': props.open }));
       </div>
       <div class="zwf-header-actions">
         <template v-if="activeMode === 'chat'">
-          <button class="zwf-icon-btn" title="清除缓存" @click="askClear">
+          <button class="zwf-icon-btn" title="清除对话" @click="askClear">
             <!-- eraser -->
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
               stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
@@ -111,11 +110,11 @@ const drawerClass = computed(() => ({ 'zwf-open': props.open }));
       <VoicePanel v-if="open && activeMode === 'voice'" @switch-chat="switchToChat" />
     </div>
 
-    <!-- 清除缓存确认 -->
+    <!-- 清除对话确认 -->
     <ConfirmDialog
       :visible="showConfirm"
-      title="清除缓存"
-      desc="此操作会清除所有会话、设置、悬浮按钮位置等本地数据，删除后无法恢复。"
+      title="清除对话"
+      desc="清除当前对话的所有历史记录，下次聊天将不携带之前的上下文。"
       confirm-text="确认清除"
       variant="danger"
       @confirm="doClear"

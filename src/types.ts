@@ -92,6 +92,10 @@ export interface AppSettings {
   theme?: string;
   /** 唤起插件的快捷键，如 "Ctrl+Shift+B" */
   shortcut: string;
+  /** 最大会话数 */
+  maxConversations?: number;
+  /** 单会话最大上下文消息数 */
+  maxContext?: number;
 }
 
 /** Adapter 流式回调每一段 */

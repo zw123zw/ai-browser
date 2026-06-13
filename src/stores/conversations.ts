@@ -1,12 +1,10 @@
 import { defineStore } from 'pinia';
-import { computed, reactive, ref, watch } from 'vue';
+import { computed, reactive, ref } from 'vue';
 import { v4 as uuid } from 'uuid';
 import type { ChatMessage, Conversation } from '@/src/types';
 import {
-  activeIdStorage,
-  conversationsStorage,
-  fabPosStorage,
-  settingsStorage,
+  conversationStorage,
+  conversationsStorageOld,
 } from '@/src/storage';
 import { useSettingsStore } from './settings';
 import { createAdapter } from '@/src/adapters';
@@ -16,66 +14,67 @@ import { Logger } from '@/src/utils/logger';
 const log = new Logger('Store:Conversations');
 
 export const useConversationsStore = defineStore('zwf-conversations', () => {
-  const conversations = ref<Conversation[]>([]);
-  const activeId = ref<string>('');
+  /** 单一会话（不再支持多会话） */
+  const conversation = ref<Conversation | null>(null);
   const ready = ref(false);
-  /** 每个会话的 AbortController，便于停止 */
-  const aborters = new Map<string, AbortController>();
+  /** 标记会话上下文是否已被清除（清除后下次发送不携带历史上下文） */
+  const contextCleared = ref(false);
+  /** AbortController，便于停止流式请求 */
+  let currentAborter: AbortController | null = null;
 
-  const active = computed<Conversation | undefined>(() =>
-    conversations.value.find((c) => c.id === activeId.value)
-  );
+  /** 兼容旧接口：active 指向唯一的会话 */
+  const active = computed<Conversation | undefined>(() => conversation.value ?? undefined);
 
-  // 跨页面 + 防抖持久化
-  defineStorageSync<Conversation[]>({
-    source: conversations,
-    storage: conversationsStorage,
+  // 跨页面 + 防抖持久化（单会话）
+  defineStorageSync<Conversation | null>({
+    source: conversation,
+    storage: conversationStorage,
     ready,
     applyRemote: (nv) => {
-      if (Array.isArray(nv)) conversations.value = nv;
+      if (nv && typeof nv === 'object' && Array.isArray((nv as any).messages)) {
+        conversation.value = nv as Conversation;
+      }
     },
   });
 
-  // activeId 单独同步（轻量，不走 deep watch）
-  let activeIdSelfWrite = 0;
-  activeIdStorage.watch((nv) => {
-    if (typeof nv !== 'string') return;
-    if (Date.now() - activeIdSelfWrite < 500) return;
-    activeId.value = nv;
-  });
-  watch(activeId, (v) => {
-    if (!ready.value) return;
-    activeIdSelfWrite = Date.now();
-    activeIdStorage.setValue(v);
-  });
-
-  /** 初始化：读取并清洗本地数据 */
+  /** 初始化：读取本地数据，兼容旧的多会话格式 */
   async function init() {
     log.info('初始化会话数据');
-    const list = await conversationsStorage.getValue();
-    if (Array.isArray(list)) {
-      conversations.value = list.filter(
-        (c) => c && typeof c === 'object' && Array.isArray((c as any).messages)
-      );
+
+    // 先尝试读取新格式（单会话）
+    const stored = await conversationStorage.getValue();
+    if (stored && typeof stored === 'object' && Array.isArray((stored as any).messages)) {
+      conversation.value = stored as Conversation;
+      log.info('从新格式存储加载会话', { id: conversation.value.id });
     } else {
-      conversations.value = [];
-      await conversationsStorage.setValue([]);
+      // 兼容旧格式：从多会话数组迁移
+      const oldStored = await conversationsStorageOld.getValue();
+      if (Array.isArray(oldStored) && oldStored.length > 0) {
+        const first = oldStored[0];
+        if (first && typeof first === 'object' && Array.isArray((first as any).messages)) {
+          conversation.value = first;
+          log.info('从旧格式迁移会话', { id: conversation.value.id });
+          // 保存到新格式并清理旧数据
+          await saveConversation();
+          await conversationsStorageOld.setValue([]);
+        }
+      }
     }
-    const aid = await activeIdStorage.getValue();
-    if (typeof aid === 'string' && conversations.value.find((c) => c.id === aid)) {
-      activeId.value = aid;
-    } else if (conversations.value.length) {
-      activeId.value = conversations.value[0].id;
+
+    // 如果没有会话，创建一个
+    if (!conversation.value) {
+      conversation.value = createDefaultConversation();
+      await saveConversation();
     }
+
     ready.value = true;
-    log.info('会话数据加载完成', { count: conversations.value.length, activeId: activeId.value });
+    log.info('会话数据加载完成', { id: conversation.value.id, messageCount: conversation.value.messages.length });
   }
 
-  // ============ 会话 CRUD ============
-
-  function createConversation(): Conversation {
+  /** 创建默认会话（仅初始化时使用） */
+  function createDefaultConversation(): Conversation {
     const settings = useSettingsStore().settings;
-    const conv: Conversation = {
+    return {
       id: uuid(),
       title: '新对话',
       messages: [],
@@ -83,58 +82,47 @@ export const useConversationsStore = defineStore('zwf-conversations', () => {
       createdAt: Date.now(),
       updatedAt: Date.now(),
     };
-    conversations.value.unshift(conv);
-    activeId.value = conv.id;
-    enforceMaxConversations();
-    log.info('创建新会话', { id: conv.id, modelId: conv.modelId });
-    return conv;
   }
 
-  function selectConversation(id: string) {
-    activeId.value = id;
-    log.debug('切换会话', { id });
-  }
-
-  function deleteConversation(id: string) {
-    const idx = conversations.value.findIndex((c) => c.id === id);
-    if (idx === -1) return;
-    conversations.value.splice(idx, 1);
-    if (activeId.value === id) {
-      activeId.value = conversations.value[0]?.id || '';
+  /** 保存会话到存储（显式写入，用于迁移等场景） */
+  async function saveConversation() {
+    if (conversation.value) {
+      conversation.value.updatedAt = Date.now();
+      await conversationStorage.setValue(conversation.value);
     }
-    log.info('删除会话', { id });
   }
 
-  function deleteMessage(convId: string, msgId: string) {
-    const conv = conversations.value.find((c) => c.id === convId);
-    if (!conv) return;
-    const idx = conv.messages.findIndex((m) => m.id === msgId);
+  /** 清除当前会话的历史记录和上下文 */
+  async function clearCurrent() {
+    if (!conversation.value) return;
+    // 中断进行中的请求
+    if (currentAborter) {
+      currentAborter.abort();
+      currentAborter = null;
+    }
+    conversation.value.messages = [];
+    conversation.value.title = '新对话';
+    conversation.value.draftText = '';
+    conversation.value.draftImages = [];
+    conversation.value.updatedAt = Date.now();
+    contextCleared.value = true;
+    log.info('已清除当前会话历史和上下文');
+  }
+
+  /** 删除单条消息 */
+  function deleteMessage(msgId: string) {
+    if (!conversation.value) return;
+    const idx = conversation.value.messages.findIndex((m) => m.id === msgId);
     if (idx === -1) return;
-    conv.messages.splice(idx, 1);
-    conv.updatedAt = Date.now();
+    conversation.value.messages.splice(idx, 1);
+    conversation.value.updatedAt = Date.now();
   }
 
-  function updateScroll(id: string, top: number) {
-    const c = conversations.value.find((x) => x.id === id);
-    if (c) c.scrollTop = top;
+  function updateScroll(top: number) {
+    if (conversation.value) conversation.value.scrollTop = top;
   }
 
-  /** 删除最早的，超过设置的最大会话数时执行 */
-  function enforceMaxConversations() {
-    const max = useSettingsStore().settings.maxConversations;
-    if (conversations.value.length <= max) return;
-    const sorted = [...conversations.value].sort(
-      (a, b) => a.createdAt - b.createdAt
-    );
-    const toRemove = new Set(
-      sorted.slice(0, conversations.value.length - max).map((c) => c.id)
-    );
-    conversations.value = conversations.value.filter(
-      (c) => !toRemove.has(c.id)
-    );
-  }
-
-  /** 截断每个会话的消息数到 maxContext */
+  /** 截断会话的消息数到 maxContext */
   function enforceMaxContext(conv: Conversation) {
     const max = useSettingsStore().settings.maxContext;
     if (conv.messages.length <= max) return;
@@ -147,41 +135,33 @@ export const useConversationsStore = defineStore('zwf-conversations', () => {
     return conv.messages.slice(-max);
   }
 
-  /** 一键清除所有本地数据并重置默认 */
-  async function clearAll() {
-    // 中断进行中的请求
-    aborters.forEach((ac) => ac.abort());
-    aborters.clear();
-    await Promise.all([
-      conversationsStorage.removeValue(),
-      activeIdStorage.removeValue(),
-      settingsStorage.removeValue(),
-      fabPosStorage.removeValue(),
-    ]);
-    conversations.value = [];
-    activeId.value = '';
-    // settings 由 settings store 自己 init 重置
-  }
-
   // ============ 流式发送 ============
 
   async function send(
-    convId: string,
     text: string,
     images: string[] = [],
     reasoningEnabled = false
   ) {
-    const conv = conversations.value.find((c) => c.id === convId);
-    if (!conv) return;
+    if (!conversation.value) return;
+    const conv = conversation.value;
 
     const settings = useSettingsStore().settings;
+    log.info('send() 开始', { textLen: text.length, modelId: conv.modelId, contextCleared: contextCleared.value });
+
     const model = settings.models.find((m) => m.id === conv.modelId);
-    if (!model) throw new Error('未找到当前会话使用的模型');
-    if (!model.apiKey && !settings.apiKey) {
+    if (!model) {
+      log.error('未找到模型', { modelId: conv.modelId, availableModels: settings.models.map(m => m.id) });
+      throw new Error('未找到当前会话使用的模型');
+    }
+    log.info('模型找到', { id: model.id, label: model.label, provider: model.provider, modelName: model.modelName });
+
+    const effectiveBaseUrl = model.baseUrl || settings.baseUrl;
+    const effectiveApiKey = model.apiKey || settings.apiKey;
+    if (!effectiveApiKey) {
+      log.error('无 API Key', { modelApiKey: !!model.apiKey, globalApiKey: !!settings.apiKey });
       throw new Error('请先在设置中配置 API Key');
     }
-
-    log.info('发送消息', { convId, provider: model.provider, model: model.modelName, hasImages: images.length > 0 });
+    log.info('API 配置', { baseUrl: effectiveBaseUrl.slice(0, 40) + '...', hasApiKey: !!effectiveApiKey });
 
     // 用户消息
     conv.messages.push({
@@ -209,11 +189,21 @@ export const useConversationsStore = defineStore('zwf-conversations', () => {
     });
     conv.messages.push(aiMsg);
     conv.updatedAt = Date.now();
-    enforceMaxContext(conv);
+
+    // 如果上下文被清除过，只发送当前用户消息（不携带历史）
+    let requestMessages: ChatMessage[];
+    if (contextCleared.value) {
+      // 只取最后一条用户消息
+      requestMessages = conv.messages.filter((m) => m.role === 'user' && m.id !== aiMsg.id).slice(-1);
+      contextCleared.value = false; // 重置标记，后续消息恢复正常上下文
+    } else {
+      enforceMaxContext(conv);
+      requestMessages = buildRequestMessages(conv).filter((m) => m.id !== aiMsg.id);
+    }
 
     const adapter = createAdapter(model.provider);
     const ac = new AbortController();
-    aborters.set(convId, ac);
+    currentAborter = ac;
 
     try {
       await adapter.chat(
@@ -221,7 +211,7 @@ export const useConversationsStore = defineStore('zwf-conversations', () => {
           baseUrl: model.baseUrl || settings.baseUrl,
           apiKey: model.apiKey || settings.apiKey,
           modelName: model.modelName,
-          messages: buildRequestMessages(conv).filter((m) => m.id !== aiMsg.id),
+          messages: requestMessages,
           signal: ac.signal,
         },
         (chunk) => {
@@ -234,40 +224,37 @@ export const useConversationsStore = defineStore('zwf-conversations', () => {
         }
       );
       aiMsg.status = 'done';
-      log.info('消息发送完成', { convId, contentLength: aiMsg.content.length });
+      log.info('消息发送完成', { contentLength: aiMsg.content.length });
     } catch (e: any) {
       if (e?.name === 'AbortError' || ac.signal.aborted) {
         aiMsg.status = 'aborted';
-        log.info('消息已中止', { convId });
+        log.info('消息已中止');
       } else {
-        log.error('消息发送失败', { convId, error: e?.message });
+        log.error('消息发送失败', { error: e?.message });
         aiMsg.status = 'error';
         aiMsg.errorMessage = e?.message || '请求失败';
       }
     } finally {
-      aborters.delete(convId);
+      if (currentAborter === ac) currentAborter = null;
     }
   }
 
-  function abort(convId: string) {
-    log.debug('中止请求', { convId });
-    aborters.get(convId)?.abort();
-    aborters.delete(convId);
+  function abort() {
+    log.debug('中止请求');
+    currentAborter?.abort();
+    currentAborter = null;
   }
 
   return {
-    conversations,
-    activeId,
+    conversation,
     active,
     ready,
+    contextCleared,
     init,
-    createConversation,
-    selectConversation,
-    deleteConversation,
+    clearCurrent,
     deleteMessage,
     updateScroll,
     send,
     abort,
-    clearAll,
   };
 });

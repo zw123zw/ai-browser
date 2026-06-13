@@ -23,6 +23,7 @@ export default defineBackground(() => {
     // 代理 fetch 请求（避免 CORS）
     if (message.type === 'proxy-fetch') {
       const { url, method, headers, body } = message;
+      console.log('[Background] proxy-fetch 收到', { url, method });
 
       fetch(url, {
         method: method || 'POST',
@@ -43,6 +44,7 @@ export default defineBackground(() => {
     // 代理流式请求（SSE）
     if (message.type === 'proxy-fetch-stream') {
       const { url, method, headers, body } = message;
+      console.log('[Background] proxy-fetch-stream 收到', { url, method });
 
       fetch(url, {
         method: method || 'POST',
@@ -66,19 +68,28 @@ export default defineBackground(() => {
           const decoder = new TextDecoder();
           let buffer = '';
 
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
+          try {
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
 
-            buffer += decoder.decode(value, { stream: true });
+              buffer += decoder.decode(value, { stream: true });
 
-            // 发送数据块到 content script
+              // 发送数据块到 content script
+              chrome.tabs.sendMessage(sender.tab.id, {
+                type: 'stream-chunk',
+                chunk: buffer,
+              }).catch(() => {});
+
+              buffer = '';
+            }
+          } catch (streamErr) {
+            console.error('[Background] 流读取异常:', streamErr);
             chrome.tabs.sendMessage(sender.tab.id, {
-              type: 'stream-chunk',
-              chunk: buffer,
+              type: 'stream-error',
+              error: String(streamErr),
             }).catch(() => {});
-
-            buffer = '';
+            return;
           }
 
           // 发送流结束
@@ -87,6 +98,14 @@ export default defineBackground(() => {
           }).catch(() => {});
         })
         .catch((err) => {
+          console.error('[Background] 流式请求异常:', err);
+          // sendResponse 可能已调用过，用 stream-error 通知 content script
+          if (sender.tab?.id) {
+            chrome.tabs.sendMessage(sender.tab.id, {
+              type: 'stream-error',
+              error: String(err),
+            }).catch(() => {});
+          }
           sendResponse({ success: false, error: String(err) });
         });
 

@@ -70,7 +70,7 @@ async function copyMessage() {
 
 function deleteMessage() {
   if (!ctxMenu.value) return;
-  store.deleteMessage(props.conversation.id, ctxMenu.value.message.id);
+  store.deleteMessage(ctxMenu.value.message.id);
   closeMenu();
 }
 
@@ -137,14 +137,14 @@ watch(
 function onScroll() {
   if (!scroller.value) return;
   const el = scroller.value;
-  store.updateScroll(props.conversation.id, el.scrollTop);
+  store.updateScroll(el.scrollTop);
   // 离底超过 80px 视为主动上滚
   stickToBottom.value = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
 }
 
 async function quickSend(text: string) {
   try {
-    await store.send(props.conversation.id, text, []);
+    await store.send(text, []);
   } catch (e: any) {
     toast.error(e?.message || '发送失败');
   }
