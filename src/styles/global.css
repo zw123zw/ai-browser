@@ -649,23 +649,21 @@
 .zwf-centered-body {
   flex: 1;
   min-height: 0;
-  overflow: hidden;
-  display: flex;
-  justify-content: center;
+  overflow-y: auto;
+  overflow-x: hidden;
   background: linear-gradient(180deg, var(--zwf-bg-soft) 0%, var(--zwf-bg) 100%);
 }
 .zwf-centered-body .zwf-msg-list-wrap {
   width: 100%;
   max-width: 560px;
   margin: 0 auto;
+  padding: 16px 20px 12px;
 }
 .zwf-centered-body .zwf-msg-list {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
   width: 100%;
-  padding: 16px 20px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 .zwf-centered-welcome {
   flex: 1;
