@@ -705,6 +705,7 @@ table {
   flex-direction: column;
   height: 100%;
   background: var(--zwf-bg);
+  position: relative;
 }
 .zwf-centered-body {
   flex: 1;
@@ -712,6 +713,7 @@ table {
   overflow-y: auto;
   overflow-x: hidden;
   background: linear-gradient(180deg, var(--zwf-bg-soft) 0%, var(--zwf-bg) 100%);
+  position: relative;
 }
 .zwf-centered-body .zwf-msg-list-wrap {
   width: 100%;
@@ -721,10 +723,13 @@ table {
 }
 .zwf-centered-body .zwf-msg-list {
   width: 100%;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
   display: flex;
   flex-direction: column;
   gap: 16px;
-  overflow-x: hidden;
 }
 .zwf-centered-welcome {
   flex: 1;
@@ -995,9 +1000,9 @@ table {
   flex-direction: column;
 }
 .zwf-scroll-bottom-btn {
-  position: absolute;
+  position: sticky;
   left: 50%;
-  bottom: 16px;
+  bottom: 50px;
   transform: translateX(-50%);
   width: 40px;
   height: 40px;
@@ -1011,7 +1016,7 @@ table {
   justify-content: center;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
   transition: background 0.15s ease, color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
-  z-index: 5;
+  z-index: 50;
 }
 .zwf-scroll-bottom-btn:hover {
   background: var(--zwf-primary);

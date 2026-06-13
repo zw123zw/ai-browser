@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import type { ChatMessage, Conversation } from '@/src/types';
 import { useConversationsStore } from '@/src/stores/conversations';
 import { useToast } from '@/src/composables/useToast';
@@ -8,6 +8,7 @@ import EmptyChat from './EmptyChat.vue';
 import MessageContextMenu from './MessageContextMenu.vue';
 
 const props = defineProps<{ conversation: Conversation }>();
+const emit = defineEmits<{ (e: 'scroll-to-bottom'): void }>();
 const store = useConversationsStore();
 const toast = useToast();
 
@@ -15,6 +16,10 @@ const scroller = ref<HTMLDivElement | null>(null);
 const anchor = ref<HTMLDivElement | null>(null);
 /** 用户没主动上滚就一直贴底 */
 const stickToBottom = ref(true);
+/** 实际滚动容器（.zwf-centered-body） */
+const scrollContainer = ref<HTMLDivElement | null>(null);
+/** 距离底部的阈值 */
+const BOTTOM_THRESHOLD = 30;
 
 interface CtxMenu {
   x: number;
@@ -87,20 +92,20 @@ function jumpToBottom() {
 }
 
 function scrollToBottom() {
-  if (!scroller.value) return;
-  // 使用 scrollTop 确保可靠滚动
-  scroller.value.scrollTop = scroller.value.scrollHeight;
+  const container = scrollContainer.value;
+  if (!container) return;
+  container.scrollTop = container.scrollHeight;
 }
 
 /** 切换会话时恢复滚动位置 */
 async function restoreScroll() {
   await nextTick();
-  if (!scroller.value) return;
+  const container = scrollContainer.value;
+  if (!container) return;
   const top = props.conversation.scrollTop;
   if (top != null) {
-    scroller.value.scrollTop = top;
-    const el = scroller.value;
-    stickToBottom.value = el.scrollHeight - top - el.clientHeight < 50;
+    container.scrollTop = top;
+    stickToBottom.value = container.scrollHeight - top - container.clientHeight < 50;
   } else {
     scrollToBottom();
     stickToBottom.value = true;
@@ -134,11 +139,12 @@ watch(
 );
 
 function onScroll() {
-  if (!scroller.value) return;
-  const el = scroller.value;
-  store.updateScroll(el.scrollTop);
-  // 离底超过 50px 视为主动上滚
-  stickToBottom.value = el.scrollHeight - el.scrollTop - el.clientHeight < 50;
+  const container = scrollContainer.value;
+  if (!container) return;
+  store.updateScroll(container.scrollTop);
+  // 离底超过阈值视为主动上滚
+  const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
+  stickToBottom.value = distanceFromBottom < BOTTOM_THRESHOLD;
 }
 
 async function quickSend(text: string) {
@@ -150,19 +156,37 @@ async function quickSend(text: string) {
 }
 
 onMounted(() => {
+  // 获取实际的滚动容器（.zwf-centered-body）
+  scrollContainer.value = scroller.value?.closest('.zwf-centered-body') as HTMLDivElement | null;
+  if (scrollContainer.value) {
+    scrollContainer.value.addEventListener('scroll', onScroll);
+  }
   restoreScroll();
   document.addEventListener('mousedown', onDocClick);
   document.addEventListener('keydown', onEsc);
 });
 onUnmounted(() => {
+  if (scrollContainer.value) {
+    scrollContainer.value.removeEventListener('scroll', onScroll);
+  }
   document.removeEventListener('mousedown', onDocClick);
   document.removeEventListener('keydown', onEsc);
+});
+
+/** 是否显示回到底部按钮 */
+const showScrollBottom = computed(() => !stickToBottom.value && props.conversation.messages.length > 0);
+
+/** 暴露给父组件的方法 */
+defineExpose({
+  jumpToBottom,
+  stickToBottom,
+  showScrollBottom,
 });
 </script>
 
 <template>
   <div class="zwf-msg-list-wrap">
-    <div ref="scroller" class="zwf-msg-list" @scroll="onScroll">
+    <div ref="scroller" class="zwf-msg-list">
       <template v-if="conversation.messages.length">
         <MessageItem
           v-for="m in conversation.messages"
@@ -174,22 +198,6 @@ onUnmounted(() => {
       </template>
       <EmptyChat v-else @pick="quickSend" />
     </div>
-
-    <!-- 一键滚动到底部 -->
-    <transition name="zwf-fade">
-      <button
-        v-if="!stickToBottom && conversation.messages.length"
-        class="zwf-scroll-bottom-btn"
-        title="滚动到底部"
-        @click="jumpToBottom"
-      >
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-          stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <line x1="12" y1="5" x2="12" y2="19" />
-          <polyline points="19 12 12 19 5 12" />
-        </svg>
-      </button>
-    </transition>
   </div>
 
   <MessageContextMenu
