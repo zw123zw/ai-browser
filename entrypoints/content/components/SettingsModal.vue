@@ -2,12 +2,14 @@
 import { computed, reactive, ref, watch } from 'vue';
 import { v4 as uuid } from 'uuid';
 import { useSettingsStore } from '@/src/stores/settings';
+import { useToast } from '@/src/composables/useToast';
 import type { ModelConfig, Provider } from '@/src/types';
 import { eventToShortcut } from '@/src/utils/shortcut';
 import { THEMES } from '@/src/themes';
 
 const emit = defineEmits<{ (e: 'close'): void }>();
 const store = useSettingsStore();
+const toast = useToast();
 
 const tab = ref<'ai' | 'general'>('ai');
 
@@ -32,10 +34,9 @@ const isNewMode = ref(false);
 
 // API 格式选项
 const apiFormats = [
-  { value: 'open-chat', label: 'Open Chat (OpenAI 兼容)' },
-  { value: 'anthropic', label: 'Anthropic Messages' },
-  { value: 'message', label: 'Message (通用消息)' },
-  { value: 'custom', label: '自定义' },
+  { value: 'open-chat', label: 'OpenAI 兼容' },
+  { value: 'anthropic', label: 'Anthropic' },
+  { value: 'message', label: '通用消息格式' },
 ];
 
 // 认证字段选项
@@ -43,7 +44,7 @@ const authFields = [
   { value: 'bearer', label: 'Bearer Token' },
   { value: 'api-key', label: 'API Key' },
   { value: 'access-token', label: 'Access Token' },
-  { value: 'authorization', label: 'Authorization' },
+  { value: 'authorization', label: 'Authorization Header' },
 ];
 
 // 供应商预设
@@ -255,6 +256,7 @@ async function saveModel() {
     baseUrl: modelData.baseUrl || '',
     apiKey: modelData.apiKey || '',
   });
+  toast.success('模型配置已保存');
 }
 
 // 删除当前模型（支持全部删除）
@@ -325,6 +327,7 @@ async function saveGeneral() {
     theme: generalForm.theme,
     shortcut: generalForm.shortcut,
   });
+  toast.success('通用配置已保存');
   emit('close');
 }
 
@@ -679,19 +682,50 @@ function exportConfig() {
 .zwf-tab-footer {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   padding-top: 16px;
   margin-top: 8px;
   border-top: 1px solid var(--zwf-border);
 }
 
 .zwf-btn-danger {
-  color: #f87171;
-  border-color: rgba(248,113,113,0.3);
+  color: #ef4444;
+  border: 1px solid rgba(239,68,68,0.3);
+  background: rgba(239,68,68,0.06);
+  padding: 7px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: all 0.15s ease;
+  font-family: inherit;
 }
 
 .zwf-btn-danger:hover {
-  background: rgba(248,113,113,0.1);
+  background: rgba(239,68,68,0.12);
+  border-color: rgba(239,68,68,0.5);
+  color: #dc2626;
+}
+
+.zwf-tab-footer .zwf-btn {
+  padding: 7px 20px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  transition: all 0.15s ease;
+}
+
+.zwf-tab-footer .zwf-btn-primary {
+  background: var(--zwf-primary);
+  border: 1px solid var(--zwf-primary);
+  color: #fff;
+  box-shadow: 0 2px 8px var(--zwf-primary-glow);
+}
+
+.zwf-tab-footer .zwf-btn-primary:hover {
+  background: var(--zwf-primary);
+  filter: brightness(1.1);
+  box-shadow: 0 4px 12px var(--zwf-primary-glow);
+  transform: translateY(-1px);
 }
 
 /* 供应商预设 */

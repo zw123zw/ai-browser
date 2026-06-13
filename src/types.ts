@@ -46,7 +46,9 @@ export interface ModelConfig {
   /** 每模型独立 API 配置（可选，不填则用全局） */
   baseUrl?: string;
   apiKey?: string;
+  /** API 格式：open-chat(OpenAI兼容) / anthropic / message(通用消息) */
   apiFormat?: string;
+  /** 认证字段：bearer / api-key / access-token / authorization */
   authField?: string;
 }
 
@@ -112,6 +114,7 @@ export interface ChatRequestOptions {
   baseUrl: string;
   apiKey: string;
   modelName: string;
+  apiFormat?: string;
   messages: ChatMessage[];
   signal?: AbortSignal;
 }

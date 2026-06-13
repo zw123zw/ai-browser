@@ -40,19 +40,65 @@ export class OpenAIAdapter extends BaseAdapter {
     opts: ChatRequestOptions,
     onChunk: (chunk: StreamChunk) => void
   ): Promise<void> {
-    const url = `${opts.baseUrl.replace(/\/$/, '')}/chat/completions`;
-    log.info('请求开始', { url, model: opts.modelName, messageCount: opts.messages.length, hasApiKey: !!opts.apiKey, hasSignal: !!opts.signal });
+    // 根据 apiFormat 和 baseUrl 智能判断协议类型
+    const base = opts.baseUrl.replace(/\/$/, '');
+
+    // 判断是否为 Anthropic 协议（apiFormat 优先级高于 URL 推断）
+    const isAnthropic = opts.apiFormat === 'anthropic'
+      || base.includes('/anthropic');
+
+    // 智能拼接 URL
+    let url: string;
+
+    // 检查 baseUrl 是否已包含完整路径
+    const hasCompletePath = base.endsWith('/chat/completions')
+      || base.endsWith('/messages');
+
+    if (hasCompletePath) {
+      // baseUrl 已包含完整路径，直接使用
+      url = base;
+    } else if (isAnthropic) {
+      // Anthropic 格式：拼接 /v1/messages
+      url = base.includes('/v1') ? `${base}/messages` : `${base}/v1/messages`;
+    } else {
+      // OpenAI 兼容格式：拼接 /chat/completions
+      // 不自动加 /v1，因为 baseUrl 可能已包含版本路径（如 /v4）
+      url = `${base}/chat/completions`;
+    }
+
+    log.debug('请求开始', { url, model: opts.modelName });
 
     const startTime = Date.now();
-    const headers = {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${opts.apiKey}`,
-    };
-    const body = JSON.stringify({
-      model: opts.modelName,
-      messages: this.toRequestMessages(opts.messages),
-      stream: true,
-    });
+
+    // 根据 API 格式设置不同的 headers 和 body
+    let headers: Record<string, string>;
+    let body: string;
+
+    if (isAnthropic) {
+      // Anthropic 格式
+      headers = {
+        'Content-Type': 'application/json',
+        'x-api-key': opts.apiKey,
+        'anthropic-version': '2023-06-01',
+      };
+      body = JSON.stringify({
+        model: opts.modelName,
+        messages: this.toRequestMessages(opts.messages),
+        max_tokens: 8192,
+        stream: true,
+      });
+    } else {
+      // OpenAI 兼容格式
+      headers = {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${opts.apiKey}`,
+      };
+      body = JSON.stringify({
+        model: opts.modelName,
+        messages: this.toRequestMessages(opts.messages),
+        stream: true,
+      });
+    }
 
     let chunkCount = 0;
     let doneFired = false;
@@ -62,24 +108,71 @@ export class OpenAIAdapter extends BaseAdapter {
       onChunk({ done: true });
     };
 
-    // 解析 SSE 数据块
+    // 解析 SSE 数据块（支持 OpenAI 和 Anthropic 格式）
     const processChunk = (data: string) => {
+      // 跳过空数据
+      if (!data || data.trim() === '') return;
+
       try {
         const json = JSON.parse(data);
-        const choice = json.choices?.[0];
-        if (!choice) return;
 
-        const delta = choice.delta || choice.message || {};
-        const reasoning = delta.reasoning_content ?? delta.reasoning ?? delta.thinking;
-        const content = delta.content ?? delta.text;
-        const chunk: StreamChunk = {};
-        if (reasoning) chunk.reasoningDelta = reasoning;
-        if (content) chunk.delta = content;
-        if (chunk.delta || chunk.reasoningDelta) {
-          chunkCount++;
-          onChunk(chunk);
+        if (isAnthropic) {
+          // Anthropic 格式的事件类型
+          switch (json.type) {
+            case 'content_block_delta':
+              // 文本增量
+              if (json.delta?.type === 'text_delta' && json.delta.text) {
+                const chunk: StreamChunk = { delta: json.delta.text };
+                chunkCount++;
+                onChunk(chunk);
+              }
+              // 思考增量（Claude 3.7+ 支持）
+              if (json.delta?.type === 'thinking_delta' && json.delta.thinking) {
+                const chunk: StreamChunk = { reasoningDelta: json.delta.thinking };
+                chunkCount++;
+                onChunk(chunk);
+              }
+              break;
+
+            case 'message_delta':
+              // 消息结束
+              if (json.delta?.stop_reason) {
+                fireDone();
+              }
+              break;
+
+            case 'message_stop':
+              // 流结束
+              fireDone();
+              break;
+
+            case 'ping':
+            case 'message_start':
+            case 'content_block_start':
+            case 'content_block_stop':
+              // 忽略这些事件
+              break;
+
+            default:
+              log.debug('未知 Anthropic 事件类型:', json.type);
+          }
+        } else {
+          // OpenAI 格式
+          const choice = json.choices?.[0];
+          if (!choice) return;
+
+          const delta = choice.delta || choice.message || {};
+          const reasoning = delta.reasoning_content ?? delta.reasoning ?? delta.thinking;
+          const content = delta.content ?? delta.text;
+          const chunk: StreamChunk = {};
+          if (reasoning) chunk.reasoningDelta = reasoning;
+          if (content) chunk.delta = content;
+          if (chunk.delta || chunk.reasoningDelta) {
+            chunkCount++;
+            onChunk(chunk);
+          }
+          if (choice.finish_reason) fireDone();
         }
-        if (choice.finish_reason) fireDone();
       } catch {
         // 跳过非法 chunk
       }
@@ -88,19 +181,38 @@ export class OpenAIAdapter extends BaseAdapter {
     // 尝试通过代理请求（避免 CORS）
     try {
       let buffer = '';
+      let eventType = ''; // 记录 Anthropic 事件类型
       await proxyFetchStream({ url, method: 'POST', headers, body }, (chunk) => {
         buffer += chunk;
         // 按行分割处理
         const lines = buffer.split('\n');
         buffer = lines.pop() || ''; // 保留最后不完整的行
         for (const line of lines) {
-          if (line.startsWith('data: ') && line !== 'data: [DONE]') {
-            processChunk(line.slice(6));
+          const trimmedLine = line.trim();
+
+          // 处理 Anthropic 的 event 行
+          if (trimmedLine.startsWith('event: ')) {
+            eventType = trimmedLine.slice(7).trim();
+            continue;
+          }
+
+          // 处理 data 行
+          if (trimmedLine.startsWith('data: ')) {
+            const data = trimmedLine.slice(6);
+
+            // OpenAI 格式的结束标记
+            if (data === '[DONE]') {
+              fireDone();
+              return;
+            }
+
+            // 解析数据
+            processChunk(data);
           }
         }
       });
       fireDone();
-      log.info('代理请求完成', { chunks: chunkCount, duration: `${Date.now() - startTime}ms` });
+      log.debug('代理请求完成', { chunks: chunkCount, duration: `${Date.now() - startTime}ms` });
       return;
     } catch (proxyError) {
       log.warn('代理请求失败，尝试直接请求:', proxyError);
@@ -119,10 +231,20 @@ export class OpenAIAdapter extends BaseAdapter {
       let msg = text || res.statusText;
       try {
         const j = JSON.parse(text);
-        if (j?.error?.message) msg = j.error.message;
-        else if (j?.message) msg = j.message;
+        // Anthropic 错误格式: { "type": "error", "error": { "type": "...", "message": "..." } }
+        if (j?.error?.message) {
+          msg = j.error.message;
+        }
+        // OpenAI 错误格式: { "error": { "message": "...", "type": "...", "code": "..." } }
+        else if (j?.error?.type) {
+          msg = `${j.error.type}: ${j.error.message || msg}`;
+        }
+        // 通用错误格式
+        else if (j?.message) {
+          msg = j.message;
+        }
       } catch {}
-      log.error('请求失败', { status: res.status, message: msg });
+      log.error('请求失败', { status: res.status, message: msg, apiFormat: opts.apiFormat, isAnthropic });
       throw new Error(`HTTP ${res.status}：${msg}`);
     }
 
@@ -130,6 +252,6 @@ export class OpenAIAdapter extends BaseAdapter {
       processChunk(data);
     }
     fireDone();
-    log.info('直接请求完成', { chunks: chunkCount, duration: `${Date.now() - startTime}ms` });
+    log.debug('直接请求完成', { chunks: chunkCount, duration: `${Date.now() - startTime}ms` });
   }
 }

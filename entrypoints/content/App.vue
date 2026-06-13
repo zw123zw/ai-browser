@@ -24,7 +24,6 @@ function toggle() {
 }
 
 function onMessage(msg: any) {
-  console.log('[App] 收到消息:', msg);
   if (msg?.type === 'zwf-toggle') toggle();
 }
 

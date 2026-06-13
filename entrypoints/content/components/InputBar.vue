@@ -126,7 +126,6 @@ function send() {
 }
 
 function onKeydown(e: KeyboardEvent) {
-  console.log('[InputBar] onKeydown', { key: e.key, shiftKey: e.shiftKey, isComposing: e.isComposing, text: text.value.trim().slice(0, 30) });
   if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
     e.preventDefault();
     send();

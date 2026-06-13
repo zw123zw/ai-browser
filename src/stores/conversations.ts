@@ -211,6 +211,7 @@ export const useConversationsStore = defineStore('zwf-conversations', () => {
           baseUrl: model.baseUrl || settings.baseUrl,
           apiKey: model.apiKey || settings.apiKey,
           modelName: model.modelName,
+          apiFormat: model.apiFormat,
           messages: requestMessages,
           signal: ac.signal,
         },

@@ -45,7 +45,7 @@ const drawerClass = computed(() => ({ 'zwf-open': props.open }));
 </script>
 
 <template>
-  <div :class="['zwf-drawer-mask', drawerClass]" @click="emit('close')" />
+  <div class="zwf-drawer-mask" />
   <div :class="['zwf-drawer', drawerClass]" @click.stop>
     <div class="zwf-drawer-header">
       <div class="zwf-header-left">

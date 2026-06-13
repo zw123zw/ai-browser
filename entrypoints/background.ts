@@ -1,7 +1,4 @@
 export default defineBackground(() => {
-  console.log('[Background] ========== 服务启动 ==========');
-  console.log('[Background] 扩展 ID:', chrome.runtime.id);
-
   // 工具栏图标点击
   chrome.action.onClicked.addListener(async (tab) => {
     if (tab.id) {
@@ -23,7 +20,6 @@ export default defineBackground(() => {
     // 代理 fetch 请求（避免 CORS）
     if (message.type === 'proxy-fetch') {
       const { url, method, headers, body } = message;
-      console.log('[Background] proxy-fetch 收到', { url, method });
 
       fetch(url, {
         method: method || 'POST',
@@ -44,7 +40,6 @@ export default defineBackground(() => {
     // 代理流式请求（SSE）
     if (message.type === 'proxy-fetch-stream') {
       const { url, method, headers, body } = message;
-      console.log('[Background] proxy-fetch-stream 收到', { url, method });
 
       fetch(url, {
         method: method || 'POST',
@@ -112,6 +107,4 @@ export default defineBackground(() => {
       return true;
     }
   });
-
-  console.log('[Background] 服务就绪');
 });

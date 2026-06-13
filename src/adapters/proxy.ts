@@ -32,7 +32,7 @@ export async function proxyFetch(options: ProxyRequestOptions): Promise<ProxyRes
       throw new Error('不在扩展环境中');
     }
 
-    log.info('代理请求:', { url: options.url, method: options.method });
+    log.debug('代理请求:', { url: options.url, method: options.method });
 
     const response = await chrome.runtime.sendMessage({
       type: 'proxy-fetch',
@@ -68,7 +68,7 @@ export async function proxyFetchStream(
       throw new Error('不在扩展环境中');
     }
 
-    log.info('流式代理请求:', { url: options.url, method: options.method });
+    log.debug('流式代理请求:', { url: options.url, method: options.method });
 
     // 先注册监听器，再发消息，避免竞态
     const chunkListener = (msg: any) => {

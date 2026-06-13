@@ -124,8 +124,8 @@ watch(
   async () => {
     await nextTick();
     if (!scroller.value) return;
-    const last = props.conversation.messages[props.conversation.messages.length - 1];
-    if (last?.status === 'streaming' || stickToBottom.value) {
+    // 只有当 stickToBottom 为 true 时才自动滚动，不再强制流式输出时滚动
+    if (stickToBottom.value) {
       scrollToBottom();
       // 二次保险：等浏览器 layout（代码块 / 表格 / KaTeX 等异步布局）
       requestAnimationFrame(() => scrollToBottom());

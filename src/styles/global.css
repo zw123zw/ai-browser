@@ -151,12 +151,7 @@
   inset: 0;
   background: transparent;
   z-index: 2147483645;
-  opacity: 0;
   pointer-events: none;
-}
-.zwf-drawer-mask.zwf-open {
-  opacity: 1;
-  pointer-events: auto;
 }
 .zwf-drawer {
   position: fixed;
@@ -904,19 +899,21 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
-  /* 确保滚动条可见 */
+  /* 滚动条样式 */
   scrollbar-width: thin;
-  scrollbar-color: color-mix(in srgb, var(--zwf-primary) 60%, transparent) transparent;
+  scrollbar-color: color-mix(in srgb, var(--zwf-primary) 50%, transparent) rgba(0,0,0,0.05);
 }
 .zwf-msg-list::-webkit-scrollbar {
-  width: 6px;
+  width: 8px;
 }
 .zwf-msg-list::-webkit-scrollbar-track {
-  background: transparent;
+  background: rgba(0,0,0,0.03);
+  border-radius: 4px;
 }
 .zwf-msg-list::-webkit-scrollbar-thumb {
-  background: color-mix(in srgb, var(--zwf-primary) 40%, transparent);
-  border-radius: 3px;
+  background: color-mix(in srgb, var(--zwf-primary) 45%, transparent);
+  border-radius: 4px;
+  border: 1px solid rgba(255,255,255,0.2);
 }
 .zwf-msg-list::-webkit-scrollbar-thumb:hover {
   background: color-mix(in srgb, var(--zwf-primary) 70%, transparent);
@@ -1115,7 +1112,7 @@
 
 .zwf-msg-row {
   display: flex;
-  padding: 0 4px;
+  padding: 0 12px;
 }
 .zwf-row-user {
   justify-content: flex-end;
@@ -1125,7 +1122,7 @@
 }
 
 .zwf-msg {
-  max-width: 85%;
+  max-width: 90%;
   padding: 8px 12px;
   border-radius: 14px;
   word-wrap: break-word;
@@ -1137,14 +1134,12 @@
   background: linear-gradient(135deg, var(--zwf-primary) 0%, color-mix(in srgb, var(--zwf-primary) 85%, #000) 100%);
   color: #fff;
   border: none;
-  border-bottom-right-radius: 4px;
   box-shadow: 0 2px 8px color-mix(in srgb, var(--zwf-primary) 25%, transparent);
 }
 .zwf-bubble-ai {
   background: var(--zwf-bg-soft);
   color: var(--zwf-text);
   border: 1px solid var(--zwf-border);
-  border-bottom-left-radius: 4px;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
 }
 .zwf-bubble-user :deep(a) {
@@ -1735,9 +1730,9 @@
   color: var(--zwf-primary);
 }
 .zwf-toast-success {
-  color: #34d399;
-  border-color: rgba(52,211,153,0.3);
-  background: rgba(52,211,153,0.1);
+  color: var(--zwf-primary);
+  border-color: var(--zwf-border-strong);
+  background: var(--zwf-primary-soft);
 }
 .zwf-toast-warning {
   color: #fbbf24;
