@@ -182,7 +182,7 @@ export class OpenAIAdapter extends BaseAdapter {
     try {
       let buffer = '';
       let eventType = ''; // 记录 Anthropic 事件类型
-      await proxyFetchStream({ url, method: 'POST', headers, body }, (chunk) => {
+      await proxyFetchStream({ url, method: 'POST', headers, body, signal: opts.signal }, (chunk) => {
         buffer += chunk;
         // 按行分割处理
         const lines = buffer.split('\n');

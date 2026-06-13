@@ -13,6 +13,7 @@ export interface ProxyRequestOptions {
   method?: string;
   headers?: Record<string, string>;
   body?: string;
+  signal?: AbortSignal;
 }
 
 export interface ProxyResponse {
@@ -70,9 +71,13 @@ export async function proxyFetchStream(
 
     log.debug('流式代理请求:', { url: options.url, method: options.method });
 
+    // 用于存储请求 ID，便于中止
+    let requestId: string | null = null;
+    let aborted = false;
+
     // 先注册监听器，再发消息，避免竞态
     const chunkListener = (msg: any) => {
-      if (msg.type === 'stream-chunk') {
+      if (msg.type === 'stream-chunk' && msg.requestId === requestId) {
         onChunk(msg.chunk);
       }
     };
@@ -90,8 +95,24 @@ export async function proxyFetchStream(
       throw new Error(response?.error || '流式请求失败');
     }
 
+    requestId = response.requestId;
+    log.debug('流式请求已启动', { requestId });
+
     // 注册监听器（在 sendMessage 之后但在流数据到达之前）
     chrome.runtime.onMessage.addListener(chunkListener);
+
+    // 监听 abort signal
+    if (options.signal) {
+      options.signal.addEventListener('abort', () => {
+        aborted = true;
+        log.debug('收到中止信号，通知 background 中止请求', { requestId });
+        // 通知 background 中止请求
+        chrome.runtime.sendMessage({
+          type: 'abort-stream',
+          requestId,
+        }).catch(() => {});
+      }, { once: true });
+    }
 
     // 等待流结束或错误
     return new Promise((resolve, reject) => {
@@ -102,18 +123,25 @@ export async function proxyFetchStream(
       };
 
       const endListener = (msg: any) => {
-        if (msg.type === 'stream-end') {
+        if (msg.type === 'stream-end' && msg.requestId === requestId) {
           cleanup();
           resolve();
         }
       };
 
       const errorListener = (msg: any) => {
-        if (msg.type === 'stream-error') {
+        if (msg.type === 'stream-error' && msg.requestId === requestId) {
           cleanup();
           reject(new Error(msg.error || '流式请求中断'));
         }
       };
+
+      // 检查是否已经中止
+      if (aborted || options.signal?.aborted) {
+        cleanup();
+        reject(new DOMException('The operation was aborted.', 'AbortError'));
+        return;
+      }
 
       chrome.runtime.onMessage.addListener(endListener);
       chrome.runtime.onMessage.addListener(errorListener);
