@@ -1002,7 +1002,7 @@ table {
 .zwf-scroll-bottom-btn {
   position: sticky;
   left: 50%;
-  bottom: 30px;
+  bottom: 50px;
   transform: translateX(-50%);
   width: 40px;
   height: 40px;
