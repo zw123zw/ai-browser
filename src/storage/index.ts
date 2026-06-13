@@ -76,3 +76,8 @@ export interface FabPos {
 export const fabPosStorage = storage.defineItem<FabPos>(KEY_FAB_POS, {
   fallback: { right: 24, bottom: 24 },
 });
+
+/** 抽屉展开状态（跨页面持久化） */
+export const drawerOpenStorage = storage.defineItem<boolean>('local:zwf-drawer-open', {
+  fallback: false,
+});

@@ -142,6 +142,20 @@ export default defineBackground(() => {
       return true;
     }
 
+    // 跨标签页同步抽屉状态
+    if (message.type === 'zwf-drawer-changed') {
+      const { open } = message;
+      console.log('[Background] 抽屉状态变化，广播给其他标签页:', open);
+      chrome.tabs.query({}, (tabs) => {
+        for (const tab of tabs) {
+          if (tab.id && tab.id !== sender.tab?.id) {
+            chrome.tabs.sendMessage(tab.id, { type: 'zwf-drawer-sync', open }).catch(() => {});
+          }
+        }
+      });
+      return false;
+    }
+
     // 中止流式请求
     if (message.type === 'abort-stream') {
       const { requestId } = message;

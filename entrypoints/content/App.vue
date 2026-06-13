@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref, watch } from 'vue';
+import { nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import FloatingButton from './components/FloatingButton.vue';
 import ChatDrawer from './components/ChatDrawer.vue';
 import SettingsModal from './components/SettingsModal.vue';
@@ -8,6 +8,7 @@ import { useSettingsStore } from '@/src/stores/settings';
 import { useConversationsStore } from '@/src/stores/conversations';
 import { matchShortcut } from '@/src/utils/shortcut';
 import { getThemeById } from '@/src/themes';
+import { drawerOpenStorage } from '@/src/storage';
 
 console.log('[App] Vue 组件初始化');
 
@@ -25,6 +26,15 @@ function toggle() {
 
 function onMessage(msg: any) {
   if (msg?.type === 'zwf-toggle') toggle();
+  // 接收其他标签页的抽屉状态同步
+  if (msg?.type === 'zwf-drawer-sync') {
+    console.log('[App] 收到跨标签页抽屉状态同步:', msg.open);
+    if (msg.open !== open.value) {
+      syncingFromRemote = true;
+      open.value = msg.open;
+      nextTick(() => (syncingFromRemote = false));
+    }
+  }
 }
 
 function onKeydown(e: KeyboardEvent) {
@@ -38,11 +48,15 @@ function onKeydown(e: KeyboardEvent) {
 }
 
 /** 鼠标松开时检测选中文字，自动发送给 AI 分析 */
-function onMouseup(_e: MouseEvent) {
+function onMouseup(e: MouseEvent) {
   // 抽屉未打开，不处理
   if (!open.value) return;
   // 功能开关关闭，不处理
   if (settingsStore.settings.autoSendSelection === false) return;
+
+  // 过滤：选区在扩展自身 Shadow DOM 内的不处理（避免聊天面板内选择文字被发送）
+  const host = rootEl.value?.getRootNode();
+  if (host instanceof ShadowRoot && e.composedPath().includes(host.host)) return;
 
   const selection = document.getSelection();
   const text = selection?.toString().trim();
@@ -78,6 +92,16 @@ watch(
   () => applyTheme()
 );
 
+// 同步抽屉展开状态到持久化存储（跨页面/标签页保持）
+let syncingFromRemote = false;
+watch(open, async (val) => {
+  if (syncingFromRemote) return;
+  console.log('[App] 抽屉状态变化，写入 storage:', val);
+  await drawerOpenStorage.setValue(val);
+  // 广播给其他标签页
+  chrome.runtime?.sendMessage?.({ type: 'zwf-drawer-changed', open: val }).catch?.(() => {});
+});
+
 onMounted(async () => {
   console.log('[App] onMounted 开始');
   try {
@@ -87,6 +111,19 @@ onMounted(async () => {
     console.error('[App] Store 初始化失败:', error);
   }
   applyTheme();
+
+  // 从持久化存储恢复抽屉展开状态（异步读取，确保从磁盘加载）
+  try {
+    const savedOpen = await drawerOpenStorage.getValue();
+    console.log('[App] 读取抽屉状态:', savedOpen);
+    if (savedOpen) {
+      open.value = true;
+      console.log('[App] 抽屉已恢复为展开状态');
+    }
+  } catch (error) {
+    console.error('[App] 读取抽屉状态失败:', error);
+  }
+
   chrome.runtime?.onMessage?.addListener(onMessage);
   document.addEventListener('keydown', onKeydown, true);
   document.addEventListener('mouseup', onMouseup, true);
