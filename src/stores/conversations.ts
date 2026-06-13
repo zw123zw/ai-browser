@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia';
 import { computed, reactive, ref } from 'vue';
 import { v4 as uuid } from 'uuid';
-import type { ChatMessage, Conversation } from '@/src/types';
+import type { ChatMessage, Conversation, Attachment } from '@/src/types';
 import {
   conversationStorage,
   conversationsStorageOld,
@@ -104,6 +104,7 @@ export const useConversationsStore = defineStore('zwf-conversations', () => {
     conversation.value.title = '新对话';
     conversation.value.draftText = '';
     conversation.value.draftImages = [];
+    conversation.value.draftAttachments = [];
     conversation.value.updatedAt = Date.now();
     contextCleared.value = true;
     log.info('已清除当前会话历史和上下文');
@@ -140,13 +141,14 @@ export const useConversationsStore = defineStore('zwf-conversations', () => {
   async function send(
     text: string,
     images: string[] = [],
+    attachments: Attachment[] = [],
     reasoningEnabled = false
   ) {
     if (!conversation.value) return;
     const conv = conversation.value;
 
     const settings = useSettingsStore().settings;
-    log.info('send() 开始', { textLen: text.length, modelId: conv.modelId, contextCleared: contextCleared.value });
+    log.info('send() 开始', { textLen: text.length, imageCount: images.length, attachmentCount: attachments.length, modelId: conv.modelId, contextCleared: contextCleared.value });
 
     const model = settings.models.find((m) => m.id === conv.modelId);
     if (!model) {
@@ -169,6 +171,7 @@ export const useConversationsStore = defineStore('zwf-conversations', () => {
       role: 'user',
       content: text,
       images: images.length ? images : undefined,
+      attachments: attachments.length ? attachments : undefined,
       timestamp: Date.now(),
       status: 'done',
       reasoningEnabled,

@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { fileToDataURL } from '@/src/utils/file';
-import type { Conversation, ModelConfig } from '@/src/types';
+import { parseFile } from '@/src/utils/file-parsers';
+import { getFileTypeIcon, formatFileSize } from '@/src/utils/file-type';
+import type { Conversation, ModelConfig, Attachment } from '@/src/types';
 
 const props = defineProps<{
   conversation: Conversation | null | undefined;
@@ -9,9 +11,10 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  (e: 'send', payload: { text: string; images: string[]; reasoning: boolean }): void;
+  (e: 'send', payload: { text: string; images: string[]; attachments: Attachment[]; reasoning: boolean }): void;
   (e: 'abort'): void;
   (e: 'switch-voice'): void;
+  (e: 'preview-file', attachment: Attachment): void;
 }>();
 
 const fileInput = ref<HTMLInputElement | null>(null);
@@ -29,6 +32,7 @@ const text = computed({
   },
 });
 const images = computed(() => props.conversation?.draftImages || []);
+const attachments = computed(() => props.conversation?.draftAttachments || []);
 const reasoning = computed(() => props.conversation?.reasoningEnabled || false);
 const currentModel = computed(
   () =>
@@ -54,45 +58,85 @@ function setDraftImages(arr: string[]) {
   if (props.conversation) props.conversation.draftImages = arr;
 }
 
+function setDraftAttachments(arr: Attachment[]) {
+  if (props.conversation) props.conversation.draftAttachments = arr;
+}
+
 function toggleReasoning() {
   if (props.conversation) props.conversation.reasoningEnabled = !reasoning.value;
 }
 
-async function pickImages(e: Event) {
+/** 选择文件（图片 + 通用文件） */
+async function pickFiles(e: Event) {
   const input = e.target as HTMLInputElement;
   if (!input.files) return;
-  const next = [...images.value];
+
+  const newImages = [...images.value];
+  const newAttachments = [...attachments.value];
+
   for (const f of Array.from(input.files)) {
-    if (!f.type.startsWith('image/')) continue;
-    next.push(await fileToDataURL(f));
+    try {
+      const attachment = await parseFile(f);
+      if (attachment.type === 'image' && attachment.dataUrl) {
+        // 图片走旧的 images 字段（保持兼容）
+        newImages.push(attachment.dataUrl);
+      } else {
+        newAttachments.push(attachment);
+      }
+    } catch (err) {
+      console.error('[InputBar] 文件解析失败:', f.name, err);
+    }
   }
-  setDraftImages(next);
+
+  setDraftImages(newImages);
+  setDraftAttachments(newAttachments);
   input.value = '';
 }
 
 async function onPaste(e: ClipboardEvent) {
   const items = e.clipboardData?.items;
   if (!items) return;
-  const imageFiles: File[] = [];
+
+  const files: File[] = [];
   for (const it of Array.from(items)) {
-    if (it.kind === 'file' && it.type.startsWith('image/')) {
+    if (it.kind === 'file') {
       const f = it.getAsFile();
-      if (f) imageFiles.push(f);
+      if (f) files.push(f);
     }
   }
-  if (!imageFiles.length) return;
+  if (!files.length) return;
   e.preventDefault();
-  const next = [...images.value];
-  for (const f of imageFiles) {
-    next.push(await fileToDataURL(f));
+
+  const newImages = [...images.value];
+  const newAttachments = [...attachments.value];
+
+  for (const f of files) {
+    try {
+      const attachment = await parseFile(f);
+      if (attachment.type === 'image' && attachment.dataUrl) {
+        newImages.push(attachment.dataUrl);
+      } else {
+        newAttachments.push(attachment);
+      }
+    } catch (err) {
+      console.error('[InputBar] 粘贴文件解析失败:', f.name, err);
+    }
   }
-  setDraftImages(next);
+
+  setDraftImages(newImages);
+  setDraftAttachments(newAttachments);
 }
 
 function removeImg(i: number) {
   const next = [...images.value];
   next.splice(i, 1);
   setDraftImages(next);
+}
+
+function removeAttachment(i: number) {
+  const next = [...attachments.value];
+  next.splice(i, 1);
+  setDraftAttachments(next);
 }
 
 function autoResize() {
@@ -107,20 +151,20 @@ watch(() => props.conversation?.id, () => nextTick(autoResize));
 
 function send() {
   const t = text.value.trim();
-  console.log('[InputBar] send() 调用', { text: t, hasImages: images.value.length > 0, conversation: !!props.conversation });
-  if (!t && !images.value.length) {
-    console.log('[InputBar] send() 中止：文本和图片都为空');
-    return;
-  }
+  if (!t && !images.value.length && !attachments.value.length) return;
+
   emit('send', {
     text: t,
     images: [...images.value],
+    attachments: [...attachments.value],
     reasoning: reasoning.value,
   });
-  // 发送后清空 draft，但保留 reasoning toggle 状态
+
+  // 发送后清空 draft
   if (props.conversation) {
     props.conversation.draftText = '';
     props.conversation.draftImages = [];
+    props.conversation.draftAttachments = [];
   }
   nextTick(autoResize);
 }
@@ -150,10 +194,21 @@ onUnmounted(() => document.removeEventListener('click', onDocClick));
 
 <template>
   <div class="zwf-input-card">
+    <!-- 图片预览（保留旧格式） -->
     <div v-if="images.length" class="zwf-image-preview">
       <div v-for="(src, i) in images" :key="i" class="zwf-image-thumb">
         <img :src="src" />
         <button class="zwf-image-del" @click="removeImg(i)">×</button>
+      </div>
+    </div>
+
+    <!-- 文件附件预览 -->
+    <div v-if="attachments.length" class="zwf-attachment-preview">
+      <div v-for="(att, i) in attachments" :key="att.id" class="zwf-attachment-chip">
+        <span class="zwf-attachment-icon">{{ getFileTypeIcon(att.type) }}</span>
+        <span class="zwf-attachment-name" :title="att.name">{{ att.name }}</span>
+        <span class="zwf-attachment-size">{{ formatFileSize(att.size) }}</span>
+        <button class="zwf-attachment-del" @click="removeAttachment(i)">×</button>
       </div>
     </div>
 
@@ -170,21 +225,18 @@ onUnmounted(() => document.removeEventListener('click', onDocClick));
 
     <div class="zwf-input-toolbar">
       <div class="zwf-toolbar-left">
-        <button class="zwf-tool-btn" title="上传图片" @click="fileInput?.click()">
+        <button class="zwf-tool-btn" title="上传文件" @click="fileInput?.click()">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-            <circle cx="8.5" cy="8.5" r="1.5" />
-            <polyline points="21 15 16 10 5 21" />
+            <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
           </svg>
         </button>
         <input
           ref="fileInput"
           type="file"
-          accept="image/*"
           multiple
           style="display: none"
-          @change="pickImages"
+          @change="pickFiles"
         />
 
         <div ref="modelMenuRef" class="zwf-model-pill-wrap">
@@ -222,7 +274,7 @@ onUnmounted(() => document.removeEventListener('click', onDocClick));
         <button
           class="zwf-send-btn"
           :class="{ 'zwf-send-btn-stop': isStreaming }"
-          :disabled="!isStreaming && !text.trim() && !images.length"
+          :disabled="!isStreaming && !text.trim() && !images.length && !attachments.length"
           :title="isStreaming ? '停止生成' : '发送'"
           @click="onSendOrAbort"
         >

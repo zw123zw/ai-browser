@@ -19,18 +19,43 @@ export class OpenAIAdapter extends BaseAdapter {
   /** 把内部 ChatMessage 转成 OpenAI 协议消息 */
   private toRequestMessages(messages: ChatMessage[]) {
     return messages.map((m) => {
-      // 多模态：有图片就用 content array，否则纯文本
-      if (m.images && m.images.length) {
-        return {
-          role: m.role,
-          content: [
-            { type: 'text', text: m.content },
-            ...m.images.map((url) => ({
-              type: 'image_url',
-              image_url: { url },
-            })),
-          ],
-        };
+      const hasImages = m.images && m.images.length;
+      const hasFileAttachments = m.attachments?.some(a => a.type !== 'image' && a.content);
+
+      // 有图片或文件附件时，使用 content array
+      if (hasImages || hasFileAttachments) {
+        const parts: any[] = [];
+
+        // 文件内容拼入文本部分
+        let textContent = m.content;
+        if (hasFileAttachments) {
+          const fileTexts = m.attachments!
+            .filter(a => a.type !== 'image' && a.content && !a.content.startsWith('['))
+            .map(a => `[文件: ${a.name}]\n\`\`\`${a.lang || ''}\n${a.content}\n\`\`\``)
+            .join('\n\n');
+          if (fileTexts) {
+            textContent = textContent ? `${textContent}\n\n${fileTexts}` : fileTexts;
+          }
+        }
+
+        parts.push({ type: 'text', text: textContent });
+
+        // 图片附件
+        if (hasImages) {
+          for (const url of m.images!) {
+            parts.push({ type: 'image_url', image_url: { url } });
+          }
+        }
+        // 新格式 attachments 中的图片
+        if (m.attachments) {
+          for (const att of m.attachments) {
+            if (att.type === 'image' && att.dataUrl) {
+              parts.push({ type: 'image_url', image_url: { url: att.dataUrl } });
+            }
+          }
+        }
+
+        return { role: m.role, content: parts };
       }
       return { role: m.role, content: m.content };
     });

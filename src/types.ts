@@ -1,5 +1,26 @@
 // 通用类型定义
 
+/** 附件类型分类 */
+export type AttachmentType = 'image' | 'text' | 'code' | 'pdf' | 'word' | 'excel' | 'binary';
+
+/** 统一附件接口 */
+export interface Attachment {
+  id: string;
+  type: AttachmentType;
+  /** 原始文件名 */
+  name: string;
+  /** 文件大小（字节） */
+  size: number;
+  /** MIME 类型 */
+  mimeType: string;
+  /** 图片: base64 dataURL */
+  dataUrl?: string;
+  /** 文本/代码/PDF/Office 提取的文本内容 */
+  content?: string;
+  /** 代码语言标识（用于语法高亮） */
+  lang?: string;
+}
+
 export type Provider =
   | 'openai'        // OpenAI 兼容
   | 'anthropic'     // Anthropic Claude
@@ -19,8 +40,10 @@ export interface ChatMessage {
   content: string;
   /** 深度思考内容（可选） */
   reasoning?: string;
-  /** 多模态附件 */
+  /** 多模态附件（旧格式，向后兼容） */
   images?: string[]; // base64 dataURL
+  /** 统一附件（新格式，图片+文件） */
+  attachments?: Attachment[];
   /** 创建时间 */
   timestamp: number;
   /** 状态：发送中 / 完成 / 错误 / 已取消 */
@@ -64,6 +87,7 @@ export interface Conversation {
   /** 输入框草稿（独立到每个会话） */
   draftText?: string;
   draftImages?: string[];
+  draftAttachments?: Attachment[];
   /** 深度思考开关（独立到每个会话） */
   reasoningEnabled?: boolean;
   createdAt: number;
@@ -98,6 +122,8 @@ export interface AppSettings {
   maxConversations?: number;
   /** 单会话最大上下文消息数 */
   maxContext?: number;
+  /** 选中文字自动发送给 AI 分析 */
+  autoSendSelection?: boolean;
 }
 
 /** Adapter 流式回调每一段 */

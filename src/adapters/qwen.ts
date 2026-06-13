@@ -16,10 +16,18 @@ export class QwenAdapter extends BaseAdapter {
   readonly name = 'qwen';
 
   private toRequestMessages(messages: ChatMessage[]) {
-    return messages.map((m) => ({
-      role: m.role,
-      content: m.content,
-    }));
+    return messages.map((m) => {
+      // 将文件附件内容合并到文本
+      let content = m.content;
+      if (m.attachments?.some(a => a.type !== 'image' && a.content && !a.content.startsWith('['))) {
+        const fileTexts = m.attachments
+          .filter(a => a.type !== 'image' && a.content && !a.content.startsWith('['))
+          .map(a => `[文件: ${a.name}]\n\`\`\`${a.lang || ''}\n${a.content}\n\`\`\``)
+          .join('\n\n');
+        if (fileTexts) content = content ? `${content}\n\n${fileTexts}` : fileTexts;
+      }
+      return { role: m.role, content };
+    });
   }
 
   async chat(

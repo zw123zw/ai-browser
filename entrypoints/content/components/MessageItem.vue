@@ -1,7 +1,9 @@
 <script setup lang="ts">
-import { computed } from 'vue';
-import type { ChatMessage } from '@/src/types';
+import { computed, ref } from 'vue';
+import type { ChatMessage, Attachment } from '@/src/types';
 import { renderMarkdown } from '@/src/utils/markdown';
+import { getFileTypeIcon, formatFileSize } from '@/src/utils/file-type';
+import FilePreviewModal from './FilePreviewModal.vue';
 
 const props = defineProps<{ message: ChatMessage }>();
 const emit = defineEmits<{
@@ -14,6 +16,41 @@ const renderedContent = computed(() => renderMarkdown(props.message.content));
 const renderedReasoning = computed(() =>
   props.message.reasoning ? renderMarkdown(props.message.reasoning) : ''
 );
+
+/** 合并旧 images 和新 attachments 用于统一展示 */
+const allImages = computed(() => {
+  const imgs: string[] = [];
+  // 旧格式 images
+  if (props.message.images?.length) {
+    imgs.push(...props.message.images);
+  }
+  // 新格式 attachments 中的图片
+  if (props.message.attachments?.length) {
+    for (const att of props.message.attachments) {
+      if (att.type === 'image' && att.dataUrl) {
+        imgs.push(att.dataUrl);
+      }
+    }
+  }
+  return imgs;
+});
+
+/** 非图片附件 */
+const fileAttachments = computed(() => {
+  if (!props.message.attachments?.length) return [];
+  return props.message.attachments.filter(a => a.type !== 'image');
+});
+
+/** 当前预览的附件 */
+const previewAttachment = ref<Attachment | null>(null);
+
+function openPreview(att: Attachment) {
+  previewAttachment.value = att;
+}
+
+function closePreview() {
+  previewAttachment.value = null;
+}
 
 function onContextMenu(e: MouseEvent) {
   e.preventDefault();
@@ -35,13 +72,27 @@ function onContextMenu(e: MouseEvent) {
       </div>
 
       <!-- 多模态：图片 -->
-      <div v-if="message.images?.length" class="zwf-msg-images">
+      <div v-if="allImages.length" class="zwf-msg-images">
         <img
-          v-for="(src, i) in message.images"
+          v-for="(src, i) in allImages"
           :key="i"
           :src="src"
           class="zwf-msg-image"
         />
+      </div>
+
+      <!-- 文件附件 -->
+      <div v-if="fileAttachments.length" class="zwf-msg-files">
+        <div
+          v-for="att in fileAttachments"
+          :key="att.id"
+          class="zwf-msg-file-chip"
+          @click="openPreview(att)"
+        >
+          <span class="zwf-msg-file-icon">{{ getFileTypeIcon(att.type) }}</span>
+          <span class="zwf-msg-file-name">{{ att.name }}</span>
+          <span class="zwf-msg-file-size">{{ formatFileSize(att.size) }}</span>
+        </div>
       </div>
 
       <!-- 文本内容 -->
@@ -71,5 +122,12 @@ function onContextMenu(e: MouseEvent) {
         <span>已停止生成</span>
       </div>
     </div>
+
+    <!-- 文件预览 Modal -->
+    <FilePreviewModal
+      v-if="previewAttachment"
+      :attachment="previewAttachment"
+      @close="closePreview"
+    />
   </div>
 </template>

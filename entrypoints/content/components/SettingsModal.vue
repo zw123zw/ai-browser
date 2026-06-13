@@ -296,6 +296,7 @@ if (localModels.value.length > 0) {
 const generalForm = reactive({
   theme: store.settings.theme || 'classic',
   shortcut: store.settings.shortcut || '',
+  autoSendSelection: store.settings.autoSendSelection !== false,
 });
 
 // 快捷键录制
@@ -326,6 +327,7 @@ async function saveGeneral() {
   await store.update({
     theme: generalForm.theme,
     shortcut: generalForm.shortcut,
+    autoSendSelection: generalForm.autoSendSelection,
   });
   toast.success('通用配置已保存');
   emit('close');
@@ -568,6 +570,23 @@ function exportConfig() {
               </div>
               <div class="zwf-text-faint" style="font-size: 12px;">
                 提示：浏览器扩展全局快捷键需在 chrome://extensions/shortcuts 配置；此处设置的是页面内监听的快捷键。
+              </div>
+            </div>
+
+            <div class="zwf-form-row">
+              <label>选中文字自动发送</label>
+              <div class="zwf-switch-row">
+                <button
+                  :class="['zwf-switch', { 'zwf-switch-on': generalForm.autoSendSelection }]"
+                  @click="generalForm.autoSendSelection = !generalForm.autoSendSelection"
+                  role="switch"
+                  :aria-checked="generalForm.autoSendSelection"
+                >
+                  <span class="zwf-switch-thumb" />
+                </button>
+                <span class="zwf-text-faint" style="font-size: 12px;">
+                  开启后，抽屉打开时选中页面文字会自动发送给 AI 分析
+                </span>
               </div>
             </div>
 
@@ -840,5 +859,46 @@ function exportConfig() {
   border-radius: 50%;
   flex-shrink: 0;
   box-shadow: 0 0 4px currentColor;
+}
+
+/* 开关 */
+.zwf-switch-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.zwf-switch {
+  position: relative;
+  width: 44px;
+  height: 24px;
+  border-radius: 12px;
+  border: 1px solid var(--zwf-border-strong);
+  background: var(--zwf-bg-card);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+  padding: 0;
+}
+
+.zwf-switch-on {
+  background: var(--zwf-primary);
+  border-color: var(--zwf-primary);
+}
+
+.zwf-switch-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  transition: transform 0.2s ease;
+}
+
+.zwf-switch-on .zwf-switch-thumb {
+  transform: translateX(20px);
 }
 </style>
