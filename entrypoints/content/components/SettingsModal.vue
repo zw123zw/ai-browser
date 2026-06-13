@@ -293,11 +293,25 @@ if (localModels.value.length > 0) {
 
 // ========== 通用配置 ==========
 
+// 兼容旧版布尔值：true → 'auto', false → 'off'
+function resolveAutoSend(val: unknown): 'auto' | 'manual' | 'off' {
+  if (val === true) return 'auto';
+  if (val === false) return 'off';
+  if (val === 'auto' || val === 'manual' || val === 'off') return val;
+  return 'auto';
+}
+
 const generalForm = reactive({
   theme: store.settings.theme || 'classic',
   shortcut: store.settings.shortcut || '',
-  autoSendSelection: store.settings.autoSendSelection !== false,
+  autoSendSelection: resolveAutoSend(store.settings.autoSendSelection),
 });
+
+const autoSendOptions = [
+  { value: 'auto' as const, label: '自动发送', desc: '选中文字后直接发送给 AI 分析' },
+  { value: 'manual' as const, label: '手动发送', desc: '选中文字后填入聊天输入框，手动确认发送' },
+  { value: 'off' as const, label: '关闭', desc: '不处理页面选中文字' },
+];
 
 // 快捷键录制
 const recording = ref(false);
@@ -574,19 +588,22 @@ function exportConfig() {
             </div>
 
             <div class="zwf-form-row">
-              <label>选中文字自动发送</label>
-              <div class="zwf-switch-row">
-                <button
-                  :class="['zwf-switch', { 'zwf-switch-on': generalForm.autoSendSelection }]"
-                  @click="generalForm.autoSendSelection = !generalForm.autoSendSelection"
-                  role="switch"
-                  :aria-checked="generalForm.autoSendSelection"
+              <label>划词操作</label>
+              <div class="zwf-radio-group">
+                <div
+                  v-for="opt in autoSendOptions"
+                  :key="opt.value"
+                  :class="['zwf-radio-card', { 'zwf-radio-active': generalForm.autoSendSelection === opt.value }]"
+                  @click="generalForm.autoSendSelection = opt.value"
                 >
-                  <span class="zwf-switch-thumb" />
-                </button>
-                <span class="zwf-text-faint" style="font-size: 12px;">
-                  开启后，抽屉打开时选中页面文字会自动发送给 AI 分析
-                </span>
+                  <div class="zwf-radio-dot">
+                    <span v-if="generalForm.autoSendSelection === opt.value" class="zwf-radio-dot-fill" />
+                  </div>
+                  <div class="zwf-radio-body">
+                    <span class="zwf-radio-label">{{ opt.label }}</span>
+                    <span class="zwf-radio-desc">{{ opt.desc }}</span>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -900,5 +917,94 @@ function exportConfig() {
 
 .zwf-switch-on .zwf-switch-thumb {
   transform: translateX(20px);
+}
+
+/* 卡片式 Radio */
+.zwf-radio-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.zwf-radio-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--zwf-border);
+  border-radius: 10px;
+  background: var(--zwf-bg-card);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.zwf-radio-card:hover {
+  border-color: var(--zwf-primary);
+  background: var(--zwf-primary-soft);
+}
+
+.zwf-radio-active {
+  border-color: var(--zwf-primary);
+  background: var(--zwf-primary-soft);
+  box-shadow: 0 0 0 1px var(--zwf-primary);
+}
+
+.zwf-radio-dot {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid var(--zwf-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: border-color 0.2s ease;
+}
+
+.zwf-radio-active .zwf-radio-dot {
+  border-color: var(--zwf-primary);
+}
+
+.zwf-radio-dot-fill {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--zwf-primary);
+  animation: radio-fill 0.2s ease;
+}
+
+@keyframes radio-fill {
+  from {
+    transform: scale(0);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.zwf-radio-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.zwf-radio-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--zwf-text);
+}
+
+.zwf-radio-active .zwf-radio-label {
+  color: var(--zwf-primary);
+}
+
+.zwf-radio-desc {
+  font-size: 12px;
+  color: var(--zwf-text-faint);
+  line-height: 1.4;
 }
 </style>

@@ -47,12 +47,13 @@ function onKeydown(e: KeyboardEvent) {
   }
 }
 
-/** 鼠标松开时检测选中文字，自动发送给 AI 分析 */
+/** 鼠标松开时检测选中文字，根据设置处理 */
 function onMouseup(e: MouseEvent) {
   // 抽屉未打开，不处理
   if (!open.value) return;
-  // 功能开关关闭，不处理
-  if (settingsStore.settings.autoSendSelection === false) return;
+  // 功能关闭，不处理（兼容旧版布尔值 false）
+  const mode = settingsStore.settings.autoSendSelection;
+  if (mode === 'off' || (mode as unknown) === false) return;
 
   // 过滤：选区在扩展自身 Shadow DOM 内的不处理（避免聊天面板内选择文字被发送）
   const host = rootEl.value?.getRootNode();
@@ -62,13 +63,20 @@ function onMouseup(e: MouseEvent) {
   const text = selection?.toString().trim();
   if (!text) return;
 
-  console.log('[App] 检测到选中文字，自动发送', { length: text.length });
-
   // 清除选区，避免重复触发
   selection?.removeAllRanges();
 
-  // 发送给 AI
-  convStore.send(text);
+  if (mode === 'manual') {
+    // 手动模式：填入输入框，不自动发送
+    console.log('[App] 检测到选中文字，填入输入框', { length: text.length });
+    if (convStore.conversation) {
+      convStore.conversation.draftText = text;
+    }
+  } else {
+    // 自动模式：直接发送给 AI
+    console.log('[App] 检测到选中文字，自动发送', { length: text.length });
+    convStore.send(text);
+  }
 }
 
 /** 应用主题 CSS 变量到 shadow host */

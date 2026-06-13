@@ -40,7 +40,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   shortcut: 'Ctrl+Shift+M',
   maxConversations: 100,
   maxContext: 50,
-  autoSendSelection: true,
+  autoSendSelection: 'auto',
   models: localModels,
 };
 

@@ -122,8 +122,8 @@ export interface AppSettings {
   maxConversations?: number;
   /** 单会话最大上下文消息数 */
   maxContext?: number;
-  /** 选中文字自动发送给 AI 分析 */
-  autoSendSelection?: boolean;
+  /** 划词操作：auto=自动发送, manual=填入输入框, off=关闭 */
+  autoSendSelection?: 'auto' | 'manual' | 'off';
 }
 
 /** Adapter 流式回调每一段 */
