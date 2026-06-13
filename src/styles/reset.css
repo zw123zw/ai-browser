@@ -1,0 +1,173 @@
+/* ============ Reset CSS ============ */
+
+/* Box sizing rules */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+/* Remove default margin and padding (exclude markdown content) */
+*:not(.zwf-msg-text):not(.zwf-msg-text *) {
+  margin: 0;
+  padding: 0;
+}
+
+/* Prevent font size inflation */
+html {
+  -moz-text-size-adjust: none;
+  -webkit-text-size-adjust: none;
+  text-size-adjust: none;
+}
+
+/* Set core body defaults */
+body {
+  min-height: 100vh;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Remove list styles on ul, ol elements with a list role */
+ul[role='list'],
+ol[role='list'] {
+  list-style: none;
+}
+
+/* Set shorter line heights on headings and interactive elements (exclude markdown) */
+h1:not(.zwf-msg-text h1), h2:not(.zwf-msg-text h2), h3:not(.zwf-msg-text h3),
+h4:not(.zwf-msg-text h4), h5:not(.zwf-msg-text h5), h6:not(.zwf-msg-text h6),
+button, input, label {
+  line-height: 1.1;
+}
+
+/* Balance text wrapping on headings */
+h1, h2, h3, h4 {
+  text-wrap: balance;
+}
+
+/* Avoid text overflows (exclude markdown) */
+p:not(.zwf-msg-text p), li:not(.zwf-msg-text li), figcaption {
+  text-wrap: pretty;
+}
+
+/* Anchor styles */
+a {
+  text-decoration-skip-ink: auto;
+  color: inherit;
+}
+
+/* Make images easier to work with */
+img,
+picture,
+video,
+canvas,
+svg {
+  display: block;
+  max-width: 100%;
+}
+
+/* Inherit fonts for inputs and buttons */
+input,
+button,
+textarea,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+/* Make sure textareas without a rows attribute are not tiny */
+textarea:not([rows]) {
+  min-height: 10em;
+}
+
+/* Anything that has been anchored to should have extra scroll margin */
+:target {
+  scroll-margin-block: 5ex;
+}
+
+/* Remove default button styles */
+button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  outline: none;
+}
+
+/* Remove default input styles */
+input,
+textarea {
+  outline: none;
+  border: none;
+}
+
+/* Remove default select styles */
+select {
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+/* Remove default table styles */
+table {
+  border-collapse: collapse;
+  border-spacing: 0;
+}
+
+/* Remove default fieldset styles */
+fieldset {
+  border: none;
+  padding: 0;
+  margin: 0;
+}
+
+/* Remove default legend styles */
+legend {
+  padding: 0;
+}
+
+/* Remove default hr styles */
+hr {
+  border: none;
+  height: 1px;
+  background: currentColor;
+  opacity: 0.1;
+}
+
+/* Remove default mark styles */
+mark {
+  background: none;
+  color: inherit;
+}
+
+/* Remove default details summary arrow */
+details summary::-webkit-details-marker {
+  display: none;
+}
+
+/* Remove default dialog styles */
+dialog {
+  padding: 0;
+  border: none;
+}
+
+/* Scrollbar styles for webkit browsers */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.3);
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
