@@ -31,12 +31,6 @@ function switchToChat() {
   activeMode.value = 'chat';
 }
 
-/** 标题：动态展示当前会话标题 */
-const title = computed(() => {
-  if (activeMode.value === 'voice') return '语音助手';
-  return store.active?.title?.trim() || '';
-});
-
 function askClear() {
   showConfirm.value = true;
 }
@@ -64,10 +58,7 @@ const drawerClass = computed(() => ({ 'zwf-open': props.open }));
           </button>
           <span class="zwf-drawer-title">🎤 语音助手</span>
         </template>
-        <!-- 文字模式：标题 -->
-        <template v-else-if="title">
-          <span class="zwf-drawer-title">{{ title }}</span>
-        </template>
+        <!-- 文字模式：始终显示品牌 logo -->
         <template v-else>
           <span class="zwf-brand">
             <span class="zwf-brand-ai">ai</span><span class="zwf-brand-sep">-</span><span class="zwf-brand-browser">browser</span>

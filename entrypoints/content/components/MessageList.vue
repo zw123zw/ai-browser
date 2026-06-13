@@ -87,11 +87,9 @@ function jumpToBottom() {
 }
 
 function scrollToBottom() {
-  if (anchor.value) {
-    anchor.value.scrollIntoView({ block: 'end' });
-  } else if (scroller.value) {
-    scroller.value.scrollTop = scroller.value.scrollHeight;
-  }
+  if (!scroller.value) return;
+  // 使用 scrollTop 确保可靠滚动
+  scroller.value.scrollTop = scroller.value.scrollHeight;
 }
 
 /** 切换会话时恢复滚动位置 */
@@ -102,9 +100,10 @@ async function restoreScroll() {
   if (top != null) {
     scroller.value.scrollTop = top;
     const el = scroller.value;
-    stickToBottom.value = el.scrollHeight - top - el.clientHeight < 60;
+    stickToBottom.value = el.scrollHeight - top - el.clientHeight < 50;
   } else {
     scrollToBottom();
+    stickToBottom.value = true;
   }
 }
 
@@ -138,8 +137,8 @@ function onScroll() {
   if (!scroller.value) return;
   const el = scroller.value;
   store.updateScroll(el.scrollTop);
-  // 离底超过 80px 视为主动上滚
-  stickToBottom.value = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+  // 离底超过 50px 视为主动上滚
+  stickToBottom.value = el.scrollHeight - el.scrollTop - el.clientHeight < 50;
 }
 
 async function quickSend(text: string) {
