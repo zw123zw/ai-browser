@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue';
+import { computed, nextTick, reactive, ref, watch } from 'vue';
 import { v4 as uuid } from 'uuid';
 import { useSettingsStore } from '@/src/stores/settings';
 import { useToast } from '@/src/composables/useToast';
@@ -315,8 +315,10 @@ const autoSendOptions = [
 
 // 快捷键录制
 const recording = ref(false);
+const shortcutInputRef = ref<HTMLDivElement>();
 function startRecord() {
   recording.value = true;
+  nextTick(() => shortcutInputRef.value?.focus());
 }
 function onShortcutKeydown(e: KeyboardEvent) {
   if (!recording.value) return;
@@ -568,6 +570,7 @@ function exportConfig() {
               <label>快捷键</label>
               <div class="zwf-shortcut-row">
                 <div
+                  ref="shortcutInputRef"
                   :class="['zwf-shortcut-input', { 'zwf-shortcut-recording': recording }]"
                   tabindex="0"
                   @click="startRecord"

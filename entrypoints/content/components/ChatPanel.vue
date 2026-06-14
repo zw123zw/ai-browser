@@ -84,6 +84,7 @@ async function onSend(payload: { text: string; attachments: import('@/src/types'
 
 function onAbort() {
   convStore.abort();
+  pipeline.abort();
 }
 
 async function onPick(text: string) {

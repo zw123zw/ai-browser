@@ -24,6 +24,7 @@ export interface IntentDetectorOptions {
   getSettings: () => AppSettings
   getSkillList?: () => string
   getRecentMessages?: () => Array<{ role: 'user' | 'assistant'; content: string }>
+  getSignal?: () => AbortSignal | undefined
 }
 
 export interface Phase1Detection {
@@ -232,6 +233,7 @@ export class IntentDetector {
           apiKey: model.apiKey || settings.apiKey,
           modelName: model.modelName || settings.defaultModelId,
           messages,
+          signal: this.options.getSignal?.(),
         },
         (chunk) => {
           if (chunk.delta) {
@@ -249,6 +251,10 @@ export class IntentDetector {
       )
       log.info(`[${scene}] adapter.chat 完成，共收到 ${chunkCount} 个 chunk，thinking 长度: ${reasoningResponse.length}`)
     } catch (error) {
+      // AbortError 向上抛，让调用方处理中止逻辑
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw error
+      }
       log.error(`[${scene}] ═══ AI 请求失败 ═══`, error)
       return ''
     }

@@ -23,6 +23,7 @@ export interface PipelineOptions {
   getSettings: () => AppSettings
   getSkillList?: () => string
   getRecentMessages?: () => Array<{ role: 'user' | 'assistant'; content: string }>
+  getSignal?: () => AbortSignal | undefined
   onSkillActivate?: (name: string, userText: string) => Promise<{ success: boolean; message: string }>
   onBuiltinCommand?: (command: string, args: string) => void
 }
@@ -41,6 +42,7 @@ export class InputPipeline {
       getSettings: options.getSettings,
       getSkillList: options.getSkillList,
       getRecentMessages: options.getRecentMessages,
+      getSignal: options.getSignal,
     })
     this.executor = new ActionExecutor()
     this.skeletonManager = new SkeletonManager()
@@ -289,12 +291,14 @@ export class InputPipeline {
           messages: [
             { id: Date.now().toString(), role: 'user', content: `${PHASE2_RETRY_SYSTEM_PROMPT}\n\n用户输入: ${userContent}`, timestamp: Date.now() },
           ],
+          signal: this.options.getSignal?.(),
         },
         (chunk) => {
           if (chunk.delta) fullResponse += chunk.delta
         },
       )
     } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') throw error
       log.error('[重试] AI 请求失败', error)
       return { rawAiOutput: '' }
     }

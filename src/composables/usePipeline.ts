@@ -25,6 +25,8 @@ export function usePipeline() {
   let pipeline: InputPipeline | null = null
   /** 当前流式消息（用于打字机效果） */
   let currentStreamingMsg: ChatMessage | null = null
+  /** 当前请求的 AbortController */
+  let currentAborter: AbortController | null = null
 
   function getRecentMessages(): Array<{ role: 'user' | 'assistant'; content: string }> {
     const conv = convStore.conversation
@@ -47,6 +49,7 @@ export function usePipeline() {
         getSettings: () => settingsStore.settings,
         getSkillList: () => '（暂无可用技能）',
         getRecentMessages,
+        getSignal: () => currentAborter?.signal,
         onSkillActivate: async (name, userText) => {
           log.info('技能触发', { name, userText })
           return { success: false, message: `技能 "${name}" 暂未实现` }
@@ -86,6 +89,8 @@ export function usePipeline() {
     log.info('═══ processInput 开始 ═══', { text })
     isProcessing.value = true
     currentStreamingMsg = null
+    const ac = new AbortController()
+    currentAborter = ac
 
     try {
       const callbacks: PipelineCallbacks = {
@@ -201,14 +206,20 @@ export function usePipeline() {
 
       await getPipeline().process({ text, mode: 'text' }, callbacks)
     } catch (error) {
-      log.error('═══ processInput 异常 ═══', error)
-      addSystemMessage(`处理失败: ${error instanceof Error ? error.message : String(error)}`)
+      if (ac.signal.aborted) {
+        log.info('═══ processInput 已中止 ═══')
+        addSystemMessage('⏹ 已停止')
+      } else {
+        log.error('═══ processInput 异常 ═══', error)
+        addSystemMessage(`处理失败: ${error instanceof Error ? error.message : String(error)}`)
+      }
     } finally {
       // 确保流式消息状态正确
       if (currentStreamingMsg && currentStreamingMsg.status === 'streaming') {
         currentStreamingMsg.status = 'done'
       }
       currentStreamingMsg = null
+      if (currentAborter === ac) currentAborter = null
       isProcessing.value = false
       log.info('═══ processInput 结束 ═══')
     }
@@ -219,5 +230,11 @@ export function usePipeline() {
     return new ActionExecutor().execute(cmd)
   }
 
-  return { isProcessing, processInput, executeCommand, addSystemMessage }
+  function abort() {
+    log.debug('中止 pipeline 请求')
+    currentAborter?.abort()
+    currentAborter = null
+  }
+
+  return { isProcessing, processInput, executeCommand, addSystemMessage, abort }
 }
