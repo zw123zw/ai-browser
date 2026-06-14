@@ -919,10 +919,10 @@ function exportConfig() {
   transform: translateX(20px);
 }
 
-/* 卡片式 Radio */
+/* 卡片式 Radio - 水平小卡片 */
 .zwf-radio-group {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   gap: 8px;
   margin-top: 4px;
 }
@@ -930,13 +930,15 @@ function exportConfig() {
 .zwf-radio-card {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
+  gap: 8px;
+  padding: 8px 14px;
   border: 1px solid var(--zwf-border);
   border-radius: 10px;
   background: var(--zwf-bg-card);
   cursor: pointer;
   transition: all 0.2s ease;
+  flex: 1;
+  min-width: 0;
 }
 
 .zwf-radio-card:hover {
@@ -951,8 +953,8 @@ function exportConfig() {
 }
 
 .zwf-radio-dot {
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   border-radius: 50%;
   border: 2px solid var(--zwf-border);
   display: flex;
@@ -967,8 +969,8 @@ function exportConfig() {
 }
 
 .zwf-radio-dot-fill {
-  width: 8px;
-  height: 8px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
   background: var(--zwf-primary);
   animation: radio-fill 0.2s ease;
@@ -996,6 +998,7 @@ function exportConfig() {
   font-size: 13px;
   font-weight: 500;
   color: var(--zwf-text);
+  white-space: nowrap;
 }
 
 .zwf-radio-active .zwf-radio-label {
@@ -1003,8 +1006,42 @@ function exportConfig() {
 }
 
 .zwf-radio-desc {
-  font-size: 12px;
-  color: var(--zwf-text-faint);
-  line-height: 1.4;
+  display: none;
+}
+
+/* 小屏适配 */
+@media (max-width: 640px) {
+  .zwf-theme-grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+  }
+
+  .zwf-theme-preview {
+    height: 44px;
+    padding: 8px;
+  }
+
+  .zwf-theme-name {
+    padding: 6px 8px;
+    font-size: 11px;
+  }
+
+  .zwf-radio-group {
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .zwf-radio-card {
+    padding: 8px 12px;
+  }
+
+  .zwf-radio-desc {
+    display: block;
+    font-size: 11px;
+  }
+
+  .zwf-radio-label {
+    font-size: 12px;
+  }
 }
 </style>

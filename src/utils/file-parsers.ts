@@ -215,8 +215,29 @@ async function parseExcel(file: File): Promise<Attachment> {
   }
 }
 
-/** 不支持的二进制文件 → 仅保留元信息 */
-function parseBinary(file: File): Attachment {
+/** 不支持的二进制文件 → 尝试读取为文本，失败则仅保留元信息 */
+async function parseBinary(file: File): Promise<Attachment> {
+  // 尝试按文本读取（可能是无扩展名的文本文件）
+  try {
+    const content = await readTextFile(file);
+    // 检查是否为有效文本（没有 null 字节）
+    if (content.length > 0 && !content.includes('\0')) {
+      log.info('二进制文件按文本读取成功', { name: file.name, length: content.length });
+      const truncated = content.length > MAX_TEXT_CONTENT_SIZE;
+      return {
+        id: uuid(),
+        type: 'text',
+        name: file.name,
+        size: file.size,
+        mimeType: file.type,
+        content: truncated ? content.slice(0, MAX_TEXT_CONTENT_SIZE) : content,
+        truncated,
+      };
+    }
+  } catch {
+    // 读取失败，降级为元信息
+  }
+
   return {
     id: uuid(),
     type: 'binary',

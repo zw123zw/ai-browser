@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, onMounted, onUnmounted } from 'vue';
+import { computed, ref, onMounted, onUnmounted, watch } from 'vue';
 import { useConversationsStore } from '@/src/stores/conversations';
 import { useSettingsStore } from '@/src/stores/settings';
 import { useToast } from '@/src/composables/useToast';
@@ -23,8 +23,8 @@ const activeMode = ref<'chat' | 'voice'>('chat');
 
 /* ---- 左侧拖拽调整宽度 ---- */
 const savedWidth = settingsStore.settings.drawerWidth;
-const drawerWidth = ref(savedWidth && savedWidth >= 380 ? savedWidth : 480);
-const MIN_WIDTH = 380;
+const drawerWidth = ref(savedWidth && savedWidth >= 60 ? savedWidth : 480);
+const MIN_WIDTH = 60;
 const MAX_WIDTH = typeof window !== 'undefined' ? window.innerWidth : 1920;
 let dragging = false;
 
@@ -57,6 +57,16 @@ onUnmounted(() => {
   document.removeEventListener('mousemove', onDragMove);
   document.removeEventListener('mouseup', onDragEnd);
 });
+
+/* 跨标签页同步宽度 */
+watch(
+  () => settingsStore.settings.drawerWidth,
+  (newWidth) => {
+    if (!dragging && newWidth && newWidth >= MIN_WIDTH) {
+      drawerWidth.value = newWidth;
+    }
+  }
+);
 
 /** 切换到语音模式 */
 function switchToVoice() {
@@ -198,5 +208,11 @@ const drawerClass = computed(() => ({ 'zwf-open': props.open }));
 .zwf-drag-handle:active {
   background: var(--zwf-primary);
   opacity: 0.3;
+}
+
+@media (max-width: 640px) {
+  .zwf-drag-handle {
+    display: none;
+  }
 }
 </style>

@@ -20,7 +20,6 @@ const settingsStore = useSettingsStore();
 const convStore = useConversationsStore();
 
 function toggle() {
-  console.log('[App] toggle() 被调用，当前状态:', open.value);
   open.value = !open.value;
 }
 

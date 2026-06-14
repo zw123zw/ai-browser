@@ -219,7 +219,7 @@ table {
   right: 0;
   height: 100vh;
   width: 480px;
-  min-width: 380px;
+  min-width: 60px;
   max-width: 100vw;
   background: var(--zwf-bg);
   z-index: 2147483646;
@@ -1470,6 +1470,7 @@ table {
   object-fit: cover;
   border: 1px solid var(--zwf-border);
   transition: transform 0.15s ease;
+  cursor: pointer;
 }
 .zwf-msg-image:hover {
   transform: scale(1.02);
@@ -1769,6 +1770,7 @@ table {
   overflow: hidden;
   border: 1.5px solid var(--zwf-border);
   transition: transform 0.15s ease;
+  cursor: pointer;
 }
 .zwf-image-thumb:hover {
   transform: scale(1.05);
@@ -1818,6 +1820,7 @@ table {
   font-size: 12px;
   color: var(--zwf-text-primary, #e8e8e8);
   max-width: 220px;
+  cursor: pointer;
   transition: background 0.15s ease;
 }
 .zwf-attachment-chip:hover {
@@ -1858,45 +1861,61 @@ table {
 .zwf-file-modal-mask {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.7);
+  background: rgba(0, 0, 0, 0.6);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 2147483647;
-  animation: zwf-fade-in 0.2s ease;
-  backdrop-filter: blur(8px);
+  animation: zwf-fade-in 0.18s ease;
+  backdrop-filter: blur(6px);
+  padding: 16px;
 }
 .zwf-file-modal {
-  background: var(--zwf-bg-soft, #1a1a2e);
-  border: 1px solid var(--zwf-border, rgba(255, 255, 255, 0.1));
-  border-radius: 16px;
-  width: 700px;
-  max-width: 92vw;
-  max-height: 85vh;
+  background: var(--zwf-bg);
+  border: 1px solid var(--zwf-border);
+  border-radius: var(--zwf-radius-lg);
+  width: 620px;
+  max-width: 100%;
+  max-height: min(70vh, 560px);
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
-  animation: zwf-pop 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
+  box-shadow: var(--zwf-shadow-lg);
+  animation: zwf-pop 0.2s cubic-bezier(0.22, 1, 0.36, 1);
 }
 .zwf-file-modal-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14px 20px;
-  border-bottom: 1px solid var(--zwf-border, rgba(255, 255, 255, 0.1));
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--zwf-border);
   flex-shrink: 0;
+  background: var(--zwf-bg-soft);
+  gap: 12px;
 }
 .zwf-file-modal-info {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   min-width: 0;
   flex: 1;
 }
 .zwf-file-modal-icon {
-  font-size: 20px;
+  font-size: 22px;
   flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--zwf-primary-soft);
+  border-radius: 10px;
+}
+.zwf-file-modal-text-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
 }
 .zwf-file-modal-name {
   font-weight: 600;
@@ -1904,41 +1923,49 @@ table {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--zwf-text-primary, #e8e8e8);
+  color: var(--zwf-text);
 }
 .zwf-file-modal-meta {
-  color: var(--zwf-text-secondary, #888);
+  color: var(--zwf-text-faint);
   font-size: 12px;
-  flex-shrink: 0;
 }
 .zwf-file-modal-close {
-  background: none;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
   border: none;
-  color: var(--zwf-text-secondary, #888);
+  color: var(--zwf-text-soft);
   cursor: pointer;
-  padding: 4px;
-  border-radius: 6px;
-  transition: color 0.15s ease, background 0.15s ease;
+  border-radius: 10px;
+  transition: background 0.15s ease, color 0.15s ease;
   flex-shrink: 0;
 }
 .zwf-file-modal-close:hover {
-  color: var(--zwf-text-primary, #e8e8e8);
-  background: var(--zwf-bg-hover, rgba(255, 255, 255, 0.1));
+  color: var(--zwf-text);
+  background: var(--zwf-bg-hover);
 }
 .zwf-file-modal-body {
   flex: 1;
   overflow: auto;
-  padding: 16px 20px;
-  min-height: 200px;
+  padding: 16px;
+  min-height: 160px;
+  background: var(--zwf-bg);
 }
 .zwf-file-modal-body pre {
   margin: 0;
-  padding: 0;
+  padding: 12px 14px;
   white-space: pre-wrap;
-  word-break: break-all;
+  word-break: break-word;
   font-size: 13px;
-  line-height: 1.6;
+  line-height: 1.65;
   font-family: 'Cascadia Code', 'Fira Code', 'JetBrains Mono', 'Consolas', monospace;
+  background: var(--zwf-md-code-bg);
+  color: var(--zwf-md-code-color);
+  border-radius: var(--zwf-radius);
+  border: 1px solid rgba(255, 255, 255, 0.06);
 }
 .zwf-file-modal-body code {
   font-family: inherit;
@@ -1947,16 +1974,19 @@ table {
   display: flex;
   align-items: center;
   justify-content: center;
+  padding: 8px 0;
 }
 .zwf-file-modal-image img {
   max-width: 100%;
-  max-height: 70vh;
+  max-height: 65vh;
   object-fit: contain;
-  border-radius: 8px;
+  border-radius: var(--zwf-radius);
+  border: 1px solid var(--zwf-border);
 }
 .zwf-file-modal-text {
   font-size: 13px;
-  line-height: 1.6;
+  line-height: 1.65;
+  color: var(--zwf-text);
 }
 .zwf-file-modal-error {
   display: flex;
@@ -1964,17 +1994,48 @@ table {
   align-items: center;
   justify-content: center;
   gap: 12px;
-  padding: 40px 20px;
-  color: var(--zwf-text-secondary, #888);
+  padding: 48px 20px;
+  color: var(--zwf-text-faint);
   font-size: 14px;
 }
 .zwf-file-modal-truncated {
-  padding: 8px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 16px;
   font-size: 12px;
   color: #f59e0b;
-  background: rgba(245, 158, 11, 0.08);
-  border-top: 1px solid rgba(245, 158, 11, 0.2);
-  text-align: center;
+  background: rgba(245, 158, 11, 0.06);
+  border-top: 1px solid rgba(245, 158, 11, 0.15);
+  flex-shrink: 0;
+}
+
+/* 小屏适配：文件预览弹窗全屏 */
+@media (max-width: 640px) {
+  .zwf-file-modal-mask {
+    padding: 0;
+  }
+  .zwf-file-modal {
+    width: 100%;
+    max-width: 100%;
+    max-height: 85vh;
+    border-radius: 16px 16px 0 0;
+    margin-top: auto;
+  }
+  .zwf-file-modal-header {
+    padding: 10px 12px;
+  }
+  .zwf-file-modal-body {
+    padding: 12px;
+  }
+  .zwf-file-modal-body pre {
+    font-size: 12px;
+    padding: 10px 12px;
+  }
+  .zwf-file-modal-image img {
+    max-height: 50vh;
+  }
 }
 
 /* ============ 弹窗 ============ */
@@ -2201,4 +2262,160 @@ table {
 }
 .zwf-toast-move {
   transition: transform 0.22s ease;
+}
+
+/* ============ 小屏响应式优化 ============ */
+@media (max-width: 640px) {
+  /* 设置弹窗：全屏 + 顶部 tab */
+  .zwf-modal-settings {
+    width: 100vw;
+    height: 100vh;
+    max-height: 100vh;
+    border-radius: 0;
+  }
+  .zwf-settings-body {
+    flex-direction: column;
+  }
+  .zwf-settings-tabs {
+    width: 100%;
+    flex-direction: row;
+    border-right: none;
+    border-bottom: 1px solid var(--zwf-border);
+    padding: 8px 12px;
+    gap: 4px;
+    overflow-x: auto;
+  }
+  .zwf-settings-tab {
+    padding: 10px 14px;
+    white-space: nowrap;
+    font-size: 13px;
+  }
+  .zwf-settings-pane .zwf-modal-body {
+    padding: 16px 14px 12px;
+  }
+
+  /* 主题网格：3列 */
+  .zwf-theme-grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+  }
+
+  /* 模型芯片换行更紧凑 */
+  .zwf-model-chips {
+    gap: 6px;
+  }
+  .zwf-chip {
+    padding: 5px 10px;
+    font-size: 12px;
+  }
+
+  /* 预设按钮 */
+  .zwf-preset-grid {
+    gap: 6px;
+  }
+  .zwf-preset-btn {
+    padding: 5px 10px;
+    font-size: 12px;
+  }
+
+  /* 输入框 */
+  .zwf-input,
+  .zwf-select {
+    padding: 8px 12px;
+    font-size: 13px;
+  }
+
+  /* 抽屉：小屏全宽 */
+  .zwf-drawer {
+    width: 100vw !important;
+    min-width: 100vw;
+    border-left: none;
+  }
+
+  /* 快捷键提示 */
+  .zwf-shortcut-row {
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  /* 消息气泡适配 */
+  .zwf-msg {
+    max-width: 96%;
+    padding: 10px 12px;
+    font-size: 13px;
+  }
+  .zwf-bubble-user {
+    max-width: 88%;
+    padding: 10px 14px;
+  }
+
+  /* 输入卡片 */
+  .zwf-input-card {
+    border-radius: 16px;
+    padding: 10px 12px 10px;
+  }
+  .zwf-input-area {
+    font-size: 13px;
+    min-height: 32px;
+  }
+
+  /* 侧边会话列表：隐藏（由抽屉头部按钮控制） */
+  .zwf-side {
+    display: none;
+  }
+
+  /* 主面板空状态 */
+  .zwf-chat-empty {
+    padding: 24px 16px;
+  }
+  .zwf-chat-empty-title {
+    font-size: 18px;
+  }
+  .zwf-chat-empty-desc {
+    font-size: 12.5px;
+  }
+  .zwf-suggestions {
+    gap: 8px;
+  }
+  .zwf-suggestion {
+    padding: 10px 14px;
+    gap: 10px;
+  }
+
+  /* 标题栏 */
+  .zwf-drawer-header {
+    padding: 10px 14px;
+  }
+
+  /* Tab footer 按钮 */
+  .zwf-tab-footer .zwf-btn {
+    padding: 6px 14px;
+    font-size: 12px;
+  }
+
+  /* 确认弹窗 */
+  .zwf-modal-confirm {
+    width: 90vw;
+    padding: 20px 16px 16px;
+  }
+
+  /* 文件预览弹窗 */
+  .zwf-file-modal {
+    width: 95vw;
+    max-width: 95vw;
+  }
+
+  /* 弹窗通用 */
+  .zwf-modal {
+    max-width: 96vw;
+    border-radius: 16px;
+  }
+  .zwf-modal-header {
+    padding: 16px 16px;
+    font-size: 15px;
+  }
+  .zwf-modal-body {
+    padding: 16px;
+    gap: 12px;
+  }
 }

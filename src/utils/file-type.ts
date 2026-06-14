@@ -60,10 +60,19 @@ const CODE_EXTENSIONS: Record<string, string> = {
 const TEXT_EXTENSIONS = new Set([
   'txt', 'text', 'log', 'out', 'err',
   'csv', 'tsv',
-  'readme', 'license', 'changelog', 'authors', 'contributors',
+  'readme', 'license', 'licence', 'changelog', 'authors', 'contributors',
+  'copying', 'notice', 'changes', 'history', 'news',
   'gitignore', 'npmignore', 'dockerignore', 'eslintignore', 'prettierignore',
   'editorconfig', 'prettierrc', 'eslintrc', 'stylelintrc',
   'lock', 'sum', // package-lock.json, go.sum 等
+]);
+
+/** 常见无扩展名文本文件名（大小写不敏感匹配） */
+const TEXT_FILENAMES = new Set([
+  'license', 'licence', 'readme', 'changelog', 'authors', 'contributors',
+  'copying', 'notice', 'changes', 'history', 'news', 'makefile',
+  'dockerfile', 'vagrantfile', 'gemfile', 'rakefile', 'procfile',
+  'justfile', 'brewfile', 'cmakelists', 'requirements', 'pipfile',
 ]);
 
 /** PDF 扩展名 */
@@ -106,6 +115,7 @@ export function getExtension(filename: string): string {
 export function detectFileType(file: File): AttachmentType {
   const ext = getExtension(file.name);
   const mime = file.type.toLowerCase();
+  const filename = file.name.toLowerCase();
 
   // 图片：MIME 前缀优先
   if (mime.startsWith(IMAGE_MIME_PREFIX)) return 'image';
@@ -123,11 +133,17 @@ export function detectFileType(file: File): AttachmentType {
   // 代码
   if (ext in CODE_EXTENSIONS) return 'code';
 
-  // 文本
+  // 文本（扩展名匹配）
   if (TEXT_EXTENSIONS.has(ext)) return 'text';
+
+  // 文本（无扩展名文件名匹配，如 LICENSE、README）
+  if (!ext && TEXT_FILENAMES.has(filename)) return 'text';
 
   // MIME 兜底：text/* 视为文本
   if (mime.startsWith('text/')) return 'text';
+
+  // 无扩展名且无 MIME 类型 → 按文本尝试读取
+  if (!ext && (!mime || mime === 'application/octet-stream')) return 'text';
 
   // 其他
   return 'binary';

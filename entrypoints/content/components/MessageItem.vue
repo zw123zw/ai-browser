@@ -3,7 +3,10 @@ import { computed, ref } from 'vue';
 import type { ChatMessage, Attachment } from '@/src/types';
 import { renderMarkdown } from '@/src/utils/markdown';
 import { getFileTypeIcon, formatFileSize } from '@/src/utils/file-type';
+import { Logger } from '@/src/utils/logger';
 import FilePreviewModal from './FilePreviewModal.vue';
+
+const log = new Logger('MessageItem');
 
 const props = defineProps<{ message: ChatMessage }>();
 const emit = defineEmits<{
@@ -45,6 +48,7 @@ const fileAttachments = computed(() => {
 const previewAttachment = ref<Attachment | null>(null);
 
 function openPreview(att: Attachment) {
+  log.info('打开预览', { name: att.name, type: att.type, hasDataUrl: !!att.dataUrl, hasContent: !!att.content });
   previewAttachment.value = att;
 }
 
@@ -78,6 +82,7 @@ function onContextMenu(e: MouseEvent) {
           :key="i"
           :src="src"
           class="zwf-msg-image"
+          @click="openPreview({ id: `img-${i}`, type: 'image', name: `图片 ${i + 1}`, size: 0, mimeType: 'image/png', dataUrl: src })"
         />
       </div>
 

@@ -3,9 +3,11 @@ import { computed, ref, nextTick } from 'vue';
 import { useConversationsStore } from '@/src/stores/conversations';
 import { useSettingsStore } from '@/src/stores/settings';
 import { useToast } from '@/src/composables/useToast';
+import type { Attachment } from '@/src/types';
 import MessageList from './MessageList.vue';
 import InputBar from './InputBar.vue';
 import EmptyChat from './EmptyChat.vue';
+import FilePreviewModal from './FilePreviewModal.vue';
 
 const emit = defineEmits<{ (e: 'switch-voice'): void }>();
 
@@ -13,6 +15,17 @@ const convStore = useConversationsStore();
 const settingsStore = useSettingsStore();
 const toast = useToast();
 const messageListRef = ref<InstanceType<typeof MessageList> | null>(null);
+
+/** InputBar 文件预览（渲染在滚动容器外部，fixed 定位正常） */
+const previewAttachment = ref<Attachment | null>(null);
+
+function onPreview(att: Attachment) {
+  previewAttachment.value = att;
+}
+
+function closePreview() {
+  previewAttachment.value = null;
+}
 
 /** 会话是否存在且有消息 */
 const hasMessages = computed(() => {
@@ -83,7 +96,15 @@ function scrollToBottom() {
         @send="onSend"
         @abort="onAbort"
         @switch-voice="emit('switch-voice')"
+        @preview="onPreview"
       />
     </footer>
+
+    <!-- InputBar 文件预览（渲染在 ChatPanel 级别，fixed 定位正常） -->
+    <FilePreviewModal
+      v-if="previewAttachment"
+      :attachment="previewAttachment"
+      @close="closePreview"
+    />
   </div>
 </template>

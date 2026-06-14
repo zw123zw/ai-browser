@@ -4,7 +4,10 @@ import { fileToDataURL } from '@/src/utils/file';
 import { parseFile } from '@/src/utils/file-parsers';
 import { getFileTypeIcon, formatFileSize } from '@/src/utils/file-type';
 import { useToast } from '@/src/composables/useToast';
+import { Logger } from '@/src/utils/logger';
 import type { Conversation, ModelConfig, Attachment } from '@/src/types';
+
+const log = new Logger('InputBar');
 
 const props = defineProps<{
   conversation: Conversation | null | undefined;
@@ -15,6 +18,7 @@ const emit = defineEmits<{
   (e: 'send', payload: { text: string; images: string[]; attachments: Attachment[]; reasoning: boolean }): void;
   (e: 'abort'): void;
   (e: 'switch-voice'): void;
+  (e: 'preview', attachment: Attachment): void;
 }>();
 
 const toast = useToast();
@@ -23,6 +27,24 @@ const fileInput = ref<HTMLInputElement | null>(null);
 const textarea = ref<HTMLTextAreaElement | null>(null);
 const modelMenuOpen = ref(false);
 const modelMenuRef = ref<HTMLDivElement | null>(null);
+
+/** 预览：emit 给父级渲染，避免 fixed 定位在滚动容器内失效 */
+function openImagePreview(src: string, name: string) {
+  log.info('打开图片预览', { name });
+  emit('preview', {
+    id: 'preview',
+    type: 'image',
+    name,
+    size: 0,
+    mimeType: 'image/png',
+    dataUrl: src,
+  });
+}
+
+function openFilePreview(att: Attachment) {
+  log.info('打开文件预览', { name: att.name, type: att.type });
+  emit('preview', att);
+}
 
 /** 从 conversation 读写草稿 */
 const text = computed({
@@ -73,20 +95,27 @@ async function pickFiles(e: Event) {
   const input = e.target as HTMLInputElement;
   if (!input.files) return;
 
+  log.info('pickFiles 开始', { fileCount: input.files.length });
+
   const newImages = [...images.value];
   const newAttachments = [...attachments.value];
   let truncationCount = 0;
 
   for (const f of Array.from(input.files)) {
     try {
+      log.info('解析文件', { name: f.name, size: f.size, type: f.type });
       const attachment = await parseFile(f);
+      log.info('解析完成', { name: f.name, attType: attachment.type, hasDataUrl: !!attachment.dataUrl, hasContent: !!attachment.content });
       if (attachment.type === 'image' && attachment.dataUrl) {
         newImages.push(attachment.dataUrl);
+        log.info('图片已添加到 draftImages', { total: newImages.length });
       } else {
         if (attachment.truncated) truncationCount++;
         newAttachments.push(attachment);
+        log.info('附件已添加到 draftAttachments', { total: newAttachments.length });
       }
     } catch (err: any) {
+      log.error('文件解析失败', { name: f.name, error: err?.message });
       toast.error(err?.message || `文件 ${f.name} 解析失败`);
     }
   }
@@ -95,6 +124,7 @@ async function pickFiles(e: Event) {
     toast.warning(`${truncationCount} 个文件内容过长，已自动截断至 100KB`);
   }
 
+  log.info('pickFiles 完成', { imageCount: newImages.length, attachmentCount: newAttachments.length });
   setDraftImages(newImages);
   setDraftAttachments(newAttachments);
   input.value = '';
@@ -203,19 +233,19 @@ onUnmounted(() => document.removeEventListener('click', onDocClick));
   <div class="zwf-input-card">
     <!-- 图片预览（保留旧格式） -->
     <div v-if="images.length" class="zwf-image-preview">
-      <div v-for="(src, i) in images" :key="i" class="zwf-image-thumb">
+      <div v-for="(src, i) in images" :key="i" class="zwf-image-thumb" @click="openImagePreview(src, `图片 ${i + 1}`)">
         <img :src="src" />
-        <button class="zwf-image-del" @click="removeImg(i)">×</button>
+        <button class="zwf-image-del" @click.stop="removeImg(i)">×</button>
       </div>
     </div>
 
     <!-- 文件附件预览 -->
     <div v-if="attachments.length" class="zwf-attachment-preview">
-      <div v-for="(att, i) in attachments" :key="att.id" class="zwf-attachment-chip">
+      <div v-for="(att, i) in attachments" :key="att.id" class="zwf-attachment-chip" @click="openFilePreview(att)">
         <span class="zwf-attachment-icon">{{ getFileTypeIcon(att.type) }}</span>
         <span class="zwf-attachment-name" :title="att.name">{{ att.name }}</span>
         <span class="zwf-attachment-size">{{ formatFileSize(att.size) }}</span>
-        <button class="zwf-attachment-del" @click="removeAttachment(i)">×</button>
+        <button class="zwf-attachment-del" @click.stop="removeAttachment(i)">×</button>
       </div>
     </div>
 

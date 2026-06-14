@@ -16,48 +16,72 @@ const log = new Logger('Adapter:OpenAI');
 export class OpenAIAdapter extends BaseAdapter {
   readonly name = 'openai';
 
-  /** 把内部 ChatMessage 转成 OpenAI 协议消息 */
-  private toRequestMessages(messages: ChatMessage[]) {
-    return messages.map((m) => {
-      const hasImages = m.images && m.images.length;
-      const hasFileAttachments = m.attachments?.some(a => a.type !== 'image' && a.content);
-
-      // 有图片或文件附件时，使用 content array
-      if (hasImages || hasFileAttachments) {
-        const parts: any[] = [];
-
-        // 文件内容拼入文本部分
-        let textContent = m.content;
-        if (hasFileAttachments) {
-          const fileTexts = m.attachments!
-            .filter(a => a.type !== 'image' && a.content && !a.content.startsWith('['))
-            .map(a => `[文件: ${a.name}]\n\`\`\`${a.lang || ''}\n${a.content}\n\`\`\``)
-            .join('\n\n');
-          if (fileTexts) {
-            textContent = textContent ? `${textContent}\n\n${fileTexts}` : fileTexts;
-          }
-        }
-
-        parts.push({ type: 'text', text: textContent });
-
-        // 图片附件
-        if (hasImages) {
-          for (const url of m.images!) {
-            parts.push({ type: 'image_url', image_url: { url } });
-          }
-        }
-        // 新格式 attachments 中的图片
-        if (m.attachments) {
-          for (const att of m.attachments) {
-            if (att.type === 'image' && att.dataUrl) {
-              parts.push({ type: 'image_url', image_url: { url: att.dataUrl } });
-            }
-          }
-        }
-
-        return { role: m.role, content: parts };
+  /** 收集消息中的所有图片 dataURL（兼容旧 images + 新 attachments） */
+  private collectImageUrls(m: ChatMessage): string[] {
+    const urls: string[] = [];
+    if (m.images?.length) urls.push(...m.images);
+    if (m.attachments) {
+      for (const att of m.attachments) {
+        if (att.type === 'image' && att.dataUrl) urls.push(att.dataUrl);
       }
-      return { role: m.role, content: m.content };
+    }
+    return urls;
+  }
+
+  /** 收集消息中的文本类附件内容 */
+  private collectFileTexts(m: ChatMessage): string {
+    if (!m.attachments) return '';
+    return m.attachments
+      .filter(a => a.type !== 'image' && a.content && !a.content.startsWith('['))
+      .map(a => `[文件: ${a.name}]\n\`\`\`${a.lang || ''}\n${a.content}\n\`\`\``)
+      .join('\n\n');
+  }
+
+  /** 把内部 ChatMessage 转成 OpenAI 协议消息（multimodal） */
+  private toOpenAIMessages(messages: ChatMessage[]) {
+    return messages.map((m) => {
+      const imageUrls = this.collectImageUrls(m);
+      const fileTexts = this.collectFileTexts(m);
+      const hasMultimodal = imageUrls.length > 0 || fileTexts.length > 0;
+
+      if (!hasMultimodal) return { role: m.role, content: m.content };
+
+      let textContent = m.content;
+      if (fileTexts) {
+        textContent = textContent ? `${textContent}\n\n${fileTexts}` : fileTexts;
+      }
+
+      const parts: any[] = [{ type: 'text', text: textContent }];
+      for (const url of imageUrls) {
+        parts.push({ type: 'image_url', image_url: { url } });
+      }
+      return { role: m.role, content: parts };
+    });
+  }
+
+  /** 把内部 ChatMessage 转成 Anthropic 协议消息（multimodal） */
+  private toAnthropicMessages(messages: ChatMessage[]) {
+    return messages.map((m) => {
+      const imageUrls = this.collectImageUrls(m);
+      const fileTexts = this.collectFileTexts(m);
+      const hasMultimodal = imageUrls.length > 0 || fileTexts.length > 0;
+
+      if (!hasMultimodal) return { role: m.role, content: m.content };
+
+      let textContent = m.content;
+      if (fileTexts) {
+        textContent = textContent ? `${textContent}\n\n${fileTexts}` : fileTexts;
+      }
+
+      // 如果有图片，以文字描述方式告知 AI（因为部分 Anthropic 兼容端点不支持 image content block）
+      if (imageUrls.length > 0) {
+        const imgNote = `\n\n[用户附带了 ${imageUrls.length} 张图片，但当前 API 端点不支持图片输入]`;
+        textContent += imgNote;
+        log.info('Anthropic 模式：图片以文字说明代替', { imageCount: imageUrls.length });
+      }
+
+      // 只返回文本内容（不使用 image content block，避免不支持图片的端点报错）
+      return { role: m.role, content: textContent };
     });
   }
 
@@ -108,7 +132,7 @@ export class OpenAIAdapter extends BaseAdapter {
       };
       body = JSON.stringify({
         model: opts.modelName,
-        messages: this.toRequestMessages(opts.messages),
+        messages: this.toAnthropicMessages(opts.messages),
         max_tokens: 8192,
         stream: true,
       });
@@ -120,7 +144,7 @@ export class OpenAIAdapter extends BaseAdapter {
       };
       body = JSON.stringify({
         model: opts.modelName,
-        messages: this.toRequestMessages(opts.messages),
+        messages: this.toOpenAIMessages(opts.messages),
         stream: true,
       });
     }
