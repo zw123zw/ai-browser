@@ -4,6 +4,7 @@ import { useVoiceStore } from '@/src/stores/voice'
 import { useSettingsStore } from '@/src/stores/settings'
 import { useToast } from '@/src/composables/useToast'
 import { VoiceSession } from '@/src/voice/session'
+import { ActionExecutor } from '@/src/browser/action-executor'
 import { Logger } from '@/src/utils/logger'
 import type { SessionState } from '@/src/stores/voice'
 
@@ -15,6 +16,7 @@ const toast = useToast()
 
 const messagesRef = ref<HTMLElement | null>(null)
 let session: VoiceSession | null = null
+const actionExecutor = new ActionExecutor()
 
 /** 自动滚动到底部 */
 function scrollToBottom() {
@@ -83,27 +85,43 @@ function initSession() {
       scrollToBottom()
     },
     executeAutomation: async (action, params) => {
+      // 优先使用本地 ActionExecutor（content script 上下文）
       try {
-        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
-        if (!tab?.id) {
-          return { success: false, message: '无法获取当前标签页' }
-        }
-        await chrome.scripting.executeScript({
-          target: { tabId: tab.id },
-          files: ['content-scripts/content.js'],
-        })
-        const response = await chrome.tabs.sendMessage(tab.id, {
-          type: 'automation',
+        const result = await actionExecutor.execute({
           action,
-          params,
+          url: params.url as string,
+          text: params.keyword as string,
+          direction: params.direction as string,
+          key: params.key as string,
+          ms: params.ms as number,
+          description: params.description as string,
         })
-        return {
-          success: response?.success ?? true,
-          message: response?.message || '操作已执行',
-        }
+        return result
       } catch (error) {
-        log.error('自动化执行异常', error)
-        return { success: false, message: String(error) }
+        log.error('本地执行失败，回退到跨标签页执行', error)
+        // 回退：通过 chrome.tabs.sendMessage 执行
+        try {
+          const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
+          if (!tab?.id) {
+            return { success: false, message: '无法获取当前标签页' }
+          }
+          await chrome.scripting.executeScript({
+            target: { tabId: tab.id },
+            files: ['content-scripts/content.js'],
+          })
+          const response = await chrome.tabs.sendMessage(tab.id, {
+            type: 'automation',
+            action,
+            params,
+          })
+          return {
+            success: response?.success ?? true,
+            message: response?.message || '操作已执行',
+          }
+        } catch (fallbackError) {
+          log.error('回退执行也失败', fallbackError)
+          return { success: false, message: String(fallbackError) }
+        }
       }
     },
     getPageContext,

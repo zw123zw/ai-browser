@@ -76,10 +76,8 @@ export const useSettingsStore = defineStore('zwf-settings', () => {
 
   /** 显式更新：立即 await 持久化 */
   async function update(partial: Partial<AppSettings>) {
-    log.info('更新设置', { keys: Object.keys(partial) });
     settings.value = mergeSettings({ ...settings.value, ...partial });
     await sync.flush();
-    log.info('设置已保存');
   }
 
   return { settings, ready, init, update };

@@ -9,8 +9,10 @@ import { useConversationsStore } from '@/src/stores/conversations';
 import { matchShortcut } from '@/src/utils/shortcut';
 import { getThemeById } from '@/src/themes';
 import { drawerOpenStorage } from '@/src/storage';
+import { executeAutomationAction } from '@/src/automation/actions';
+import { Logger } from '@/src/utils/logger';
 
-console.log('[App] Vue 组件初始化');
+const log = new Logger('App');
 
 const open = ref(false);
 const showSettings = ref(false);
@@ -23,8 +25,9 @@ function toggle() {
   open.value = !open.value;
 }
 
-function onMessage(msg: any) {
+function onMessage(msg: any, sender: chrome.runtime.MessageSender, sendResponse: (response?: any) => void) {
   if (msg?.type === 'zwf-toggle') toggle();
+
   // 接收其他标签页的抽屉状态同步
   if (msg?.type === 'zwf-drawer-sync') {
     if (msg.open !== open.value) {
@@ -32,6 +35,20 @@ function onMessage(msg: any) {
       open.value = msg.open;
       nextTick(() => (syncingFromRemote = false));
     }
+  }
+
+  // 自动化指令执行（来自 VoicePanel）
+  if (msg?.type === 'automation') {
+    log.info('收到自动化指令', { action: msg.action, params: msg.params });
+    try {
+      const result = executeAutomationAction(msg.action, msg.params || {});
+      log.info('自动化指令执行结果', { action: msg.action, success: result.success, message: result.message });
+      sendResponse(result);
+    } catch (error) {
+      log.error('自动化指令执行异常', error);
+      sendResponse({ success: false, message: String(error) });
+    }
+    return true; // 异步响应
   }
 }
 

@@ -115,12 +115,7 @@ export default defineBackground(() => {
             activeStreams.delete(requestId);
           }
 
-          // 检查是否已被中止
-          if (!activeStreams.has(requestId)) {
-            return;
-          }
-
-          // 发送流结束
+          // 发送流结束（无论正常结束还是被中止，都通知 content script）
           chrome.tabs.sendMessage(sender.tab.id, {
             type: 'stream-end',
             requestId,
