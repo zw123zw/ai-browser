@@ -22,7 +22,7 @@ search    — 全网搜索（需text）
 click     — 点击元素（需elementId或description）
 type      — 输入文字（需elementId+text）
 clear     — 清空输入框（需elementId）
-scroll    — 滚动页面（direction:up/down/top/bottom）
+scroll    — 滚动页面（direction:up/down/top/bottom，amount:滚动像素，可选）
 select    — 选择下拉框（需elementId+text）
 keyboard  — 模拟按键（需key:Enter/Escape/Tab等，别名press）
 focus     — 聚焦元素（需elementId）

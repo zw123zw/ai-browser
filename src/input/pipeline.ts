@@ -100,6 +100,7 @@ export class InputPipeline {
     let lastAiOutput = ''
     let lastError = ''
     let lastErrorType: 'extract' | 'exec' = 'extract'
+    let needHtmlRetried = false
 
     for (let attempt = 0; attempt <= MAX_RETRY; attempt++) {
       const skeleton = this.skeletonManager.getSkeleton()
@@ -187,10 +188,18 @@ export class InputPipeline {
 
       // ── need_html ──
       if (phase2Result.needHtml) {
-        lastError = `无法找到 "${phase2Result.needHtml.query}" 相关元素`
-        lastErrorType = 'extract'
-        log.warn('[Phase 2] need_html 兜底失败', { query: phase2Result.needHtml.query })
-        continue
+        if (!needHtmlRetried) {
+          // 首次：用 description 重试一次（骨架里没有的元素，AI 用文本描述定位）
+          needHtmlRetried = true
+          lastError = `骨架中未找到 "${phase2Result.needHtml.query}" 对应元素。请改用 description 字段描述目标（如 "点赞"），系统会通过文本匹配定位。禁止使用 [need_html]。`
+          lastErrorType = 'extract'
+          log.warn('[Phase 2] need_html → 用 description 重试')
+          continue
+        }
+        // 二次：放弃
+        log.warn('[Phase 2] need_html 二次失败，放弃', { query: phase2Result.needHtml.query })
+        callbacks.onError(`未找到 "${phase2Result.needHtml.query}" 对应的页面元素，请尝试更具体的描述`)
+        return
       }
     }
 

@@ -35,7 +35,7 @@ export class ActionExecutor {
         case 'click':     return await this.executeClick(element!)
         case 'type':      return await this.executeType(element!, cmd.text || '')
         case 'clear':     return await this.executeClear(element!)
-        case 'scroll':    return await this.executeScroll(cmd.direction || 'down')
+        case 'scroll':    return await this.executeScroll(cmd.direction || 'down', cmd.amount)
         case 'navigate':  return await this.executeNavigate(cmd.url || '')
         case 'select':    return await this.executeSelect(element!, cmd.text || '')
         case 'keyboard':
@@ -91,14 +91,32 @@ export class ActionExecutor {
 
   /** 文本模糊匹配查找元素 */
   private findByText(text: string): HTMLElement | null {
-    const candidates = document.querySelectorAll('a, button, input, [role="button"], [onclick], [tabindex]')
-    for (const el of candidates) {
+    // 优先搜索交互元素
+    const interactive = document.querySelectorAll('a, button, input, select, [role="button"], [onclick], [tabindex]')
+    for (const el of interactive) {
       const elText = el.textContent?.trim() || ''
       const ariaLabel = el.getAttribute('aria-label') || ''
-      if (elText.includes(text) || ariaLabel.includes(text)) {
+      const title = el.getAttribute('title') || ''
+      if (elText.includes(text) || ariaLabel.includes(text) || title.includes(text)) {
         return el as HTMLElement
       }
     }
+
+    // 兜底：搜索所有元素（覆盖 div/span + SVG 图标按钮）
+    const allElements = document.querySelectorAll('*')
+    for (const el of allElements) {
+      if (el.tagName === 'SCRIPT' || el.tagName === 'STYLE' || el.tagName === 'SVG') continue
+      const elText = el.textContent?.trim() || ''
+      const ariaLabel = el.getAttribute('aria-label') || ''
+      const title = el.getAttribute('title') || ''
+      if (elText.includes(text) || ariaLabel.includes(text) || title.includes(text)) {
+        // 过滤不可见元素
+        const style = window.getComputedStyle(el as HTMLElement)
+        if (style.display === 'none' || style.visibility === 'hidden') continue
+        return el as HTMLElement
+      }
+    }
+
     return null
   }
 
@@ -231,8 +249,8 @@ export class ActionExecutor {
   }
 
   /** 滚动 */
-  private async executeScroll(direction: string): Promise<ActionResult> {
-    const scrollAmount = window.innerHeight * 0.8
+  private async executeScroll(direction: string, amount?: number): Promise<ActionResult> {
+    const scrollAmount = amount || window.innerHeight * 0.8
     switch (direction) {
       case 'up':     window.scrollBy(0, -scrollAmount); break
       case 'down':   window.scrollBy(0, scrollAmount); break

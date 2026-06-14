@@ -135,7 +135,17 @@ export class IntentDetector {
       // [need_html] 兜底
       if (tags.needHtml && !tags.commands?.length && !tags.skill) {
         log.info('[Phase 2] need_html 兜底', { query: tags.needHtml.query })
-        const localHtml = extractLocalHtml(tags.needHtml.query)
+        let localHtml = extractLocalHtml(tags.needHtml.query)
+
+        // 原始查询失败 → 尝试简化查询（提取核心关键词）
+        if (!localHtml) {
+          const simpleQuery = simplifyQuery(tags.needHtml.query)
+          if (simpleQuery !== tags.needHtml.query) {
+            log.info('[Phase 2] 尝试简化查询', { original: tags.needHtml.query, simplified: simpleQuery })
+            localHtml = extractLocalHtml(simpleQuery)
+          }
+        }
+
         if (localHtml) {
           log.info('[Phase 2] 局部 HTML 提取成功', { htmlLength: localHtml.length })
           const retryOutput = await this.callAI(
@@ -271,4 +281,23 @@ export class IntentDetector {
 
     return finalResponse
   }
+}
+
+/**
+ * 简化查询关键词（从长描述中提取核心动作词）
+ *
+ * "推荐下的第一条内容的点赞按钮" → "点赞"
+ * "搜索框旁边的设置图标" → "设置"
+ */
+function simplifyQuery(query: string): string {
+  const actionKeywords = [
+    '点赞', '评论', '分享', '收藏', '关注', '取消关注',
+    '登录', '注册', '搜索', '提交', '发送', '删除', '编辑',
+    '保存', '取消', '确认', '下载', '上传', '播放', '暂停',
+    '关闭', '打开', '展开', '收起', '刷新', '返回',
+  ]
+  for (const kw of actionKeywords) {
+    if (query.includes(kw)) return kw
+  }
+  return query
 }

@@ -38,6 +38,7 @@ export interface Command {
   url?: string             // navigate 操作的目标 URL
   key?: string             // keyboard 操作的按键
   direction?: string       // scroll 操作的方向
+  amount?: number          // scroll 操作的滚动像素
   ms?: number              // wait 操作的等待时间
   description?: string     // 操作描述（日志用 / 文本匹配兜底）
 }
