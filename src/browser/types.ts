@@ -17,6 +17,7 @@ export interface SkeletonElement {
   value?: string            // input/textarea 的当前值
   role?: string             // ARIA role
   ariaLabel?: string        // aria-label
+  title?: string            // title 属性（按钮/链接的提示文字）
   parent?: string           // 父级地标标签（nav/header/main 等）
   class?: string            // 仅保留 data-testid 等定位属性
 }

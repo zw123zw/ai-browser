@@ -100,7 +100,7 @@ onUnmounted(() => {
     :style="{ right: pos.right + 'px', bottom: pos.bottom + 'px' }"
     @mousedown="onMouseDown"
   >
-    <span class="zwf-fab-tip">AI 语音助手 ({{ settingsStore.settings.shortcut || 'Ctrl+Shift+M' }})</span>
+    <span class="zwf-fab-tip">AI 语音助手 ({{ settingsStore.settings.shortcut || 'Ctrl+`' }})</span>
     <!-- Logo - 科技芯片 -->
     <svg class="zwf-fab-svg" width="24" height="24" viewBox="0 0 24 24" fill="none">
       <!-- 外层八角科技框 -->

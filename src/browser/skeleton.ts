@@ -116,7 +116,14 @@ function extractElement(el: HTMLElement, id: string): SkeletonElement | null {
   }
   if (el.getAttribute('role')) base.role = el.getAttribute('role')!
   if (el.getAttribute('aria-label')) base.ariaLabel = el.getAttribute('aria-label')!
+  if (el.getAttribute('title')) base.title = el.getAttribute('title')!
   if (el.dataset.testid) base.class = `[data-testid="${el.dataset.testid}"]`
+
+  // 交互元素补充属性：button 的 type，带 onclick/tabindex 的元素的 role
+  if (tag === 'button' && el.getAttribute('type')) base.type = el.getAttribute('type')!
+  if (!base.role && (el.getAttribute('onclick') || el.getAttribute('tabindex'))) {
+    base.role = el.getAttribute('role') || 'button'
+  }
 
   return base
 }

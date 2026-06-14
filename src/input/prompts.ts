@@ -83,6 +83,11 @@ ${CAPABILITY_DOMAIN}
 3. 有匹配技能 → 返回[skill]
 4. 找不到目标 → 返回[need_html]
 5. 多步操作按顺序输出多个[command]
+
+图标按钮识别：
+- 很多按钮没有文字，只有SVG图标
+- 通过aria-label、title、role属性识别其功能
+- 骨架中没有文字的button，检查其aria-label/title属性
 \`\`\``
 
 // ═══════════════════════════════════════════════════════════════
@@ -172,5 +177,6 @@ export function buildNeedHtmlUserMessage(
     `未找到: ${needHtml.reason}`,
     `"${needHtml.query}"附近HTML:\n\`\`\`html\n${localHtml}\n\`\`\``,
     '根据HTML生成精确指令。',
+    '注意：HTML中的SVG是图标，不是交互目标。点击目标是SVG的父元素（通常是<button>或<a>），通过父元素的aria-label、title、class判断其功能。',
   ].join('\n\n')
 }

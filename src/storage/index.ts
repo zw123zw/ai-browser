@@ -37,7 +37,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   drawerWidth: 480,
   primaryColor: '#4f46e5',
   theme: 'classic',
-  shortcut: 'Ctrl+Shift+M',
+  shortcut: 'Ctrl+`',
   maxConversations: 100,
   maxContext: 50,
   autoSendSelection: 'auto',
