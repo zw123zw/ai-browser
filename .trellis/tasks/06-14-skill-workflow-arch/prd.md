@@ -270,6 +270,51 @@ src/skills/
 - `src/adapters/` — AI 适配器，复用现有工厂模式
 - `src/stores/settings.ts` — 获取 AI 模型配置
 
+### 技能触发标签格式
+
+统一输入架构中，AI 通过 `[skill]` 标签触发技能：
+
+```
+[skill]{"name":"翻译","userText":"中文"}[/skill]
+```
+
+- `name` — 技能名（匹配 registry 中的技能）
+- `userText` — 用户描述（传给技能的 `ctx.userText`）
+
+扩展后台解析到 `[skill]` 标签后，调用 `skillEngine.activate(name, userText)`。
+
+### 技能列表注入到 Phase 2 Prompt
+
+意图检测架构的 Phase 2 需要技能列表来决策。技能注册表提供格式化列表：
+
+```typescript
+interface SkillListItem {
+  name: string           // 技能名
+  trigger: string        // 触发词（如 "翻译"）
+  description: string    // 描述（如 "将页面内容翻译为指定语言"）
+  userTextHint: string   // userText 提示（如 "目标语言，默认中文"）
+}
+
+function formatSkillList(skills: SkillListItem[]): string {
+  return skills.map(s =>
+    `- ${s.trigger}: ${s.description}（参数: ${s.userTextHint}）`
+  ).join('\n')
+}
+
+// 示例输出:
+// - 翻译: 将页面内容翻译为指定语言（参数: 目标语言，默认中文）
+// - 总结: 总结页面核心内容（参数: 无特殊参数）
+```
+
+注入位置：Phase 2 的 System Prompt 中 `{skillList}` 占位符。
+
+### AI 决策规则
+
+Phase 2 Prompt 中的优先级规则：
+1. 有匹配技能 → 必须返回 `[skill]`，不能返回浏览器指令
+2. 无匹配技能 → 返回 `[command]` 浏览器指令
+3. 技能优先级 > 浏览器指令
+
 ### 实现计划
 
 - **PR1**: 类型定义 + defineSkill + registry
