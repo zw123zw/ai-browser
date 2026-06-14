@@ -123,13 +123,12 @@ export function usePipeline() {
           }
         },
 
-        // Phase 1 检测到操作意图 → 移除流式消息（不展示原始标签）
+        // Phase 1 检测到操作意图 → 更新为"执行中"状态（保留视觉反馈）
         onActionDetected: () => {
           log.info('[回调] onActionDetected')
-          if (currentStreamingMsg && convStore.conversation) {
-            const idx = convStore.conversation.messages.findIndex(m => m.id === currentStreamingMsg!.id)
-            if (idx !== -1) convStore.conversation.messages.splice(idx, 1)
-            currentStreamingMsg = null
+          if (currentStreamingMsg) {
+            currentStreamingMsg.content = '正在执行操作...'
+            currentStreamingMsg.status = 'done'
           }
         },
 
@@ -146,21 +145,32 @@ export function usePipeline() {
           })
         },
 
-        // 解析到指令列表 → 在聊天中展示"正在执行xxx指令"
+        // 解析到指令列表 → 替换"执行中"消息为具体指令列表
         onCommandsParsed: (commands) => {
           log.info('[回调] onCommandsParsed', {
             count: commands.length,
             commands: commands.map(c => ({ action: c.action, elementId: c.elementId, description: c.description, url: c.url })),
           })
+          // 移除"正在执行操作..."占位消息
+          if (currentStreamingMsg && convStore.conversation) {
+            const idx = convStore.conversation.messages.findIndex(m => m.id === currentStreamingMsg!.id)
+            if (idx !== -1) convStore.conversation.messages.splice(idx, 1)
+            currentStreamingMsg = null
+          }
           const cmdList = commands
             .map((c, i) => `${i + 1}. **${c.action}**${c.description ? ` — ${c.description}` : ''}${c.url ? ` → ${c.url}` : ''}${c.text ? ` "${c.text}"` : ''}`)
             .join('\n')
           addSystemMessage(`🔧 **正在执行 ${commands.length} 条指令：**\n${cmdList}`)
         },
 
-        // 解析到技能 → 在聊天中展示"正在执行xxx技能"
+        // 解析到技能 → 替换"执行中"消息为技能信息
         onSkillParsed: (name, userText) => {
           log.info('[回调] onSkillParsed', { name, userText })
+          if (currentStreamingMsg && convStore.conversation) {
+            const idx = convStore.conversation.messages.findIndex(m => m.id === currentStreamingMsg!.id)
+            if (idx !== -1) convStore.conversation.messages.splice(idx, 1)
+            currentStreamingMsg = null
+          }
           addSystemMessage(`⚡ **正在执行技能：** ${name}${userText ? ` — ${userText}` : ''}`)
         },
 
@@ -171,9 +181,14 @@ export function usePipeline() {
           addSystemMessage(`${icon} **${action}** — ${message}`)
         },
 
-        // 重试消息
+        // 重试消息（清理占位消息）
         onRetryMessage: (message) => {
           log.info('[回调] onRetryMessage', { message })
+          if (currentStreamingMsg && convStore.conversation) {
+            const idx = convStore.conversation.messages.findIndex(m => m.id === currentStreamingMsg!.id)
+            if (idx !== -1) convStore.conversation.messages.splice(idx, 1)
+            currentStreamingMsg = null
+          }
           addSystemMessage(message)
         },
 

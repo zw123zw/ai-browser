@@ -70,18 +70,19 @@ export class InputPipeline {
       return
     }
 
-    // 2. Phase 1（支持流式）
+    // 2. Phase 1 — 流式输出（打字机效果），判断完再决定保留还是移除
     callbacks.onChatStart()
     const p1 = await this.detector.detectPhase1(ctx.text, callbacks.onChatDelta)
-    callbacks.onChatEnd()
 
     if (p1.isChat && p1.responseText) {
       log.info('[流程] Phase 1 → 聊天回复 → 结束')
-      // 流式展示已在 onChatDelta 中完成，无需再调用 onChatMessage
+      // 确认是聊天 → 用回复内容替换"思考中"，标记完成
+      callbacks.onChatDelta(p1.responseText)
+      callbacks.onChatEnd()
       return
     }
 
-    // 3. Phase 2 — 清除 Phase 1 流式消息中的原始标签内容，只展示执行结果
+    // 3. Phase 2 — 移除"思考中"消息，只展示解析后的执行结果
     log.info('[流程] Phase 1 → [action] → 进入 Phase 2')
     callbacks.onActionDetected()
     await this.processPhase2WithRetry(ctx.text, callbacks)
@@ -268,8 +269,8 @@ export class InputPipeline {
     const { createAdapter } = await import('@/src/adapters')
     const adapter = createAdapter(model.provider || settings.provider)
 
-    const recentMsgs = this.options.getRecentMessages?.() || []
-    const userContent = buildRetryUserMessage(text, skeleton, lastAiOutput, lastError, errorType, recentMsgs)
+    // 重试不带会话历史，避免之前失败任务的消息污染当前重试上下文
+    const userContent = buildRetryUserMessage(text, skeleton, lastAiOutput, lastError, errorType, [])
 
     log.info('[重试] ═══ 重试 AI 请求 ═══', {
       errorType,

@@ -17,8 +17,8 @@ export class ActionExecutor {
   async execute(cmd: Command): Promise<ActionResult> {
     log.info('执行指令', { action: cmd.action, elementId: cmd.elementId, description: cmd.description })
 
-    // 不需要元素的操作
-    const needsElement = !['navigate', 'wait', 'scroll'].includes(cmd.action)
+    // 不需要元素的操作（keyboard/press 作用于当前焦点元素）
+    const needsElement = !['navigate', 'wait', 'scroll', 'keyboard', 'press'].includes(cmd.action)
     let element: HTMLElement | null = null
 
     if (needsElement) {
@@ -38,7 +38,8 @@ export class ActionExecutor {
         case 'scroll':    return await this.executeScroll(cmd.direction || 'down')
         case 'navigate':  return await this.executeNavigate(cmd.url || '')
         case 'select':    return await this.executeSelect(element!, cmd.text || '')
-        case 'keyboard':  return await this.executeKeyboard(cmd.key || '')
+        case 'keyboard':
+        case 'press':     return await this.executeKeyboard(cmd.key || '')
         case 'focus':     return await this.executeFocus(element!)
         case 'hover':     return await this.executeHover(element!)
         case 'wait':      return await this.executeWait(cmd.ms || 1000)
@@ -153,7 +154,7 @@ export class ActionExecutor {
     return this.executeType(el, '')
   }
 
-  /** 键盘操作：keydown → keypress → keyup */
+  /** 键盘操作：keydown → keypress → keyup（Enter 时尝试提交表单） */
   private async executeKeyboard(key: string): Promise<ActionResult> {
     const target = document.activeElement || document.body
     const keyEventInit: KeyboardEventInit = {
@@ -166,6 +167,29 @@ export class ActionExecutor {
     target.dispatchEvent(new KeyboardEvent('keydown', keyEventInit))
     target.dispatchEvent(new KeyboardEvent('keypress', keyEventInit))
     target.dispatchEvent(new KeyboardEvent('keyup', keyEventInit))
+
+    // Enter 键：尝试提交表单（合成事件不触发浏览器默认行为）
+    if (key === 'Enter') {
+      // 优先从 activeElement 找 form
+      if (target instanceof HTMLElement) {
+        const form = target.closest('form')
+        if (form) {
+          form.requestSubmit()
+          return { success: true, message: '回车提交表单' }
+        }
+      }
+      // 兜底：全局找搜索输入框并提交
+      const searchInput = document.querySelector<HTMLInputElement>(
+        'input[type="search"], input[name="q"], input[name="keyword"], input[name="wd"], input[placeholder*="搜索"], input[placeholder*="search"]'
+      )
+      if (searchInput) {
+        const form = searchInput.closest('form')
+        if (form) {
+          form.requestSubmit()
+          return { success: true, message: '回车提交搜索表单' }
+        }
+      }
+    }
 
     return { success: true, message: `键盘操作: ${key}` }
   }

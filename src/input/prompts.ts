@@ -24,7 +24,7 @@ type      — 输入文字（需elementId+text）
 clear     — 清空输入框（需elementId）
 scroll    — 滚动页面（direction:up/down/top/bottom）
 select    — 选择下拉框（需elementId+text）
-keyboard  — 模拟按键（需key:Enter/Escape/Tab等）
+keyboard  — 模拟按键（需key:Enter/Escape/Tab等，别名press）
 focus     — 聚焦元素（需elementId）
 hover     — 悬停元素（需elementId）
 wait      — 等待（需ms）
