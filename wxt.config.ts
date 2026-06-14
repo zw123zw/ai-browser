@@ -41,6 +41,10 @@ export default defineConfig({
         resources: ['icon.png'],
         matches: ['<all_urls>'],
       },
+      {
+        resources: ['tesseract/*.gz'],
+        matches: ['<all_urls>'],
+      },
     ],
     commands: {
       'toggle-chat': {

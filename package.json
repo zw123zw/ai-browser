@@ -38,6 +38,8 @@
     "download-model": "bash scripts/download-model.sh"
   },
   "dependencies": {
+    "@tesseract.js-data/chi_sim": "^1.0.0",
+    "@tesseract.js-data/eng": "^1.0.0",
     "highlight.js": "^11.10.0",
     "katex": "^0.16.11",
     "mammoth": "^1.12.0",
