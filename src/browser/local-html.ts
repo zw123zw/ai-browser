@@ -18,20 +18,32 @@ const log = new Logger('LocalHtml')
 export function extractLocalHtml(query: string): string | null {
   log.info('提取局部 HTML', { query })
 
-  const allElements = document.querySelectorAll('*')
   let target: HTMLElement | null = null
 
-  // 1. 搜索包含关键词的元素
-  for (const el of allElements) {
-    const text = el.textContent?.trim() || ''
-    const ariaLabel = el.getAttribute('aria-label') || ''
-    const placeholder = el.getAttribute('placeholder') || ''
-    const title = el.getAttribute('title') || ''
-    const value = (el as HTMLInputElement).value || ''
+  // 1. 优先按骨架 ID 查找（query 如 "e77"）
+  if (/^e\d+$/.test(query)) {
+    target = document.querySelector<HTMLElement>(`[data-skeleton-id="${query}"]`)
+    if (target) log.debug('通过骨架 ID 找到元素', { query })
+  }
 
-    if ([text, ariaLabel, placeholder, title, value].some(t => t && t.includes(query))) {
-      target = el as HTMLElement
-      break
+  // 2. 按文本内容搜索（模糊匹配）
+  if (!target) {
+    const normalizedQuery = query.replace(/\s+/g, ' ').trim()
+    const allElements = document.querySelectorAll('*')
+
+    for (const el of allElements) {
+      const text = (el.textContent || '').replace(/\s+/g, ' ').trim()
+      const ariaLabel = el.getAttribute('aria-label') || ''
+      const placeholder = el.getAttribute('placeholder') || ''
+      const titleAttr = el.getAttribute('title') || ''
+      const value = (el as HTMLInputElement).value || ''
+
+      // 长标题用前 30 字符匹配（避免截断导致匹配失败）
+      const matchQuery = normalizedQuery.length > 30 ? normalizedQuery.slice(0, 30) : normalizedQuery
+      if ([text, ariaLabel, placeholder, titleAttr, value].some(t => t && t.includes(matchQuery))) {
+        target = el as HTMLElement
+        break
+      }
     }
   }
 
