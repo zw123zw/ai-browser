@@ -139,9 +139,11 @@ export class ActionExecutor {
     el.dispatchEvent(new MouseEvent('mousedown', mouseEventInit))
     el.dispatchEvent(new MouseEvent('mouseup', mouseEventInit))
 
-    // <a> 标签用 el.click() 触发浏览器默认跳转（合成事件不触发导航）
-    if (el instanceof HTMLAnchorElement) {
-      el.click()
+    // <a> 标签用 window.open 触发导航（合成事件不触发浏览器默认行为）
+    if (el instanceof HTMLAnchorElement && el.href) {
+      const opened = window.open(el.href, el.target || '_self')
+      // 弹窗被拦截 → 降级为当前页跳转
+      if (!opened) window.location.href = el.href
     } else {
       el.dispatchEvent(new MouseEvent('click', mouseEventInit))
     }
