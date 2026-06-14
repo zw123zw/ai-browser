@@ -105,13 +105,11 @@ export class IntentDetector {
 
     const skillList = this.options.getSkillList?.() || '（暂无可用技能）'
     const systemPrompt = PHASE2_SYSTEM_PROMPT.replace('{skillList}', skillList)
-    const recentMsgs = this.options.getRecentMessages?.() || []
-    const userContent = buildPhase2UserMessage(text, skeleton, recentMsgs)
+    const userContent = buildPhase2UserMessage(text, skeleton)
 
     log.info('[Phase 2] 请求参数', {
       skeletonUrl: skeleton.url,
       skeletonElements: skeleton.elements.length,
-      recentMsgCount: recentMsgs.length,
       skillList: skillList.slice(0, 50),
     })
 

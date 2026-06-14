@@ -79,11 +79,12 @@ ${CAPABILITY_DOMAIN}
 {skillList}
 
 规则：
-1. 打开网站/搜索/滚动 → 直接返回[command]（不需要骨架）
-2. 操作页面元素 → 用骨架elementId定位
-3. 有匹配技能 → 返回[skill]
-4. 找不到目标 → 返回[need_html]
-5. 多步操作按顺序输出多个[command]
+1. 只处理当前用户请求，对话历史仅用于理解指代（如"第一个"指什么），不要重复执行之前的操作
+2. 打开网站/搜索/滚动 → 直接返回[command]（不需要骨架）
+3. 操作页面元素 → 用骨架elementId定位
+4. 有匹配技能 → 返回[skill]
+5. 找不到目标 → 返回[need_html]
+6. 多步操作按顺序输出多个[command]
 
 图标按钮识别：
 - 很多按钮没有文字，只有SVG图标
@@ -111,25 +112,17 @@ contextId 是离目标最近的骨架元素ID，用于提取周围HTML。
 
 /**
  * 构建 Phase 2 用户消息
+ *
+ * 对话历史由 callAI 作为独立消息发送，此处不重复拼接。
  */
 export function buildPhase2UserMessage(
   text: string,
   skeleton: SemanticSkeleton,
-  recentMessages: Array<{ role: 'user' | 'assistant'; content: string }>,
 ): string {
-  const parts: string[] = []
-
-  if (recentMessages.length > 0) {
-    const history = recentMessages
-      .map(m => `${m.role === 'user' ? '用户' : '助手'}: ${m.content.slice(0, 200)}`)
-      .join('\n')
-    parts.push(`对话历史:\n${history}`)
-  }
-
-  parts.push(`用户: "${text}"`)
-  parts.push(`页面骨架:\n${JSON.stringify(skeleton, null, 2)}`)
-
-  return parts.join('\n\n')
+  return [
+    `用户: "${text}"`,
+    `页面骨架:\n${JSON.stringify(skeleton, null, 2)}`,
+  ].join('\n\n')
 }
 
 /**
