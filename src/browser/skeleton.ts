@@ -96,12 +96,19 @@ export function extractSkeleton(doc: Document): SemanticSkeleton {
 function extractElement(el: HTMLElement, id: string): SkeletonElement | null {
   const tag = el.tagName.toLowerCase()
   const text = getDirectText(el).slice(0, 100)
+  const hasIcon = !!el.querySelector('svg, img, i, [class*="icon"]')
 
-  if (!text && !isInteractive(el) && !el.getAttribute('role')) return null
+  // 无文字 + 非交互元素 + 无 role + 无图标子元素 → 跳过
+  if (!text && !isInteractive(el) && !el.getAttribute('role') && !hasIcon) return null
 
   const base: SkeletonElement = { id, tag }
 
-  if (text) base.text = text
+  // 有文字用文字，无文字但有图标子元素标记为图标按钮
+  if (text) {
+    base.text = text
+  } else if (hasIcon) {
+    base.text = '(icon)'
+  }
   if (el instanceof HTMLAnchorElement && el.href) base.href = el.href
   if (el instanceof HTMLImageElement && el.src) base.src = el.src
   if (el instanceof HTMLInputElement) {
