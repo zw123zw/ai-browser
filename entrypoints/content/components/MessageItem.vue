@@ -91,6 +91,7 @@ function onContextMenu(e: MouseEvent) {
         >
           <span class="zwf-msg-file-icon">{{ getFileTypeIcon(att.type) }}</span>
           <span class="zwf-msg-file-name">{{ att.name }}</span>
+          <span v-if="att.truncated" class="zwf-msg-file-truncated" title="内容已截断">⚠️</span>
           <span class="zwf-msg-file-size">{{ formatFileSize(att.size) }}</span>
         </div>
       </div>

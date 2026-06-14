@@ -1516,6 +1516,10 @@ table {
   flex-shrink: 0;
   font-size: 11px;
 }
+.zwf-msg-file-truncated {
+  flex-shrink: 0;
+  font-size: 12px;
+}
 .zwf-typing {
   display: inline-flex;
   gap: 4px;
@@ -1963,6 +1967,14 @@ table {
   padding: 40px 20px;
   color: var(--zwf-text-secondary, #888);
   font-size: 14px;
+}
+.zwf-file-modal-truncated {
+  padding: 8px 20px;
+  font-size: 12px;
+  color: #f59e0b;
+  background: rgba(245, 158, 11, 0.08);
+  border-top: 1px solid rgba(245, 158, 11, 0.2);
+  text-align: center;
 }
 
 /* ============ 弹窗 ============ */

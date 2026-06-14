@@ -117,6 +117,11 @@ function escapeHtml(s: string): string {
         <!-- 文本/代码预览 -->
         <div v-else-if="isTextPreview" class="zwf-file-modal-text" v-html="highlightedContent" />
 
+        <!-- 截断提示 -->
+        <div v-if="isTextPreview && attachment.truncated" class="zwf-file-modal-truncated">
+          ⚠️ 内容过长，已截断至 100KB。完整内容已发送给 AI 分析。
+        </div>
+
         <!-- 无内容 -->
         <div v-else class="zwf-file-modal-error">
           <p>此文件类型无法预览内容</p>

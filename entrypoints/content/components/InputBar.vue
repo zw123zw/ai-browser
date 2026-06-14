@@ -3,6 +3,7 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { fileToDataURL } from '@/src/utils/file';
 import { parseFile } from '@/src/utils/file-parsers';
 import { getFileTypeIcon, formatFileSize } from '@/src/utils/file-type';
+import { useToast } from '@/src/composables/useToast';
 import type { Conversation, ModelConfig, Attachment } from '@/src/types';
 
 const props = defineProps<{
@@ -14,8 +15,9 @@ const emit = defineEmits<{
   (e: 'send', payload: { text: string; images: string[]; attachments: Attachment[]; reasoning: boolean }): void;
   (e: 'abort'): void;
   (e: 'switch-voice'): void;
-  (e: 'preview-file', attachment: Attachment): void;
 }>();
+
+const toast = useToast();
 
 const fileInput = ref<HTMLInputElement | null>(null);
 const textarea = ref<HTMLTextAreaElement | null>(null);
@@ -73,19 +75,24 @@ async function pickFiles(e: Event) {
 
   const newImages = [...images.value];
   const newAttachments = [...attachments.value];
+  let truncationCount = 0;
 
   for (const f of Array.from(input.files)) {
     try {
       const attachment = await parseFile(f);
       if (attachment.type === 'image' && attachment.dataUrl) {
-        // 图片走旧的 images 字段（保持兼容）
         newImages.push(attachment.dataUrl);
       } else {
+        if (attachment.truncated) truncationCount++;
         newAttachments.push(attachment);
       }
-    } catch (err) {
-      console.error('[InputBar] 文件解析失败:', f.name, err);
+    } catch (err: any) {
+      toast.error(err?.message || `文件 ${f.name} 解析失败`);
     }
+  }
+
+  if (truncationCount > 0) {
+    toast.warning(`${truncationCount} 个文件内容过长，已自动截断至 100KB`);
   }
 
   setDraftImages(newImages);
@@ -118,8 +125,8 @@ async function onPaste(e: ClipboardEvent) {
       } else {
         newAttachments.push(attachment);
       }
-    } catch (err) {
-      console.error('[InputBar] 粘贴文件解析失败:', f.name, err);
+    } catch (err: any) {
+      toast.error(err?.message || `粘贴文件 ${f.name} 解析失败`);
     }
   }
 

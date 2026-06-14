@@ -1,8 +1,8 @@
 {
   "id": "voice-arch-v2",
   "name": "voice-arch-v2",
-  "title": "优化: 纯语音交互架构升级",
-  "description": "",
+  "title": "AI 驱动语音指令架构（语义骨架 + 开放 action + 跨页面连续指令）",
+  "description": "合并 06-12-voice-mode-logging，旧方案已清除，全新架构设计",
   "status": "planning",
   "dev_type": null,
   "scope": null,

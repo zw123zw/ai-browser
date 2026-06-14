@@ -9,13 +9,18 @@ import { Logger } from './logger';
 
 const log = new Logger('FileParsers');
 
-/** 文本文件最大 100KB */
-const MAX_TEXT_SIZE = 100 * 1024;
-/** 二进制文件最大 10MB */
-const MAX_BINARY_SIZE = 10 * 1024 * 1024;
+/** 文本内容最大 100KB（约 25000 中文字） */
+export const MAX_TEXT_CONTENT_SIZE = 100 * 1024;
+/** 文本文件最大 500KB（读取后截断到 100KB） */
+const MAX_TEXT_FILE_SIZE = 500 * 1024;
+/** 二进制文件（PDF/Office）最大 10MB */
+export const MAX_BINARY_FILE_SIZE = 10 * 1024 * 1024;
+/** 图片最大 20MB */
+export const MAX_IMAGE_FILE_SIZE = 20 * 1024 * 1024;
 
 /**
  * 统一文件解析入口
+ * @throws 文件过大或不支持时抛出错误，由调用方捕获处理
  */
 export async function parseFile(file: File): Promise<Attachment> {
   const type = detectFileType(file);
@@ -41,6 +46,9 @@ export async function parseFile(file: File): Promise<Attachment> {
 
 /** 解析图片 → dataURL */
 async function parseImage(file: File): Promise<Attachment> {
+  if (file.size > MAX_IMAGE_FILE_SIZE) {
+    throw new Error(`图片过大 (${formatMB(file.size)})，最大支持 ${formatMB(MAX_IMAGE_FILE_SIZE)}`);
+  }
   const dataUrl = await fileToDataURL(file);
   return {
     id: uuid(),
@@ -54,22 +62,29 @@ async function parseImage(file: File): Promise<Attachment> {
 
 /** 解析文本/代码文件 → 文本内容 */
 async function parseText(file: File, type: 'text' | 'code'): Promise<Attachment> {
+  if (file.size > MAX_TEXT_FILE_SIZE) {
+    throw new Error(`文件过大 (${formatMB(file.size)})，最大支持 ${formatMB(MAX_TEXT_FILE_SIZE)}`);
+  }
   const content = await readTextFile(file);
   const lang = type === 'code' ? getCodeLang(file.name) : undefined;
-  const truncated = content.length > MAX_TEXT_SIZE;
+  const truncated = content.length > MAX_TEXT_CONTENT_SIZE;
   return {
     id: uuid(),
     type,
     name: file.name,
     size: file.size,
     mimeType: file.type,
-    content: truncated ? content.slice(0, MAX_TEXT_SIZE) : content,
+    content: truncated ? content.slice(0, MAX_TEXT_CONTENT_SIZE) : content,
     lang,
+    truncated,
   };
 }
 
 /** 解析 PDF → 提取文本 */
 async function parsePdf(file: File): Promise<Attachment> {
+  if (file.size > MAX_BINARY_FILE_SIZE) {
+    throw new Error(`PDF 过大 (${formatMB(file.size)})，最大支持 ${formatMB(MAX_BINARY_FILE_SIZE)}`);
+  }
   try {
     const arrayBuffer = await file.arrayBuffer();
     const pdfjsLib = await import('pdfjs-dist');
@@ -92,16 +107,18 @@ async function parsePdf(file: File): Promise<Attachment> {
     }
 
     const content = textParts.join('\n\n');
-    const truncated = content.length > MAX_TEXT_SIZE;
+    const truncated = content.length > MAX_TEXT_CONTENT_SIZE;
     return {
       id: uuid(),
       type: 'pdf',
       name: file.name,
       size: file.size,
       mimeType: file.type,
-      content: truncated ? content.slice(0, MAX_TEXT_SIZE) : content,
+      content: truncated ? content.slice(0, MAX_TEXT_CONTENT_SIZE) : content,
+      truncated,
     };
   } catch (e) {
+    if ((e as Error).message?.includes('过大')) throw e;
     log.error('PDF 解析失败', { name: file.name, error: (e as Error).message });
     return {
       id: uuid(),
@@ -116,21 +133,26 @@ async function parsePdf(file: File): Promise<Attachment> {
 
 /** 解析 Word 文档 → 提取文本 */
 async function parseWord(file: File): Promise<Attachment> {
+  if (file.size > MAX_BINARY_FILE_SIZE) {
+    throw new Error(`Word 文档过大 (${formatMB(file.size)})，最大支持 ${formatMB(MAX_BINARY_FILE_SIZE)}`);
+  }
   try {
     const arrayBuffer = await file.arrayBuffer();
     const mammoth = await import('mammoth');
     const result = await mammoth.extractRawText({ arrayBuffer });
     const content = result.value;
-    const truncated = content.length > MAX_TEXT_SIZE;
+    const truncated = content.length > MAX_TEXT_CONTENT_SIZE;
     return {
       id: uuid(),
       type: 'word',
       name: file.name,
       size: file.size,
       mimeType: file.type,
-      content: truncated ? content.slice(0, MAX_TEXT_SIZE) : content,
+      content: truncated ? content.slice(0, MAX_TEXT_CONTENT_SIZE) : content,
+      truncated,
     };
   } catch (e) {
+    if ((e as Error).message?.includes('过大')) throw e;
     log.error('Word 解析失败', { name: file.name, error: (e as Error).message });
     return {
       id: uuid(),
@@ -145,6 +167,9 @@ async function parseWord(file: File): Promise<Attachment> {
 
 /** 解析 Excel/CSV → CSV 文本 */
 async function parseExcel(file: File): Promise<Attachment> {
+  if (file.size > MAX_BINARY_FILE_SIZE) {
+    throw new Error(`Excel 文件过大 (${formatMB(file.size)})，最大支持 ${formatMB(MAX_BINARY_FILE_SIZE)}`);
+  }
   try {
     const ext = getExtension(file.name);
     let content: string;
@@ -166,16 +191,18 @@ async function parseExcel(file: File): Promise<Attachment> {
       content = parts.join('\n\n');
     }
 
-    const truncated = content.length > MAX_TEXT_SIZE;
+    const truncated = content.length > MAX_TEXT_CONTENT_SIZE;
     return {
       id: uuid(),
       type: 'excel',
       name: file.name,
       size: file.size,
       mimeType: file.type,
-      content: truncated ? content.slice(0, MAX_TEXT_SIZE) : content,
+      content: truncated ? content.slice(0, MAX_TEXT_CONTENT_SIZE) : content,
+      truncated,
     };
   } catch (e) {
+    if ((e as Error).message?.includes('过大')) throw e;
     log.error('Excel 解析失败', { name: file.name, error: (e as Error).message });
     return {
       id: uuid(),
@@ -201,16 +228,18 @@ function parseBinary(file: File): Attachment {
 }
 
 /**
- * 读取文本文件内容（自动检测编码）
+ * 读取文本文件内容（UTF-8）
  */
 async function readTextFile(file: File): Promise<string> {
-  if (file.size > MAX_BINARY_SIZE) {
-    throw new Error(`文件过大 (${(file.size / 1024 / 1024).toFixed(1)}MB)，最大支持 ${(MAX_BINARY_SIZE / 1024 / 1024).toFixed(0)}MB`);
-  }
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(reader.result as string);
     reader.onerror = () => reject(new Error('文件读取失败'));
     reader.readAsText(file, 'UTF-8');
   });
+}
+
+/** 格式化 MB */
+function formatMB(bytes: number): string {
+  return `${(bytes / 1024 / 1024).toFixed(1)}MB`;
 }
