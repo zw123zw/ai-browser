@@ -134,6 +134,7 @@ async function onPaste(e: ClipboardEvent) {
   const items = e.clipboardData?.items;
   if (!items) return;
 
+  // 同步检测：是否有文件（截图等）
   const files: File[] = [];
   for (const it of Array.from(items)) {
     if (it.kind === 'file') {
@@ -141,27 +142,136 @@ async function onPaste(e: ClipboardEvent) {
       if (f) files.push(f);
     }
   }
-  if (!files.length) return;
-  e.preventDefault();
 
-  const newImages = [...images.value];
-  const newAttachments = [...attachments.value];
-
-  for (const f of files) {
-    try {
-      const attachment = await parseFile(f);
-      if (attachment.type === 'image' && attachment.dataUrl) {
-        newImages.push(attachment.dataUrl);
-      } else {
-        newAttachments.push(attachment);
+  // 有文件 → 立即拦截，走文件解析
+  if (files.length) {
+    e.preventDefault();
+    const newImages = [...images.value];
+    const newAttachments = [...attachments.value];
+    for (const f of files) {
+      try {
+        const attachment = await parseFile(f);
+        if (attachment.type === 'image' && attachment.dataUrl) {
+          newImages.push(attachment.dataUrl);
+        } else {
+          newAttachments.push(attachment);
+        }
+      } catch (err: any) {
+        toast.error(err?.message || `文件 ${f.name} 解析失败`);
       }
-    } catch (err: any) {
-      toast.error(err?.message || `粘贴文件 ${f.name} 解析失败`);
     }
+    setDraftImages(newImages);
+    setDraftAttachments(newAttachments);
+    return;
   }
 
-  setDraftImages(newImages);
-  setDraftAttachments(newAttachments);
+  // 没有文件 → 检查是否为图片链接（同步用 getData）
+  const pastedText = e.clipboardData?.getData('text/plain')?.trim();
+  if (pastedText && isImageUrl(pastedText)) {
+    e.preventDefault(); // 是图片链接才拦截
+    try {
+      const dataUrl = await fetchImageAsDataUrl(pastedText);
+      setDraftImages([...images.value, dataUrl]);
+    } catch {
+      // 获取失败 → 写入输入框
+      insertTextAtCursor(pastedText);
+    }
+    return;
+  }
+
+  // 普通文本 → 不拦截，让浏览器正常粘贴
+}
+
+/** 在光标位置插入文本 */
+function insertTextAtCursor(insertText: string) {
+  const el = textarea.value;
+  if (!el) return;
+  const start = el.selectionStart;
+  const end = el.selectionEnd;
+  const before = text.value.slice(0, start);
+  const after = text.value.slice(end);
+  text.value = before + insertText + after;
+  nextTick(() => {
+    const pos = start + insertText.length;
+    el.selectionStart = el.selectionEnd = pos;
+    el.focus();
+  });
+}
+
+/** 判断是否为可获取的 URL */
+function isImageUrl(url: string): boolean {
+  try {
+    const u = new URL(url);
+    return u.protocol === 'http:' || u.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+/** 获取图片并转为 base64 dataURL（多策略降级） */
+async function fetchImageAsDataUrl(url: string): Promise<string> {
+  // 策略 1：直接 fetch（同源或服务器允许 CORS 的图片）
+  try {
+    const res = await fetch(url, { mode: 'cors' });
+    if (res.ok) {
+      const blob = await res.blob();
+      if (blob.type.startsWith('image/')) return blobToDataUrl(blob);
+    }
+  } catch { /* CORS blocked，继续降级 */ }
+
+  // 策略 2：no-cors 模式加载到 <img>，用 canvas 转 base64
+  try {
+    return await imgToDataUrl(url);
+  } catch { /* tainted canvas，继续降级 */ }
+
+  // 策略 3：通过代理获取（多个代理轮试）
+  const proxies = [
+    (u: string) => `https://corsproxy.io/?${encodeURIComponent(u)}`,
+    (u: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
+  ];
+  for (const buildProxy of proxies) {
+    try {
+      const res = await fetch(buildProxy(url));
+      if (res.ok) {
+        const blob = await res.blob();
+        if (blob.type.startsWith('image/')) return blobToDataUrl(blob);
+      }
+    } catch { /* 代理也失败，试下一个 */ }
+  }
+
+  throw new Error('所有获取方式均失败（可能服务器拒绝跨域访问）');
+}
+
+function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(new Error('转换 base64 失败'));
+    reader.readAsDataURL(blob);
+  });
+}
+
+/** 通过 <img> + canvas 获取跨域图片的 base64 */
+function imgToDataUrl(url: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.naturalWidth;
+        canvas.height = img.naturalHeight;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return reject(new Error('canvas 不可用'));
+        ctx.drawImage(img, 0, 0);
+        resolve(canvas.toDataURL('image/png'));
+      } catch (e) {
+        reject(e);
+      }
+    };
+    img.onerror = () => reject(new Error('图片加载失败'));
+    img.src = url;
+  });
 }
 
 function removeImg(i: number) {
