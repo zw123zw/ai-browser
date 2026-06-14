@@ -87,37 +87,23 @@ function startOcr(attachment: Attachment) {
     ocrProgressMap.value[attachment.id] = progress;
   }).then(() => {
     delete ocrProgressMap.value[attachment.id];
-    // 触发响应式更新（content 被就地修改）
     setDraftAttachments([...attachments.value]);
   });
 }
 
-/** 选择文件（图片 + 通用文件） */
-async function pickFiles(e: Event) {
-  const input = e.target as HTMLInputElement;
-  if (!input.files) return;
-
-  log.info('pickFiles 开始', { fileCount: input.files.length });
-
+/** 统一文件处理：解析 → 添加附件 → 异步 OCR */
+async function addFiles(files: File[]) {
   const newAttachments = [...attachments.value];
   const ocrTargets: Attachment[] = [];
   let truncationCount = 0;
 
-  for (const f of Array.from(input.files)) {
+  for (const f of files) {
     try {
-      log.info('解析文件', { name: f.name, size: f.size, type: f.type });
       const attachment = await parseFile(f);
-      log.info('解析完成', { name: f.name, attType: attachment.type });
-
       if (attachment.truncated) truncationCount++;
       newAttachments.push(attachment);
-
-      // 图片需要 OCR
-      if (attachment.type === 'image') {
-        ocrTargets.push(attachment);
-      }
+      if (attachment.type === 'image') ocrTargets.push(attachment);
     } catch (err: any) {
-      log.error('文件解析失败', { name: f.name, error: err?.message });
       toast.error(err?.message || `文件 ${f.name} 解析失败`);
     }
   }
@@ -126,12 +112,15 @@ async function pickFiles(e: Event) {
     toast.warning(`${truncationCount} 个文件内容过长，已自动截断至 100KB`);
   }
 
-  // 先更新 UI（图片立即显示），再异步 OCR
-  log.info('pickFiles 完成', { attachmentCount: newAttachments.length, ocrCount: ocrTargets.length });
   setDraftAttachments(newAttachments);
-  for (const att of ocrTargets) {
-    startOcr(att);
-  }
+  for (const att of ocrTargets) startOcr(att);
+}
+
+/** 选择文件（图片 + 通用文件） */
+async function pickFiles(e: Event) {
+  const input = e.target as HTMLInputElement;
+  if (!input.files) return;
+  await addFiles(Array.from(input.files));
   input.value = '';
 }
 
@@ -148,41 +137,25 @@ async function onPaste(e: ClipboardEvent) {
     }
   }
 
-  // 有文件 → 立即拦截，走文件解析
+  // 有文件 → 走统一的 addFiles 流程
   if (files.length) {
     e.preventDefault();
-    const newAttachments = [...attachments.value];
-    const ocrTargets: Attachment[] = [];
-    for (const f of files) {
-      try {
-        const attachment = await parseFile(f);
-        newAttachments.push(attachment);
-        if (attachment.type === 'image') ocrTargets.push(attachment);
-      } catch (err: any) {
-        toast.error(err?.message || `文件 ${f.name} 解析失败`);
-      }
-    }
-    setDraftAttachments(newAttachments);
-    for (const att of ocrTargets) startOcr(att);
+    await addFiles(files);
     return;
   }
 
-  // 没有文件 → 检查是否为图片链接（同步用 getData）
+  // 没有文件 → 检查是否为图片链接
   const pastedText = e.clipboardData?.getData('text/plain')?.trim();
   if (pastedText && isImageUrl(pastedText)) {
-    e.preventDefault(); // 是图片链接才拦截
+    e.preventDefault();
     try {
-      const dataUrl = await fetchImageAsDataUrl(pastedText);
-      // 作为图片附件添加（无 OCR，URL 图片直接附带 dataUrl）
-      const imgAttachment: Attachment = {
-        id: `_url_${Date.now()}`,
-        type: 'image',
-        name: pastedText.split('/').pop() || 'image.png',
-        size: 0,
-        mimeType: 'image/png',
-        dataUrl,
-      };
-      setDraftAttachments([...attachments.value, imgAttachment]);
+      // 获取图片并转为 File，走统一的 addFiles 流程
+      const res = await fetch(pastedText, { mode: 'cors' });
+      const blob = await res.blob();
+      const ext = blob.type.split('/')[1] || 'png';
+      const fileName = pastedText.split('/').pop()?.split('?')[0] || `image.${ext}`;
+      const file = new File([blob], fileName, { type: blob.type });
+      await addFiles([file]);
     } catch {
       // 获取失败 → 写入输入框
       insertTextAtCursor(pastedText);
@@ -217,72 +190,6 @@ function isImageUrl(url: string): boolean {
   } catch {
     return false;
   }
-}
-
-/** 获取图片并转为 base64 dataURL（多策略降级） */
-async function fetchImageAsDataUrl(url: string): Promise<string> {
-  // 策略 1：直接 fetch（同源或服务器允许 CORS 的图片）
-  try {
-    const res = await fetch(url, { mode: 'cors' });
-    if (res.ok) {
-      const blob = await res.blob();
-      if (blob.type.startsWith('image/')) return blobToDataUrl(blob);
-    }
-  } catch { /* CORS blocked，继续降级 */ }
-
-  // 策略 2：no-cors 模式加载到 <img>，用 canvas 转 base64
-  try {
-    return await imgToDataUrl(url);
-  } catch { /* tainted canvas，继续降级 */ }
-
-  // 策略 3：通过代理获取（多个代理轮试）
-  const proxies = [
-    (u: string) => `https://corsproxy.io/?${encodeURIComponent(u)}`,
-    (u: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
-  ];
-  for (const buildProxy of proxies) {
-    try {
-      const res = await fetch(buildProxy(url));
-      if (res.ok) {
-        const blob = await res.blob();
-        if (blob.type.startsWith('image/')) return blobToDataUrl(blob);
-      }
-    } catch { /* 代理也失败，试下一个 */ }
-  }
-
-  throw new Error('所有获取方式均失败（可能服务器拒绝跨域访问）');
-}
-
-function blobToDataUrl(blob: Blob): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = () => reject(new Error('转换 base64 失败'));
-    reader.readAsDataURL(blob);
-  });
-}
-
-/** 通过 <img> + canvas 获取跨域图片的 base64 */
-function imgToDataUrl(url: string): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = () => {
-      try {
-        const canvas = document.createElement('canvas');
-        canvas.width = img.naturalWidth;
-        canvas.height = img.naturalHeight;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) return reject(new Error('canvas 不可用'));
-        ctx.drawImage(img, 0, 0);
-        resolve(canvas.toDataURL('image/png'));
-      } catch (e) {
-        reject(e);
-      }
-    };
-    img.onerror = () => reject(new Error('图片加载失败'));
-    img.src = url;
-  });
 }
 
 function removeAttachment(i: number) {
