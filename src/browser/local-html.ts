@@ -13,15 +13,22 @@ const log = new Logger('LocalHtml')
  * 根据关键词在 DOM 中搜索相关区域，提取局部完整 HTML
  *
  * @param query 搜索关键词（如 "登录按钮"）
+ * @param contextId 骨架元素 ID（如 "e114"），用于定位目标周围的区域
  * @returns 局部 HTML 字符串，未找到返回 null
  */
-export function extractLocalHtml(query: string): string | null {
-  log.info('提取局部 HTML', { query })
+export function extractLocalHtml(query: string, contextId?: string): string | null {
+  log.info('提取局部 HTML', { query, contextId })
 
   let target: HTMLElement | null = null
 
-  // 1. 优先按骨架 ID 查找（query 如 "e77"）
-  if (/^e\d+$/.test(query)) {
+  // 0. 优先用 contextId 定位（AI 指定的上下文元素）
+  if (contextId) {
+    target = document.querySelector<HTMLElement>(`[data-skeleton-id="${contextId}"]`)
+    if (target) log.debug('通过 contextId 找到元素', { contextId })
+  }
+
+  // 1. 按骨架 ID 查找（query 如 "e77"）
+  if (!target && /^e\d+$/.test(query)) {
     target = document.querySelector<HTMLElement>(`[data-skeleton-id="${query}"]`)
     if (target) log.debug('通过骨架 ID 找到元素', { query })
   }

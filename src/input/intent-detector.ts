@@ -134,8 +134,16 @@ export class IntentDetector {
     if (tags.commands?.length || tags.skill || tags.needHtml) {
       // [need_html] 兜底
       if (tags.needHtml && !tags.commands?.length && !tags.skill) {
-        log.info('[Phase 2] need_html 兜底', { query: tags.needHtml.query })
-        let localHtml = extractLocalHtml(tags.needHtml.query)
+        log.info('[Phase 2] need_html 兜底', { query: tags.needHtml.query, contextId: tags.needHtml.contextId })
+
+        // 优先用 contextId（AI 指定的上下文元素）提取周围 HTML
+        let localHtml = extractLocalHtml(tags.needHtml.query, tags.needHtml.contextId)
+
+        // contextId 失败 → 尝试原始查询文本搜索
+        if (!localHtml && tags.needHtml.contextId) {
+          log.info('[Phase 2] contextId 未命中，尝试文本搜索')
+          localHtml = extractLocalHtml(tags.needHtml.query)
+        }
 
         // 原始查询失败 → 尝试简化查询（提取核心关键词）
         if (!localHtml) {

@@ -53,4 +53,5 @@ export interface ActionResult {
 export interface NeedHtmlRequest {
   query: string    // 搜索关键词
   reason: string   // 为什么需要 HTML
+  contextId?: string // 离目标最近的骨架元素 ID，用于提取周围 HTML
 }

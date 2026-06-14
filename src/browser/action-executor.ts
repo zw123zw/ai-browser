@@ -138,7 +138,13 @@ export class ActionExecutor {
 
     el.dispatchEvent(new MouseEvent('mousedown', mouseEventInit))
     el.dispatchEvent(new MouseEvent('mouseup', mouseEventInit))
-    el.dispatchEvent(new MouseEvent('click', mouseEventInit))
+
+    // <a> 标签用 el.click() 触发浏览器默认跳转（合成事件不触发导航）
+    if (el instanceof HTMLAnchorElement) {
+      el.click()
+    } else {
+      el.dispatchEvent(new MouseEvent('click', mouseEventInit))
+    }
 
     return { success: true, message: '点击成功' }
   }

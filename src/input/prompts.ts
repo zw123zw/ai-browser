@@ -67,7 +67,8 @@ export const PHASE2_SYSTEM_PROMPT = `\`\`\`
 [command]{"action":"click","elementId":"e3","description":"登录"}[/command]
 [command]{"action":"navigate","url":"https://..."}[/command]
 [skill]{"name":"翻译","userText":"这个页面"}[/skill]
-[need_html]{"query":"下载","reason":"骨架未找到"}[/need_html]
+[need_html]{"query":"下载","reason":"骨架未找到","contextId":"e3"}[/need_html]
+contextId 是离目标最近的骨架元素ID（如按钮所在的卡片、容器），用于提取周围HTML。
 
 能力域：
 ${CAPABILITY_DOMAIN}
@@ -100,7 +101,8 @@ export const PHASE2_RETRY_SYSTEM_PROMPT = `\`\`\`
 指令格式：
 [command]{"action":"click","elementId":"e3","description":"登录"}[/command]
 [skill]{"name":"翻译","userText":"这个页面"}[/skill]
-[need_html]{"query":"下载","reason":"骨架未找到"}[/need_html]
+[need_html]{"query":"下载","reason":"骨架未找到","contextId":"e3"}[/need_html]
+contextId 是离目标最近的骨架元素ID，用于提取周围HTML。
 \`\`\``
 
 // ═══════════════════════════════════════════════════════════════
