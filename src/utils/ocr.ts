@@ -4,10 +4,6 @@
  * 在前端对图片执行 OCR，提取文字内容。
  * 支持中文简体 + 英文混合识别。
  */
-import { Logger } from './logger';
-
-const log = new Logger('OCR');
-
 /** OCR 进度回调 */
 export type OcrProgressCallback = (progress: number) => void;
 
@@ -24,8 +20,6 @@ export async function recognizeImage(
   dataUrl: string,
   onProgress?: OcrProgressCallback
 ): Promise<string> {
-  log.info('开始 OCR 识别');
-
   try {
     const Tesseract = await import('tesseract.js');
 
@@ -37,11 +31,8 @@ export async function recognizeImage(
       },
     });
 
-    const text = result.data.text?.trim() || '';
-    log.info('OCR 完成', { textLength: text.length });
-    return text;
-  } catch (err) {
-    log.error('OCR 识别失败', { error: (err as Error).message });
+    return result.data.text?.trim() || '';
+  } catch {
     return '';
   }
 }
