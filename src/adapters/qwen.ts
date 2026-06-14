@@ -17,12 +17,17 @@ export class QwenAdapter extends BaseAdapter {
 
   private toRequestMessages(messages: ChatMessage[]) {
     return messages.map((m) => {
-      // 将文件附件内容合并到文本
+      // 将文件附件内容合并到文本（含图片 OCR 文字）
       let content = m.content;
-      if (m.attachments?.some(a => a.type !== 'image' && a.content && !a.content.startsWith('['))) {
+      if (m.attachments?.some(a => a.content && !a.content.startsWith('['))) {
         const fileTexts = m.attachments
-          .filter(a => a.type !== 'image' && a.content && !a.content.startsWith('['))
-          .map(a => `[文件: ${a.name}]\n\`\`\`${a.lang || ''}\n${a.content}\n\`\`\``)
+          .filter(a => a.content && !a.content.startsWith('['))
+          .map(a => {
+            if (a.type === 'image') {
+              return `[图片文字识别: ${a.name}]\n${a.content}`;
+            }
+            return `[文件: ${a.name}]\n\`\`\`${a.lang || ''}\n${a.content}\n\`\`\``;
+          })
           .join('\n\n');
         if (fileTexts) content = content ? `${content}\n\n${fileTexts}` : fileTexts;
       }

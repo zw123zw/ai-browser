@@ -5,6 +5,7 @@ import { v4 as uuid } from 'uuid';
 import type { Attachment } from '@/src/types';
 import { detectFileType, getCodeLang, getExtension } from './file-type';
 import { fileToDataURL } from './file';
+import { recognizeImage, type OcrProgressCallback } from './ocr';
 import { Logger } from './logger';
 
 const log = new Logger('FileParsers');
@@ -44,7 +45,7 @@ export async function parseFile(file: File): Promise<Attachment> {
   }
 }
 
-/** 解析图片 → dataURL */
+/** 解析图片 → dataURL（立即返回，OCR 由调用方异步触发） */
 async function parseImage(file: File): Promise<Attachment> {
   if (file.size > MAX_IMAGE_FILE_SIZE) {
     throw new Error(`图片过大 (${formatMB(file.size)})，最大支持 ${formatMB(MAX_IMAGE_FILE_SIZE)}`);
@@ -58,6 +59,21 @@ async function parseImage(file: File): Promise<Attachment> {
     mimeType: file.type,
     dataUrl,
   };
+}
+
+/**
+ * 对已解析的图片附件执行 OCR，就地更新 content 字段
+ * @param attachment  图片附件（会被就地修改）
+ * @param onProgress  进度回调 (0~1)
+ */
+export async function ocrAttachment(
+  attachment: Attachment,
+  onProgress?: OcrProgressCallback
+): Promise<void> {
+  if (attachment.type !== 'image' || !attachment.dataUrl) return;
+  const text = await recognizeImage(attachment.dataUrl, onProgress);
+  log.info('OCR 识别结果', { name: attachment.name, text, textLength: text.length });
+  if (text) attachment.content = text;
 }
 
 /** 解析文本/代码文件 → 文本内容 */

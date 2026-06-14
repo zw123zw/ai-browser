@@ -42,9 +42,7 @@ export interface ChatMessage {
   content: string;
   /** 深度思考内容（可选） */
   reasoning?: string;
-  /** 多模态附件（旧格式，向后兼容） */
-  images?: string[]; // base64 dataURL
-  /** 统一附件（新格式，图片+文件） */
+  /** 统一附件（图片 OCR 文字 + 文件） */
   attachments?: Attachment[];
   /** 创建时间 */
   timestamp: number;
@@ -88,7 +86,6 @@ export interface Conversation {
   scrollTop?: number;
   /** 输入框草稿（独立到每个会话） */
   draftText?: string;
-  draftImages?: string[];
   draftAttachments?: Attachment[];
   /** 深度思考开关（独立到每个会话） */
   reasoningEnabled?: boolean;

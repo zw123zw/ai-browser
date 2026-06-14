@@ -1,11 +1,14 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { fileToDataURL } from '@/src/utils/file';
-import { parseFile } from '@/src/utils/file-parsers';
+import { parseFile, ocrAttachment } from '@/src/utils/file-parsers';
 import { getFileTypeIcon, formatFileSize } from '@/src/utils/file-type';
 import { useToast } from '@/src/composables/useToast';
 import { Logger } from '@/src/utils/logger';
 import type { Conversation, ModelConfig, Attachment } from '@/src/types';
+
+/** 图片 OCR 进度追踪（key = attachment id） */
+const ocrProgressMap = ref<Record<string, number>>({});
 
 const log = new Logger('InputBar');
 
@@ -15,7 +18,7 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  (e: 'send', payload: { text: string; images: string[]; attachments: Attachment[]; reasoning: boolean }): void;
+  (e: 'send', payload: { text: string; attachments: Attachment[]; reasoning: boolean }): void;
   (e: 'abort'): void;
   (e: 'switch-voice'): void;
   (e: 'preview', attachment: Attachment): void;
@@ -29,18 +32,6 @@ const modelMenuOpen = ref(false);
 const modelMenuRef = ref<HTMLDivElement | null>(null);
 
 /** 预览：emit 给父级渲染，避免 fixed 定位在滚动容器内失效 */
-function openImagePreview(src: string, name: string) {
-  log.info('打开图片预览', { name });
-  emit('preview', {
-    id: 'preview',
-    type: 'image',
-    name,
-    size: 0,
-    mimeType: 'image/png',
-    dataUrl: src,
-  });
-}
-
 function openFilePreview(att: Attachment) {
   log.info('打开文件预览', { name: att.name, type: att.type });
   emit('preview', att);
@@ -55,8 +46,11 @@ const text = computed({
     }
   },
 });
-const images = computed(() => props.conversation?.draftImages || []);
 const attachments = computed(() => props.conversation?.draftAttachments || []);
+/** 图片附件（用于预览） */
+const imageAttachments = computed(() => attachments.value.filter(a => a.type === 'image'));
+/** 非图片附件（用于预览） */
+const nonImageAttachments = computed(() => attachments.value.filter(a => a.type !== 'image'));
 const reasoning = computed(() => props.conversation?.reasoningEnabled || false);
 const currentModel = computed(
   () =>
@@ -78,16 +72,25 @@ function onSendOrAbort() {
   }
 }
 
-function setDraftImages(arr: string[]) {
-  if (props.conversation) props.conversation.draftImages = arr;
-}
-
 function setDraftAttachments(arr: Attachment[]) {
   if (props.conversation) props.conversation.draftAttachments = arr;
 }
 
 function toggleReasoning() {
   if (props.conversation) props.conversation.reasoningEnabled = !reasoning.value;
+}
+
+/** 启动异步 OCR（不阻塞 UI） */
+function startOcr(attachment: Attachment) {
+  ocrProgressMap.value[attachment.id] = 0;
+  ocrAttachment(attachment, (progress) => {
+    ocrProgressMap.value[attachment.id] = progress;
+  }).then(() => {
+    delete ocrProgressMap.value[attachment.id];
+    // 触发响应式更新（content 被就地修改）
+    setDraftAttachments([...attachments.value]);
+    log.info('OCR 完成', { name: attachment.name, textLength: attachment.content?.length || 0 });
+  });
 }
 
 /** 选择文件（图片 + 通用文件） */
@@ -97,22 +100,22 @@ async function pickFiles(e: Event) {
 
   log.info('pickFiles 开始', { fileCount: input.files.length });
 
-  const newImages = [...images.value];
   const newAttachments = [...attachments.value];
+  const ocrTargets: Attachment[] = [];
   let truncationCount = 0;
 
   for (const f of Array.from(input.files)) {
     try {
       log.info('解析文件', { name: f.name, size: f.size, type: f.type });
       const attachment = await parseFile(f);
-      log.info('解析完成', { name: f.name, attType: attachment.type, hasDataUrl: !!attachment.dataUrl, hasContent: !!attachment.content });
-      if (attachment.type === 'image' && attachment.dataUrl) {
-        newImages.push(attachment.dataUrl);
-        log.info('图片已添加到 draftImages', { total: newImages.length });
-      } else {
-        if (attachment.truncated) truncationCount++;
-        newAttachments.push(attachment);
-        log.info('附件已添加到 draftAttachments', { total: newAttachments.length });
+      log.info('解析完成', { name: f.name, attType: attachment.type });
+
+      if (attachment.truncated) truncationCount++;
+      newAttachments.push(attachment);
+
+      // 图片需要 OCR
+      if (attachment.type === 'image') {
+        ocrTargets.push(attachment);
       }
     } catch (err: any) {
       log.error('文件解析失败', { name: f.name, error: err?.message });
@@ -124,9 +127,12 @@ async function pickFiles(e: Event) {
     toast.warning(`${truncationCount} 个文件内容过长，已自动截断至 100KB`);
   }
 
-  log.info('pickFiles 完成', { imageCount: newImages.length, attachmentCount: newAttachments.length });
-  setDraftImages(newImages);
+  // 先更新 UI（图片立即显示），再异步 OCR
+  log.info('pickFiles 完成', { attachmentCount: newAttachments.length, ocrCount: ocrTargets.length });
   setDraftAttachments(newAttachments);
+  for (const att of ocrTargets) {
+    startOcr(att);
+  }
   input.value = '';
 }
 
@@ -146,22 +152,19 @@ async function onPaste(e: ClipboardEvent) {
   // 有文件 → 立即拦截，走文件解析
   if (files.length) {
     e.preventDefault();
-    const newImages = [...images.value];
     const newAttachments = [...attachments.value];
+    const ocrTargets: Attachment[] = [];
     for (const f of files) {
       try {
         const attachment = await parseFile(f);
-        if (attachment.type === 'image' && attachment.dataUrl) {
-          newImages.push(attachment.dataUrl);
-        } else {
-          newAttachments.push(attachment);
-        }
+        newAttachments.push(attachment);
+        if (attachment.type === 'image') ocrTargets.push(attachment);
       } catch (err: any) {
         toast.error(err?.message || `文件 ${f.name} 解析失败`);
       }
     }
-    setDraftImages(newImages);
     setDraftAttachments(newAttachments);
+    for (const att of ocrTargets) startOcr(att);
     return;
   }
 
@@ -171,7 +174,16 @@ async function onPaste(e: ClipboardEvent) {
     e.preventDefault(); // 是图片链接才拦截
     try {
       const dataUrl = await fetchImageAsDataUrl(pastedText);
-      setDraftImages([...images.value, dataUrl]);
+      // 作为图片附件添加（无 OCR，URL 图片直接附带 dataUrl）
+      const imgAttachment: Attachment = {
+        id: `_url_${Date.now()}`,
+        type: 'image',
+        name: pastedText.split('/').pop() || 'image.png',
+        size: 0,
+        mimeType: 'image/png',
+        dataUrl,
+      };
+      setDraftAttachments([...attachments.value, imgAttachment]);
     } catch {
       // 获取失败 → 写入输入框
       insertTextAtCursor(pastedText);
@@ -274,12 +286,6 @@ function imgToDataUrl(url: string): Promise<string> {
   });
 }
 
-function removeImg(i: number) {
-  const next = [...images.value];
-  next.splice(i, 1);
-  setDraftImages(next);
-}
-
 function removeAttachment(i: number) {
   const next = [...attachments.value];
   next.splice(i, 1);
@@ -298,11 +304,10 @@ watch(() => props.conversation?.id, () => nextTick(autoResize));
 
 function send() {
   const t = text.value.trim();
-  if (!t && !images.value.length && !attachments.value.length) return;
+  if (!t && !attachments.value.length) return;
 
   emit('send', {
     text: t,
-    images: [...images.value],
     attachments: [...attachments.value],
     reasoning: reasoning.value,
   });
@@ -310,7 +315,6 @@ function send() {
   // 发送后清空 draft
   if (props.conversation) {
     props.conversation.draftText = '';
-    props.conversation.draftImages = [];
     props.conversation.draftAttachments = [];
   }
   nextTick(autoResize);
@@ -341,21 +345,26 @@ onUnmounted(() => document.removeEventListener('click', onDocClick));
 
 <template>
   <div class="zwf-input-card">
-    <!-- 图片预览（保留旧格式） -->
-    <div v-if="images.length" class="zwf-image-preview">
-      <div v-for="(src, i) in images" :key="i" class="zwf-image-thumb" @click="openImagePreview(src, `图片 ${i + 1}`)">
-        <img :src="src" />
-        <button class="zwf-image-del" @click.stop="removeImg(i)">×</button>
+    <!-- 图片预览（带 OCR 进度） -->
+    <div v-if="imageAttachments.length" class="zwf-image-preview">
+      <div v-for="att in imageAttachments" :key="att.id" class="zwf-image-thumb" @click="openFilePreview(att)">
+        <img :src="att.dataUrl" />
+        <!-- OCR 进度覆盖层 -->
+        <div v-if="att.id in ocrProgressMap" class="zwf-ocr-overlay">
+          <div class="zwf-ocr-overlay-bar" :style="{ width: (ocrProgressMap[att.id] * 100) + '%' }"></div>
+          <span class="zwf-ocr-overlay-text">OCR</span>
+        </div>
+        <button class="zwf-image-del" @click.stop="removeAttachment(attachments.indexOf(att))">×</button>
       </div>
     </div>
 
-    <!-- 文件附件预览 -->
-    <div v-if="attachments.length" class="zwf-attachment-preview">
-      <div v-for="(att, i) in attachments" :key="att.id" class="zwf-attachment-chip" @click="openFilePreview(att)">
+    <!-- 非图片附件预览 -->
+    <div v-if="nonImageAttachments.length" class="zwf-attachment-preview">
+      <div v-for="(att, i) in nonImageAttachments" :key="att.id" class="zwf-attachment-chip" @click="openFilePreview(att)">
         <span class="zwf-attachment-icon">{{ getFileTypeIcon(att.type) }}</span>
         <span class="zwf-attachment-name" :title="att.name">{{ att.name }}</span>
         <span class="zwf-attachment-size">{{ formatFileSize(att.size) }}</span>
-        <button class="zwf-attachment-del" @click.stop="removeAttachment(i)">×</button>
+        <button class="zwf-attachment-del" @click.stop="removeAttachment(attachments.indexOf(att))">×</button>
       </div>
     </div>
 
@@ -421,7 +430,7 @@ onUnmounted(() => document.removeEventListener('click', onDocClick));
         <button
           class="zwf-send-btn"
           :class="{ 'zwf-send-btn-stop': isStreaming }"
-          :disabled="!isStreaming && !text.trim() && !images.length && !attachments.length"
+          :disabled="!isStreaming && !text.trim() && !attachments.length"
           :title="isStreaming ? '停止生成' : '发送'"
           @click="onSendOrAbort"
         >

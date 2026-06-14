@@ -20,22 +20,12 @@ const renderedReasoning = computed(() =>
   props.message.reasoning ? renderMarkdown(props.message.reasoning) : ''
 );
 
-/** 合并旧 images 和新 attachments 用于统一展示 */
+/** 消息中的图片（从 attachments 获取） */
 const allImages = computed(() => {
-  const imgs: string[] = [];
-  // 旧格式 images
-  if (props.message.images?.length) {
-    imgs.push(...props.message.images);
-  }
-  // 新格式 attachments 中的图片
-  if (props.message.attachments?.length) {
-    for (const att of props.message.attachments) {
-      if (att.type === 'image' && att.dataUrl) {
-        imgs.push(att.dataUrl);
-      }
-    }
-  }
-  return imgs;
+  if (!props.message.attachments?.length) return [];
+  return props.message.attachments
+    .filter(a => a.type === 'image' && a.dataUrl)
+    .map(a => a.dataUrl!);
 });
 
 /** 非图片附件 */

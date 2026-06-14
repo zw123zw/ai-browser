@@ -37,7 +37,7 @@ const showScrollBottom = computed(() => {
   return messageListRef.value?.showScrollBottom ?? false;
 });
 
-async function onSend(payload: { text: string; images: string[]; attachments: import('@/src/types').Attachment[]; reasoning: boolean }) {
+async function onSend(payload: { text: string; attachments: import('@/src/types').Attachment[]; reasoning: boolean }) {
   if (!convStore.conversation) return;
   const text = payload.reasoning
     ? `[请按深度思考的方式作答，先给出完整推理过程，再给出最终答案]\n\n${payload.text}`
@@ -45,7 +45,7 @@ async function onSend(payload: { text: string; images: string[]; attachments: im
   try {
     // 先滚动到底部，再发送消息
     messageListRef.value?.jumpToBottom();
-    await convStore.send(text, payload.images, payload.attachments, payload.reasoning);
+    await convStore.send(text, payload.attachments, payload.reasoning);
   } catch (e: any) {
     toast.error(e?.message || '发送失败');
   }
@@ -58,7 +58,7 @@ function onAbort() {
 function onPick(text: string) {
   // 直接发送建议文本到当前会话
   if (!convStore.conversation) return;
-  convStore.send(text, [], [], false);
+  convStore.send(text, [], false);
 }
 
 function scrollToBottom() {

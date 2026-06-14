@@ -103,7 +103,6 @@ export const useConversationsStore = defineStore('zwf-conversations', () => {
     conversation.value.messages = [];
     conversation.value.title = '新对话';
     conversation.value.draftText = '';
-    conversation.value.draftImages = [];
     conversation.value.draftAttachments = [];
     conversation.value.updatedAt = Date.now();
     contextCleared.value = true;
@@ -140,7 +139,6 @@ export const useConversationsStore = defineStore('zwf-conversations', () => {
 
   async function send(
     text: string,
-    images: string[] = [],
     attachments: Attachment[] = [],
     reasoningEnabled = false
   ) {
@@ -148,7 +146,7 @@ export const useConversationsStore = defineStore('zwf-conversations', () => {
     const conv = conversation.value;
 
     const settings = useSettingsStore().settings;
-    log.info('send() 开始', { textLen: text.length, imageCount: images.length, attachmentCount: attachments.length, modelId: conv.modelId, contextCleared: contextCleared.value });
+    log.info('send() 开始', { textLen: text.length, attachmentCount: attachments.length, modelId: conv.modelId, contextCleared: contextCleared.value });
 
     const model = settings.models.find((m) => m.id === conv.modelId);
     if (!model) {
@@ -165,12 +163,11 @@ export const useConversationsStore = defineStore('zwf-conversations', () => {
     }
     log.info('API 配置', { baseUrl: effectiveBaseUrl.slice(0, 40) + '...', hasApiKey: !!effectiveApiKey });
 
-    // 用户消息
+    // 用户消息（图片已通过 OCR 转为文本，存在 attachments 中）
     conv.messages.push({
       id: uuid(),
       role: 'user',
       content: text,
-      images: images.length ? images : undefined,
       attachments: attachments.length ? attachments : undefined,
       timestamp: Date.now(),
       status: 'done',
