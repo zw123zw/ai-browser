@@ -89,7 +89,6 @@ function startOcr(attachment: Attachment) {
     delete ocrProgressMap.value[attachment.id];
     // 触发响应式更新（content 被就地修改）
     setDraftAttachments([...attachments.value]);
-    log.info('OCR 完成', { name: attachment.name, textLength: attachment.content?.length || 0 });
   });
 }
 

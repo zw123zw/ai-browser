@@ -72,7 +72,6 @@ export async function ocrAttachment(
 ): Promise<void> {
   if (attachment.type !== 'image' || !attachment.dataUrl) return;
   const text = await recognizeImage(attachment.dataUrl, onProgress);
-  log.info('OCR 识别结果', { name: attachment.name, text, textLength: text.length });
   if (text) attachment.content = text;
 }
 

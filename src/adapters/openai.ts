@@ -19,7 +19,7 @@ export class OpenAIAdapter extends BaseAdapter {
   /** 收集消息中的文本类附件内容（含图片 OCR 文字） */
   private collectFileTexts(m: ChatMessage): string {
     if (!m.attachments) return '';
-    const texts = m.attachments
+    return m.attachments
       .filter(a => a.content && !a.content.startsWith('['))
       .map(a => {
         if (a.type === 'image') {
@@ -28,8 +28,6 @@ export class OpenAIAdapter extends BaseAdapter {
         return `[文件: ${a.name}]\n\`\`\`${a.lang || ''}\n${a.content}\n\`\`\``;
       })
       .join('\n\n');
-    if (texts) log.info('collectFileTexts 结果', { length: texts.length, preview: texts.slice(0, 100) });
-    return texts;
   }
 
   /** 把内部 ChatMessage 转成 OpenAI 协议消息（图片已 OCR 为文本，统一发文本） */
