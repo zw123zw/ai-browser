@@ -17,17 +17,22 @@ import type { SemanticSkeleton, NeedHtmlRequest } from '@/src/browser/types'
 // ═══════════════════════════════════════════════════════════════
 
 export const CAPABILITY_DOMAIN = `\`\`\`
-navigate  — 打开URL（需url）
-search    — 全网搜索（需text）
-click     — 点击元素（需elementId或description）
-type      — 输入文字（需elementId+text）
-clear     — 清空输入框（需elementId）
-scroll    — 滚动页面（direction:up/down/top/bottom，amount:滚动像素，可选）
-select    — 选择下拉框（需elementId+text）
-keyboard  — 模拟按键（需key:Enter/Escape/Tab等，别名press）
-focus     — 聚焦元素（需elementId）
-hover     — 悬停元素（需elementId）
-wait      — 等待（需ms）
+navigate    — 打开URL（需url）
+search      — 全网搜索（需text）
+click       — 点击元素（需elementId或description）
+type        — 输入文字（需elementId+text）
+clear       — 清空输入框（需elementId）
+scroll      — 滚动页面（direction:up/down/top/bottom，amount:滚动像素，可选）
+select      — 选择下拉框（需elementId+text）
+keyboard    — 模拟按键（需key:Enter/Escape/Tab等，别名press）
+focus       — 聚焦元素（需elementId）
+hover       — 悬停元素（需elementId）
+wait        — 等待（需ms）
+newTab      — 打开新标签页
+closeTab    — 关闭当前标签页
+switchTab   — 切换到指定标签页（需tabQuery关键词，如"B站"、"淘宝"）
+nextTab     — 切换到下一个标签页
+prevTab     — 切换到上一个标签页
 \`\`\``
 
 // ═══════════════════════════════════════════════════════════════

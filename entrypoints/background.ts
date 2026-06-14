@@ -150,6 +150,95 @@ export default defineBackground(() => {
       return false;
     }
 
+    // 标签页操作（newTab / closeTab / switchTab）
+    if (message.type === 'tab-action') {
+      const { action, query } = message;
+
+      if (action === 'newTab') {
+        chrome.tabs.create({}).then((tab) => {
+          sendResponse({ success: true, message: `新标签页: ${tab.id}` });
+        }).catch((err) => {
+          sendResponse({ success: false, error: String(err) });
+        });
+        return true;
+      }
+
+      if (action === 'closeTab') {
+        const tabId = sender.tab?.id;
+        if (tabId) {
+          chrome.tabs.remove(tabId).then(() => {
+            sendResponse({ success: true, message: '标签页已关闭' });
+          }).catch((err) => {
+            sendResponse({ success: false, error: String(err) });
+          });
+        } else {
+          sendResponse({ success: false, error: '无法获取当前标签页 ID' });
+        }
+        return true;
+      }
+
+      if (action === 'switchTab') {
+        // 支持 nextTab / prevTab 相对切换
+        if (query === 'next' || query === 'prev') {
+          chrome.tabs.query({ currentWindow: true }).then((tabs) => {
+            const activeIndex = tabs.findIndex((t) => t.active);
+            if (activeIndex < 0) {
+              sendResponse({ success: false, error: '未找到当前标签页' });
+              return;
+            }
+            let targetIndex: number;
+            if (query === 'next') {
+              targetIndex = (activeIndex + 1) % tabs.length;
+            } else {
+              targetIndex = (activeIndex - 1 + tabs.length) % tabs.length;
+            }
+            const target = tabs[targetIndex];
+            if (target?.id) {
+              chrome.tabs.update(target.id, { active: true }).then(() => {
+                sendResponse({ success: true, message: `已切换到: ${target.title}` });
+              }).catch((err) => {
+                sendResponse({ success: false, error: String(err) });
+              });
+            }
+          }).catch((err) => {
+            sendResponse({ success: false, error: String(err) });
+          });
+          return true;
+        }
+
+        // 按关键词匹配标签
+        if (!query) {
+          sendResponse({ success: false, error: '未指定目标标签页关键词' });
+          return true;
+        }
+        chrome.tabs.query({}).then((tabs) => {
+          const target = tabs.find((tab) => {
+            const title = (tab.title || '').toLowerCase();
+            const url = (tab.url || '').toLowerCase();
+            return title.includes(query.toLowerCase()) || url.includes(query.toLowerCase());
+          });
+          if (target?.id) {
+            chrome.tabs.update(target.id, { active: true }).then(() => {
+              if (target.windowId) {
+                chrome.windows.update(target.windowId, { focused: true });
+              }
+              sendResponse({ success: true, message: `已切换到: ${target.title}` });
+            }).catch((err) => {
+              sendResponse({ success: false, error: String(err) });
+            });
+          } else {
+            sendResponse({ success: false, error: `未找到包含 "${query}" 的标签页` });
+          }
+        }).catch((err) => {
+          sendResponse({ success: false, error: String(err) });
+        });
+        return true;
+      }
+
+      sendResponse({ success: false, error: `未知标签页操作: ${action}` });
+      return false;
+    }
+
     // 中止流式请求
     if (message.type === 'abort-stream') {
       const { requestId } = message;

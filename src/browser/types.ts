@@ -41,6 +41,8 @@ export interface Command {
   amount?: number          // scroll 操作的滚动像素
   ms?: number              // wait 操作的等待时间
   description?: string     // 操作描述（日志用 / 文本匹配兜底）
+  tabAction?: 'newTab' | 'closeTab' | 'switchTab' | 'nextTab' | 'prevTab' // 标签页操作类型
+  tabQuery?: string        // switchTab 的目标标签关键词（如 "B站"、"淘宝"）
 }
 
 /** 执行结果 */

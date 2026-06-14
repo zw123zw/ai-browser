@@ -17,8 +17,8 @@ export class ActionExecutor {
   async execute(cmd: Command): Promise<ActionResult> {
     log.info('执行指令', { action: cmd.action, elementId: cmd.elementId, description: cmd.description })
 
-    // 不需要元素的操作（keyboard/press 作用于当前焦点元素）
-    const needsElement = !['navigate', 'wait', 'scroll', 'keyboard', 'press'].includes(cmd.action)
+    // 不需要元素的操作（keyboard/press 作用于当前焦点元素，tab 操作走 background）
+    const needsElement = !['navigate', 'wait', 'scroll', 'keyboard', 'press', 'newTab', 'closeTab', 'switchTab', 'nextTab', 'prevTab'].includes(cmd.action)
     let element: HTMLElement | null = null
 
     if (needsElement) {
@@ -43,6 +43,11 @@ export class ActionExecutor {
         case 'focus':     return await this.executeFocus(element!)
         case 'hover':     return await this.executeHover(element!)
         case 'wait':      return await this.executeWait(cmd.ms || 1000)
+        case 'newTab':    return await this.executeTabAction('newTab')
+        case 'closeTab':  return await this.executeTabAction('closeTab')
+        case 'switchTab': return await this.executeTabAction('switchTab', cmd.tabQuery || cmd.description)
+        case 'nextTab':   return await this.executeTabAction('switchTab', 'next')
+        case 'prevTab':   return await this.executeTabAction('switchTab', 'prev')
         default:          return { success: false, message: `未知操作类型: ${cmd.action}` }
       }
     } catch (error) {
@@ -302,5 +307,29 @@ export class ActionExecutor {
   private async executeWait(ms: number): Promise<ActionResult> {
     await new Promise(resolve => setTimeout(resolve, ms))
     return { success: true, message: `等待 ${ms}ms` }
+  }
+
+  // ========== 标签页操作（通过 background 代理） ==========
+
+  /** 标签页操作：通过 chrome.runtime.sendMessage 调用 background 的 tabs API */
+  private async executeTabAction(
+    tabAction: 'newTab' | 'closeTab' | 'switchTab',
+    tabQuery?: string,
+  ): Promise<ActionResult> {
+    try {
+      const response = await chrome.runtime.sendMessage({
+        type: 'tab-action',
+        action: tabAction,
+        query: tabQuery,
+      })
+      if (response?.success) {
+        return { success: true, message: response.message || `${tabAction} 成功` }
+      }
+      return { success: false, message: response?.error || `${tabAction} 失败` }
+    } catch (error) {
+      const msg = `标签页操作异常: ${error instanceof Error ? error.message : String(error)}`
+      log.error(msg, error)
+      return { success: false, message: msg }
+    }
   }
 }
