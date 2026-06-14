@@ -583,4 +583,83 @@ onUnmounted(() => {
   color: var(--zwf-primary);
   background: var(--zwf-primary-soft);
 }
+
+/* ========== 小屏宽度适配 ========== */
+@media (max-width: 640px) {
+  .zwf-voice-status {
+    padding: 8px 14px;
+    min-height: 38px;
+  }
+  .zwf-voice-messages {
+    padding: 14px;
+    gap: 12px;
+  }
+  .zwf-empty-icon {
+    font-size: 36px;
+    margin-bottom: 10px;
+  }
+  .zwf-voice-msg {
+    max-width: 94%;
+    padding: 10px 12px;
+    font-size: 13px;
+    border-radius: 12px;
+  }
+  .zwf-voice-controls {
+    padding: 16px 14px;
+  }
+  .zwf-mic-wrapper {
+    width: 72px;
+    height: 72px;
+  }
+  .zwf-mic-btn {
+    width: 58px;
+    height: 58px;
+  }
+  .zwf-mic-btn svg {
+    width: 22px;
+    height: 22px;
+  }
+}
+
+/* ========== 短视口高度适配 ========== */
+@media (max-height: 680px) {
+  .zwf-voice-status {
+    padding: 6px 14px;
+    min-height: 34px;
+  }
+  .zwf-voice-messages {
+    padding: 10px 14px;
+    gap: 10px;
+  }
+  .zwf-empty-icon {
+    font-size: 32px;
+    margin-bottom: 8px;
+  }
+  .zwf-empty-hint {
+    margin-top: 4px;
+  }
+  .zwf-voice-msg {
+    padding: 8px 12px;
+    font-size: 13px;
+  }
+  .zwf-voice-controls {
+    padding: 12px 14px;
+  }
+  .zwf-mic-wrapper {
+    width: 64px;
+    height: 64px;
+  }
+  .zwf-mic-btn {
+    width: 52px;
+    height: 52px;
+  }
+  .zwf-mic-btn svg {
+    width: 20px;
+    height: 20px;
+  }
+  .zwf-ripple-container {
+    width: 52px;
+    height: 52px;
+  }
+}
 </style>

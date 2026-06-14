@@ -2042,32 +2042,7 @@ table {
   flex-shrink: 0;
 }
 
-/* 小屏适配：文件预览弹窗全屏 */
-@media (max-width: 640px) {
-  .zwf-file-modal-mask {
-    padding: 0;
-  }
-  .zwf-file-modal {
-    width: 100%;
-    max-width: 100%;
-    max-height: 85vh;
-    border-radius: 16px 16px 0 0;
-    margin-top: auto;
-  }
-  .zwf-file-modal-header {
-    padding: 10px 12px;
-  }
-  .zwf-file-modal-body {
-    padding: 12px;
-  }
-  .zwf-file-modal-body pre {
-    font-size: 12px;
-    padding: 10px 12px;
-  }
-  .zwf-file-modal-image img {
-    max-height: 50vh;
-  }
-}
+/* （已合并到下方统一的小屏媒体查询块） */
 
 /* ============ 弹窗 ============ */
 .zwf-modal-mask {
@@ -2295,9 +2270,125 @@ table {
   transition: transform 0.22s ease;
 }
 
-/* ============ 小屏响应式优化 ============ */
+/* ============ 小屏宽度适配（≤640px） ============ */
 @media (max-width: 640px) {
-  /* 设置弹窗：全屏 + 顶部 tab */
+  /* ── 抽屉 ── */
+  .zwf-drawer {
+    width: 100vw !important;
+    min-width: 100vw;
+    border-left: none;
+  }
+  .zwf-drawer-header {
+    padding: 10px 14px;
+  }
+  .zwf-drawer-body {
+    /* 确保小屏下不出现双重滚动 */
+    overflow: hidden;
+  }
+
+  /* ── 消息气泡 ── */
+  .zwf-msg {
+    max-width: 96%;
+    padding: 10px 12px;
+    font-size: 13px;
+  }
+  .zwf-bubble-user {
+    max-width: 88%;
+    padding: 10px 14px;
+  }
+  .zwf-msg-text pre {
+    font-size: 12px;
+    padding: 10px 12px;
+    border-radius: 8px;
+  }
+  .zwf-msg-text table {
+    font-size: 12px;
+  }
+  .zwf-msg-text th,
+  .zwf-msg-text td {
+    padding: 6px 8px;
+  }
+  .zwf-msg-image {
+    max-width: 160px;
+    max-height: 160px;
+  }
+
+  /* ── 消息列表 ── */
+  .zwf-centered-body .zwf-msg-list-wrap {
+    padding: 12px 6px 10px;
+  }
+  .zwf-msg-list {
+    gap: 12px;
+  }
+
+  /* ── 回到底部按钮 ── */
+  .zwf-scroll-bottom-btn {
+    width: 36px;
+    height: 36px;
+    bottom: 36px;
+  }
+
+  /* ── 输入区 ── */
+  .zwf-input-card {
+    border-radius: 16px;
+    padding: 10px 12px;
+  }
+  .zwf-input-area {
+    font-size: 13px;
+    min-height: 32px;
+    padding: 8px 4px;
+  }
+  .zwf-input-toolbar {
+    padding-top: 8px;
+    margin-top: 8px;
+    gap: 6px;
+  }
+  .zwf-tool-btn {
+    width: 32px;
+    height: 32px;
+  }
+  .zwf-send-btn {
+    width: 36px;
+    height: 36px;
+    border-radius: 12px;
+  }
+  .zwf-tool-pill {
+    padding: 6px 10px;
+    font-size: 12px;
+  }
+
+  /* ── 底部 footer ── */
+  .zwf-centered-footer {
+    padding: 10px 12px 14px;
+  }
+
+  /* ── 欢迎空状态 ── */
+  .zwf-chat-empty {
+    padding: 24px 16px;
+  }
+  .zwf-chat-empty-title {
+    font-size: 18px;
+  }
+  .zwf-chat-empty-desc {
+    font-size: 12.5px;
+  }
+  .zwf-suggestions {
+    gap: 8px;
+  }
+  .zwf-suggestion {
+    padding: 10px 14px;
+    gap: 10px;
+  }
+  .zwf-suggestion-icon {
+    font-size: 18px;
+  }
+
+  /* ── 侧边会话列表 ── */
+  .zwf-side {
+    display: none;
+  }
+
+  /* ── 设置弹窗：全屏 + 顶部 tab ── */
   .zwf-modal-settings {
     width: 100vw;
     height: 100vh;
@@ -2325,13 +2416,13 @@ table {
     padding: 16px 14px 12px;
   }
 
-  /* 主题网格：3列 */
+  /* ── 主题网格：3列 ── */
   .zwf-theme-grid {
     grid-template-columns: repeat(3, 1fr);
     gap: 8px;
   }
 
-  /* 模型芯片换行更紧凑 */
+  /* ── 模型芯片 / 预设按钮 ── */
   .zwf-model-chips {
     gap: 6px;
   }
@@ -2339,8 +2430,6 @@ table {
     padding: 5px 10px;
     font-size: 12px;
   }
-
-  /* 预设按钮 */
   .zwf-preset-grid {
     gap: 6px;
   }
@@ -2349,94 +2438,55 @@ table {
     font-size: 12px;
   }
 
-  /* 输入框 */
+  /* ── 表单控件 ── */
   .zwf-input,
   .zwf-select {
     padding: 8px 12px;
     font-size: 13px;
   }
-
-  /* 抽屉：小屏全宽 */
-  .zwf-drawer {
-    width: 100vw !important;
-    min-width: 100vw;
-    border-left: none;
-  }
-
-  /* 快捷键提示 */
   .zwf-shortcut-row {
     flex-direction: column;
     gap: 6px;
   }
 
-  /* 消息气泡适配 */
-  .zwf-msg {
-    max-width: 96%;
-    padding: 10px 12px;
-    font-size: 13px;
-  }
-  .zwf-bubble-user {
-    max-width: 88%;
-    padding: 10px 14px;
-  }
-
-  /* 输入卡片 */
-  .zwf-input-card {
-    border-radius: 16px;
-    padding: 10px 12px 10px;
-  }
-  .zwf-input-area {
-    font-size: 13px;
-    min-height: 32px;
-  }
-
-  /* 侧边会话列表：隐藏（由抽屉头部按钮控制） */
-  .zwf-side {
-    display: none;
-  }
-
-  /* 主面板空状态 */
-  .zwf-chat-empty {
-    padding: 24px 16px;
-  }
-  .zwf-chat-empty-title {
-    font-size: 18px;
-  }
-  .zwf-chat-empty-desc {
-    font-size: 12.5px;
-  }
-  .zwf-suggestions {
-    gap: 8px;
-  }
-  .zwf-suggestion {
-    padding: 10px 14px;
-    gap: 10px;
-  }
-
-  /* 标题栏 */
-  .zwf-drawer-header {
-    padding: 10px 14px;
-  }
-
-  /* Tab footer 按钮 */
+  /* ── Tab footer 按钮 ── */
   .zwf-tab-footer .zwf-btn {
     padding: 6px 14px;
     font-size: 12px;
   }
 
-  /* 确认弹窗 */
+  /* ── 确认弹窗 ── */
   .zwf-modal-confirm {
     width: 90vw;
     padding: 20px 16px 16px;
   }
 
-  /* 文件预览弹窗 */
+  /* ── 文件预览弹窗 ── */
+  .zwf-file-modal-mask {
+    padding: 0;
+  }
   .zwf-file-modal {
-    width: 95vw;
-    max-width: 95vw;
+    width: 100%;
+    max-width: 100%;
+    max-height: 85vh;
+    border-radius: 16px 16px 0 0;
+    margin-top: auto;
+  }
+  .zwf-file-modal-header {
+    padding: 10px 12px;
+  }
+  .zwf-file-modal-body {
+    padding: 12px;
+  }
+  .zwf-file-modal-body pre {
+    font-size: 12px;
+    padding: 10px 12px;
+  }
+  .zwf-file-modal-image img {
+    max-height: 50vh;
   }
 
-  /* 弹窗通用 */
+  /* ── 弹窗通用 ── */
   .zwf-modal {
     max-width: 96vw;
     border-radius: 16px;
@@ -2448,5 +2498,164 @@ table {
   .zwf-modal-body {
     padding: 16px;
     gap: 12px;
+  }
+
+  /* ── 右键菜单 ── */
+  .zwf-ctx-menu {
+    min-width: 160px;
+    padding: 4px;
+  }
+  .zwf-ctx-item {
+    padding: 8px 12px;
+    font-size: 13px;
+  }
+
+  /* ── Toast ── */
+  .zwf-toast-container {
+    top: 16px;
+    padding: 0 12px;
+  }
+  .zwf-toast {
+    padding: 10px 14px;
+    font-size: 13px;
+    min-width: 160px;
+    max-width: 90vw;
+  }
+
+  /* ── 品牌标题 ── */
+  .zwf-brand {
+    font-size: 14px;
+  }
+  .zwf-brand-ai {
+    font-size: 16px;
+  }
+  .zwf-brand-browser {
+    font-size: 13px;
+    letter-spacing: 1px;
+  }
+
+  /* ── 悬浮按钮 ── */
+  .zwf-fab {
+    width: 44px;
+    height: 44px;
+  }
+  .zwf-fab-tip {
+    display: none;
+  }
+}
+
+/* ============ 短视口高度适配（≤680px） ============ */
+@media (max-height: 680px) {
+  /* ── 抽屉头部 ── */
+  .zwf-drawer-header {
+    padding: 10px 18px;
+  }
+
+  /* ── 欢迎区域 ── */
+  .zwf-centered-welcome .zwf-chat-empty {
+    padding: 16px 20px 8px;
+    max-width: 520px;
+  }
+  .zwf-chat-empty-title {
+    font-size: 18px;
+    margin-bottom: 4px;
+  }
+  .zwf-chat-empty-desc {
+    font-size: 12.5px;
+    margin-bottom: 14px;
+  }
+  .zwf-suggestions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    max-width: 100%;
+  }
+  .zwf-suggestion {
+    padding: 10px 12px;
+    gap: 10px;
+  }
+  .zwf-suggestion-icon {
+    font-size: 18px;
+  }
+  .zwf-suggestion-title {
+    font-size: 12.5px;
+  }
+  .zwf-suggestion-desc {
+    font-size: 11px;
+  }
+
+  /* ── 底部输入区 ── */
+  .zwf-centered-footer {
+    padding: 8px 16px 12px;
+  }
+  .zwf-input-card {
+    padding: 10px 14px 8px;
+  }
+  .zwf-input-area {
+    min-height: 28px;
+    padding: 6px 4px;
+  }
+  .zwf-input-toolbar {
+    padding-top: 6px;
+    margin-top: 6px;
+  }
+
+  /* ── 消息列表 ── */
+  .zwf-centered-body .zwf-msg-list-wrap {
+    padding: 12px 10px 10px;
+  }
+  .zwf-msg-list {
+    gap: 12px;
+  }
+  .zwf-msg {
+    padding: 10px 14px;
+  }
+
+  /* ── 设置弹窗 ── */
+  .zwf-modal-settings {
+    height: 92vh;
+    max-height: 92vh;
+  }
+  .zwf-settings-tabs {
+    padding: 10px 12px;
+  }
+  .zwf-settings-tab {
+    padding: 10px 12px;
+  }
+  .zwf-settings-pane .zwf-modal-body {
+    padding: 16px 20px 12px;
+  }
+
+  /* ── 弹窗通用 ── */
+  .zwf-modal {
+    max-height: 92vh;
+  }
+  .zwf-modal-header {
+    padding: 14px 20px;
+  }
+  .zwf-modal-body {
+    padding: 16px 20px;
+    gap: 12px;
+  }
+  .zwf-modal-footer {
+    padding: 12px 20px;
+  }
+
+  /* ── 确认弹窗 ── */
+  .zwf-modal-confirm {
+    padding: 20px 20px 16px;
+  }
+  .zwf-modal-icon {
+    width: 44px;
+    height: 44px;
+    margin-bottom: 10px;
+  }
+
+  /* ── 文件预览弹窗 ── */
+  .zwf-file-modal {
+    max-height: min(80vh, 500px);
+  }
+  .zwf-file-modal-body {
+    min-height: 120px;
   }
 }
