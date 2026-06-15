@@ -112,8 +112,12 @@ export function usePipeline() {
         },
 
         // Phase 1 聊天回复增量（流式更新）
-        onChatDelta: (delta, reasoningDelta) => {
+        onChatDelta: (delta, reasoningDelta, clearContent) => {
           if (!currentStreamingMsg) return
+          if (clearContent) {
+            currentStreamingMsg.content = ''
+            return
+          }
           if (delta) currentStreamingMsg.content += delta
           if (reasoningDelta) currentStreamingMsg.reasoning = (currentStreamingMsg.reasoning || '') + reasoningDelta
           if (convStore.conversation) convStore.conversation.updatedAt = Date.now()
@@ -184,6 +188,22 @@ export function usePipeline() {
           log.info('[回调] onCommandResult', { action, success, message })
           const icon = success ? '✅' : '❌'
           addSystemMessage(`${icon} **${action}** — ${message}`)
+        },
+
+        // 全部指令执行成功 → 存为 assistant 消息，让 AI 知道已执行过什么
+        onAllCommandsDone: (userText, commands) => {
+          if (!convStore.conversation) return
+          const summary = commands
+            .map(c => `${c.action}${c.description ? `(${c.description})` : ''}${c.url ? ` → ${c.url}` : ''}`)
+            .join('; ')
+          convStore.conversation.messages.push({
+            id: uuid(),
+            role: 'assistant',
+            content: `已执行: ${summary}`,
+            timestamp: Date.now(),
+            status: 'done',
+          })
+          log.info('[回调] onAllCommandsDone → assistant 消息已存入对话历史', { summary })
         },
 
         // 重试消息（清理占位消息）

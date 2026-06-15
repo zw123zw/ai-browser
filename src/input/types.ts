@@ -22,7 +22,7 @@ export interface PipelineCallbacks {
   onChatStart: () => void
 
   /** Phase 1 聊天回复增量（流式更新） */
-  onChatDelta: (delta: string, reasoningDelta?: string) => void
+  onChatDelta: (delta: string, reasoningDelta?: string, clearContent?: boolean) => void
 
   /** Phase 1 聊天回复结束 */
   onChatEnd: () => void
@@ -41,6 +41,9 @@ export interface PipelineCallbacks {
 
   /** 单条指令执行结果 */
   onCommandResult: (action: string, success: boolean, message: string) => void
+
+  /** 全部指令执行成功（用于存储 assistant 消息到对话历史） */
+  onAllCommandsDone?: (userText: string, commands: Command[]) => void
 
   /** 重试消息（展示给用户看重试过程） */
   onRetryMessage: (message: string) => void

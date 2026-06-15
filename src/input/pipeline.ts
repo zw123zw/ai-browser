@@ -72,9 +72,25 @@ export class InputPipeline {
       return
     }
 
-    // 2. Phase 1 — 流式输出（打字机效果），判断完再决定保留还是移除
+    // 2. Phase 1 — 流式输出，但检测到操作标签时清掉内容，用户只看到"思考中"
     callbacks.onChatStart()
-    const p1 = await this.detector.detectPhase1(ctx.text, callbacks.onChatDelta)
+    let phase1StreamedContent = ''
+    let phase1ActionTagDetected = false
+    const p1 = await this.detector.detectPhase1(ctx.text, (delta, reasoningDelta) => {
+      if (reasoningDelta) callbacks.onChatDelta('', reasoningDelta)
+      if (delta) {
+        phase1StreamedContent += delta
+        if (!phase1ActionTagDetected) {
+          callbacks.onChatDelta(delta)
+          // 检测到操作标签 → 清掉流式内容，只保留"思考中"
+          // 关键词必须带 [ 或 ]，防止聊天中提到 "action" 等词误触发
+          if (/\[(?:action|command|skill)|(?:action|command|skill)\]/.test(phase1StreamedContent)) {
+            phase1ActionTagDetected = true
+            callbacks.onChatDelta('', undefined, true)
+          }
+        }
+      }
+    })
 
     if (p1.isChat && p1.responseText) {
       log.info('[流程] Phase 1 → 聊天回复 → 结束')
@@ -99,7 +115,7 @@ export class InputPipeline {
 
     let lastAiOutput = ''
     let lastError = ''
-    let lastErrorType: 'extract' | 'exec' = 'extract'
+    let lastErrorType: 'extract' | 'exec' | 'need_html' = 'extract'
     let needHtmlRetried = false
 
     for (let attempt = 0; attempt <= MAX_RETRY; attempt++) {
@@ -120,7 +136,9 @@ export class InputPipeline {
         callbacks.onRetryMessage(
           lastErrorType === 'extract'
             ? `⚠️ 指令提取失败，重试 ${attempt}/${MAX_RETRY}...`
-            : `⚠️ 指令执行失败，重试 ${attempt}/${MAX_RETRY}...`,
+            : lastErrorType === 'need_html'
+              ? `⚠️ 需要更多页面信息，重试 ${attempt}/${MAX_RETRY}...`
+              : `⚠️ 指令执行失败，重试 ${attempt}/${MAX_RETRY}...`,
         )
 
         phase2Result = await this.retryPhase2(text, skeleton, lastAiOutput, lastError, lastErrorType)
@@ -177,6 +195,7 @@ export class InputPipeline {
         const execResult = await this.executeCommands(phase2Result.commands, callbacks)
         if (execResult.success) {
           log.info('[Phase 2] ═══ 全部指令执行成功 ═══')
+          callbacks.onAllCommandsDone?.(text, phase2Result.commands)
           return
         }
 
@@ -192,7 +211,7 @@ export class InputPipeline {
           // 首次：用 description 重试一次（骨架里没有的元素，AI 用文本描述定位）
           needHtmlRetried = true
           lastError = `骨架中未找到 "${phase2Result.needHtml.query}" 对应元素。请改用 description 字段描述目标（如 "点赞"），系统会通过文本匹配定位。禁止使用 [need_html]。`
-          lastErrorType = 'extract'
+          lastErrorType = 'need_html'
           log.warn('[Phase 2] need_html → 用 description 重试')
           continue
         }
@@ -268,7 +287,7 @@ export class InputPipeline {
     skeleton: SemanticSkeleton,
     lastAiOutput: string,
     lastError: string,
-    errorType: 'extract' | 'exec',
+    errorType: 'extract' | 'exec' | 'need_html',
   ): Promise<import('./intent-detector').Phase2Result> {
     const settings = this.options.getSettings()
     const model = settings.models.find(m => m.id === settings.defaultModelId) || settings.models[0]

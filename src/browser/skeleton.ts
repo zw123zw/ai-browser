@@ -13,6 +13,12 @@ const log = new Logger('Skeleton')
 const LANDMARK_TAGS = ['nav', 'header', 'main', 'aside', 'footer']
 const LANDMARK_ROLES = ['navigation', 'banner', 'main', 'complementary', 'contentinfo']
 
+/** 需要过滤的非内容地标（导航、页头、侧栏、页脚） */
+const EXCLUDED_LANDMARKS = ['nav', 'header', 'aside', 'footer']
+
+/** 骨架最大元素数（减少 token 消耗） */
+const MAX_SKELETON_ELEMENTS = 200
+
 /**
  * 骨架管理器
  *
@@ -84,12 +90,20 @@ export function extractSkeleton(doc: Document): SemanticSkeleton {
     }
   }
 
-  log.debug('骨架提取完成', { elementCount: elements.length, url: doc.location.href })
+  // 过滤非内容地标元素，保留 main 区域的核心内容
+  const filtered = elements.filter(el => !isInsideExcludedLandmark(el))
+  const final = filtered.length > MAX_SKELETON_ELEMENTS ? filtered.slice(0, MAX_SKELETON_ELEMENTS) : filtered
+
+  log.debug('骨架提取完成', {
+    rawCount: elements.length,
+    filteredCount: final.length,
+    url: doc.location.href,
+  })
 
   return {
     url: doc.location.href,
     title: doc.title,
-    elements,
+    elements: final,
   }
 }
 
@@ -175,4 +189,19 @@ function findLandmarkParent(el: HTMLElement): string | undefined {
     current = current.parentElement
   }
   return undefined
+}
+
+/**
+ * 判断元素是否应被过滤（减少骨架 token 消耗）
+ *
+ * 只过滤地标容器本身（nav/header/aside/footer 标签），
+ * 保留里面的所有元素（包括 li/p/a/button 等）。
+ *
+ * 为什么不过滤地标内的文本元素？
+ * 因为 AI 靠文本匹配来定位目标（如 "前端"、"JavaScript"），
+ * 如果过滤掉 li/p，AI 就找不到对应的 elementId。
+ * token 控制通过 MAX_SKELETON_ELEMENTS=200 来实现。
+ */
+function isInsideExcludedLandmark(element: SkeletonElement): boolean {
+  return EXCLUDED_LANDMARKS.includes(element.tag)
 }

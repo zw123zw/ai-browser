@@ -66,9 +66,9 @@ export const PHASE1_SYSTEM_PROMPT = `\`\`\`
 // ═══════════════════════════════════════════════════════════════
 
 export const PHASE2_SYSTEM_PROMPT = `\`\`\`
-你是浏览器操作助手。根据用户意图生成操作指令。
+你是浏览器操作助手。只输出指令标签，不要解释。
 
-指令格式（标签可出现在回复任意位置）：
+指令格式：
 [command]{"action":"click","elementId":"e3","description":"登录"}[/command]
 [command]{"action":"navigate","url":"https://..."}[/command]
 [skill]{"name":"翻译","userText":"这个页面"}[/skill]
@@ -84,17 +84,16 @@ ${CAPABILITY_DOMAIN}
 {skillList}
 
 规则：
-1. 只处理当前用户请求，对话历史仅用于理解指代（如"第一个"指什么），不要重复执行之前的操作
-2. 打开网站/搜索/滚动 → 直接返回[command]（不需要骨架）
-3. 操作页面元素 → 用骨架elementId定位
-4. 有匹配技能 → 返回[skill]
-5. 找不到目标 → 返回[need_html]
-6. 多步操作按顺序输出多个[command]
+1. 最后一条用户消息是[当前请求]，前面的消息是对话历史。只处理[当前请求]，不要重复执行历史中已执行过的操作
+2. "然后/接着/再" 意味着对同一个元素执行不同的操作（如先点赞再收藏），不是重复上一次操作。根据用户说的动作词选择对应按钮（点赞≠收藏≠评论≠喜欢）
+3. 打开网站/搜索/滚动 → 直接返回[command]（不需要骨架）
+4. 操作页面元素 → 用骨架elementId定位
+5. 有匹配技能 → 返回[skill]
+6. 找不到目标 → 返回[need_html]
+7. 多步操作按顺序输出多个[command]
 
 图标按钮识别：
-- 很多按钮没有文字，只有SVG图标
-- 通过aria-label、title、role属性识别其功能
-- 骨架中没有文字的button，检查其aria-label/title属性
+- 骨架中text为"(icon)"的元素，优先检查aria-label/title属性来判断功能
 \`\`\``
 
 // ═══════════════════════════════════════════════════════════════
@@ -102,7 +101,7 @@ ${CAPABILITY_DOMAIN}
 // ═══════════════════════════════════════════════════════════════
 
 export const PHASE2_RETRY_SYSTEM_PROMPT = `\`\`\`
-你上一次的操作失败了。根据错误信息和最新骨架重新生成指令。
+上次操作失败，根据错误和新骨架重新生成指令。只输出指令标签，不要解释。
 
 指令格式：
 [command]{"action":"click","elementId":"e3","description":"登录"}[/command]
@@ -125,8 +124,8 @@ export function buildPhase2UserMessage(
   skeleton: SemanticSkeleton,
 ): string {
   return [
-    `用户: "${text}"`,
-    `页面骨架:\n${JSON.stringify(skeleton, null, 2)}`,
+    `[当前请求] 用户: "${text}"`,
+    `页面骨架:\n${JSON.stringify(skeleton)}`,
   ].join('\n\n')
 }
 
@@ -138,7 +137,7 @@ export function buildRetryUserMessage(
   skeleton: SemanticSkeleton,
   lastAiOutput: string,
   lastError: string,
-  errorType: 'extract' | 'exec',
+  errorType: 'extract' | 'exec' | 'need_html',
   recentMessages: Array<{ role: 'user' | 'assistant'; content: string }>,
 ): string {
   const parts: string[] = []
@@ -151,12 +150,14 @@ export function buildRetryUserMessage(
   }
 
   parts.push(`用户: "${text}"`)
-  parts.push(`页面骨架:\n${JSON.stringify(skeleton, null, 2)}`)
+  parts.push(`页面骨架:\n${JSON.stringify(skeleton)}`)
   parts.push(`你上次的回复:\n${lastAiOutput}`)
   parts.push(`错误: ${lastError}`)
 
   if (errorType === 'exec') {
     parts.push('骨架已更新，请根据新骨架重新定位。')
+  } else if (errorType === 'need_html') {
+    parts.push('请改用 description 字段描述目标，禁止使用 [need_html]。')
   } else {
     parts.push('请在回复中包含有效指令标签。')
   }
