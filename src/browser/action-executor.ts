@@ -254,11 +254,24 @@ export class ActionExecutor {
     return key
   }
 
-  /** 导航（新标签页打开） */
+  /** 导航（通过 background 新标签页打开，避免 popup 拦截） */
   private async executeNavigate(url: string): Promise<ActionResult> {
     if (!url) return { success: false, message: '未指定 URL' }
-    window.open(url, '_blank')
-    return { success: true, message: `新标签页打开: ${url}` }
+    try {
+      const response = await chrome.runtime.sendMessage({
+        type: 'tab-action',
+        action: 'newTab',
+        url,
+      })
+      if (response?.success) {
+        return { success: true, message: `新标签页打开: ${url}` }
+      }
+      return { success: false, message: response?.error || '导航失败' }
+    } catch (error) {
+      const msg = `导航异常: ${error instanceof Error ? error.message : String(error)}`
+      log.error(msg, error)
+      return { success: false, message: msg }
+    }
   }
 
   /** 滚动 */

@@ -1,3 +1,5 @@
 连续性指令
 
+.trellis\tasks\06-15-test-suite\prd.md 实现测试方案
+
 语音功能实现

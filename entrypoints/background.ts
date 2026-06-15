@@ -155,7 +155,7 @@ export default defineBackground(() => {
       const { action, query } = message;
 
       if (action === 'newTab') {
-        chrome.tabs.create({}).then((tab) => {
+        chrome.tabs.create({ url: message.url }).then((tab) => {
           sendResponse({ success: true, message: `新标签页: ${tab.id}` });
         }).catch((err) => {
           sendResponse({ success: false, error: String(err) });
