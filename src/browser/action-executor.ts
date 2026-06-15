@@ -144,11 +144,17 @@ export class ActionExecutor {
     el.dispatchEvent(new MouseEvent('mousedown', mouseEventInit))
     el.dispatchEvent(new MouseEvent('mouseup', mouseEventInit))
 
-    // <a> 标签用 window.open 触发导航（合成事件不触发浏览器默认行为）
-    if (el instanceof HTMLAnchorElement && el.href) {
-      const opened = window.open(el.href, el.target || '_self')
-      // 弹窗被拦截 → 降级为当前页跳转
-      if (!opened) window.location.href = el.href
+    // <a> 标签：区分真实链接 vs JS 交互型链接
+    if (el instanceof HTMLAnchorElement) {
+      const href = el.getAttribute('href') || ''
+      if (!href || href === '#' || href.startsWith('javascript:')) {
+        // javascript: / # / 空 href → 依赖 JS 事件处理器，触发 click 事件
+        el.dispatchEvent(new MouseEvent('click', mouseEventInit))
+      } else if (el.href) {
+        // 真实 URL → 用 window.open 触发导航（合成事件不触发浏览器默认行为）
+        const opened = window.open(el.href, el.target || '_self')
+        if (!opened) window.location.href = el.href
+      }
     } else {
       el.dispatchEvent(new MouseEvent('click', mouseEventInit))
     }
