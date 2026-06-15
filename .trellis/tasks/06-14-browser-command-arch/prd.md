@@ -636,3 +636,54 @@ src/
 - 文件上传/下载
 - iframe / Shadow DOM
 - 跨页面连续指令队列
+
+
+Phase 2 完整流程
+
+  入口
+
+  Phase 1 返回 [action] 后进入 Phase 2，调用 processPhase2WithRetry(text, callbacks)
+
+  重试循环（最多 5 次）
+
+  for attempt = 0 to 5:
+    1. 提取骨架（每次重新提取）
+    2. 调用 AI 获取指令
+    3. 解析结果 → 分支处理
+
+  分支处理（按优先级）
+
+  分支 A：标签提取失败（AI 没返回 [command]/[skill]/[need_html]）
+  → lastError = "未找到有效指令标签"
+  → lastErrorType = "extract"
+  → continue（重试）
+
+  分支 B：技能触发（AI 返回 [skill]）
+  → 调用 onSkillActivate(name, userText)
+  → 成功 → return
+  → 失败 → lastError = 错误信息，lastErrorType = "exec"，continue
+
+  分支 C：浏览器指令（AI 返回 [command]）
+  → 逐条执行 executeCommands()
+  → 全部成功 → return
+  → 任意失败 → lastError = 错误信息，lastErrorType = "exec"，continue
+  → 特殊：navigate 成功后调用 skeletonManager.invalidate() 清缓存
+
+  分支 D：need_html（AI 返回 [need_html]）
+  needHtmlRetried 计数器 +1
+
+  第 1 次：depth=1，提取 contextId 周围 HTML → 拼接给 AI 重试
+  第 2 次：depth=2，扩大范围
+  第 3 次：depth=3，再扩大
+  第 4 次：放弃 HTML 提取，告诉 AI "用 description 字段定位，禁止 [need_html]"
+  第 5 次：放弃，报错 "未找到对应元素"
+
+  提取失败 → 降级到 description 重试
+
+  重试时 AI 请求的构建
+
+  首次：detectPhase2(text, skeleton) → 完整的 Phase2 系统提示词 + 骨架 + 用户消息
+
+  重试：retryPhase2(...) → 用 PHASE2_RETRY_SYSTEM_PROMPT（精简版）+ 骨架 + 上次 AI 回复 + 错误信息
+
+  need_html 重试：直接用 buildNeedHtmlUserMessage() → 用户原文 + 局部 HTML + 指令

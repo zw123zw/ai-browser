@@ -151,8 +151,9 @@ export class ActionExecutor {
         // javascript: / # / 空 href → 依赖 JS 事件处理器，触发 click 事件
         el.dispatchEvent(new MouseEvent('click', mouseEventInit))
       } else if (el.href) {
-        // 真实 URL → 用 window.open 触发导航（合成事件不触发浏览器默认行为）
-        const opened = window.open(el.href, el.target || '_self')
+        // 真实 URL → 新标签页打开（保留原 target 指定的行为）
+        const target = el.target || '_blank'
+        const opened = window.open(el.href, target)
         if (!opened) window.location.href = el.href
       }
     } else {
@@ -290,6 +291,8 @@ export class ActionExecutor {
       case 'bottom': window.scrollTo(0, document.body.scrollHeight); break
       default:       return { success: false, message: `未知滚动方向: ${direction}` }
     }
+    // 等待浏览器完成滚动和重绘（两帧 + 500ms 保险）
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(resolve, 500))))
     return { success: true, message: `滚动: ${direction}` }
   }
 

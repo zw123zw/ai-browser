@@ -202,15 +202,16 @@ export class IntentDetector {
     // 构建消息列表：历史上下文 + 当前用户消息
     const messages: ChatMessage[] = []
 
-    // 添加历史上下文（最近 6 条消息，过滤空内容）
+    // 添加历史上下文（最近 6 条消息，过滤空内容，去掉骨架/HTML避免累积）
     const recentMsgs = this.options.getRecentMessages?.() || []
     let validMsgCount = 0
     for (const msg of recentMsgs) {
       if (msg.content && msg.content.trim()) {
+        const cleaned = stripHeavyData(msg.content)
         messages.push({
           id: Date.now().toString(),
           role: msg.role,
-          content: msg.content,
+          content: cleaned,
           timestamp: Date.now(),
         })
         validMsgCount++
@@ -306,4 +307,20 @@ function simplifyQuery(query: string): string {
     if (query.includes(kw)) return kw
   }
   return query
+}
+
+/**
+ * 去掉历史消息中的重数据（骨架 JSON、need_html HTML 等）
+ * 保留用户输入和 AI 回复的关键信息，减少 token 消耗
+ */
+function stripHeavyData(content: string): string {
+  let result = content
+
+  // 1. 去掉骨架 JSON（页面骨架: 后面的所有内容，直到双换行或结尾）
+  result = result.replace(/页面骨架:\n[\s\S]*?(?=\n\n|$)/g, '页面骨架: [已省略]')
+
+  // 2. 去掉 need_html 的 HTML 代码块
+  result = result.replace(/```html\n[\s\S]*?\n```/g, '[HTML已省略]')
+
+  return result
 }
