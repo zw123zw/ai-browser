@@ -4,7 +4,7 @@
 
 export { extractSkeleton, SkeletonManager } from './skeleton'
 export { ActionExecutor } from './action-executor'
-export { extractLocalHtml } from './local-html'
+export { searchByKeywords } from './local-html'
 export type {
   SkeletonElement,
   SemanticSkeleton,

@@ -8,12 +8,10 @@
 import { Logger } from '@/src/utils/logger'
 import { createAdapter } from '@/src/adapters'
 import { extractTags, isChatOnlyReply, getChatText } from './tag-parser'
-import { extractLocalHtml } from '@/src/browser/local-html'
 import {
   PHASE1_SYSTEM_PROMPT,
   PHASE2_SYSTEM_PROMPT,
   buildPhase2UserMessage,
-  buildNeedHtmlUserMessage,
 } from './prompts'
 import type { AppSettings, ChatMessage } from '@/src/types'
 import type { SemanticSkeleton, Command, NeedHtmlRequest } from '@/src/browser/types'
@@ -125,55 +123,11 @@ export class IntentDetector {
       commandsCount: tags.commands?.length || 0,
       commands: tags.commands?.map(c => ({ action: c.action, elementId: c.elementId, description: c.description })),
       skill: tags.skill,
-      needHtml: tags.needHtml ? { query: tags.needHtml.query, reason: tags.needHtml.reason } : undefined,
+      needHtml: tags.needHtml ? { keywords: tags.needHtml.keywords, reason: tags.needHtml.reason } : undefined,
     })
 
-    // 提取到有效标签
+    // 提取到有效标签（need_html 由 pipeline 统一处理）
     if (tags.commands?.length || tags.skill || tags.needHtml) {
-      // [need_html] 兜底
-      if (tags.needHtml && !tags.commands?.length && !tags.skill) {
-        log.info('[Phase 2] need_html 兜底', { query: tags.needHtml.query, contextId: tags.needHtml.contextId })
-
-        // 优先用 contextId（AI 指定的上下文元素）提取周围 HTML
-        let localHtml = extractLocalHtml(tags.needHtml.query, tags.needHtml.contextId)
-
-        // contextId 失败 → 尝试原始查询文本搜索
-        if (!localHtml && tags.needHtml.contextId) {
-          log.info('[Phase 2] contextId 未命中，尝试文本搜索')
-          localHtml = extractLocalHtml(tags.needHtml.query)
-        }
-
-        // 原始查询失败 → 尝试简化查询（提取核心关键词）
-        if (!localHtml) {
-          const simpleQuery = simplifyQuery(tags.needHtml.query)
-          if (simpleQuery !== tags.needHtml.query) {
-            log.info('[Phase 2] 尝试简化查询', { original: tags.needHtml.query, simplified: simpleQuery })
-            localHtml = extractLocalHtml(simpleQuery)
-          }
-        }
-
-        if (localHtml) {
-          log.info('[Phase 2] 局部 HTML 提取成功', { htmlLength: localHtml.length })
-          const retryOutput = await this.callAI(
-            'Phase2-NeedHtml',
-            systemPrompt,
-            buildNeedHtmlUserMessage(text, tags.needHtml, localHtml),
-          )
-          if (retryOutput) {
-            const retryTags = extractTags(retryOutput)
-            log.info('[Phase 2] need_html 重试提取结果', {
-              commandsCount: retryTags.commands?.length || 0,
-              hasSkill: !!retryTags.skill,
-            })
-            if (retryTags.commands?.length || retryTags.skill) {
-              return { commands: retryTags.commands, skill: retryTags.skill, rawAiOutput: retryOutput }
-            }
-          }
-        } else {
-          log.warn('[Phase 2] 局部 HTML 提取失败')
-        }
-      }
-
       log.info('[Phase 2] ─── 提取成功 ───')
       return { commands: tags.commands, skill: tags.skill, needHtml: tags.needHtml, rawAiOutput: aiOutput }
     }
@@ -288,25 +242,6 @@ export class IntentDetector {
 
     return finalResponse
   }
-}
-
-/**
- * 简化查询关键词（从长描述中提取核心动作词）
- *
- * "推荐下的第一条内容的点赞按钮" → "点赞"
- * "搜索框旁边的设置图标" → "设置"
- */
-function simplifyQuery(query: string): string {
-  const actionKeywords = [
-    '点赞', '评论', '分享', '收藏', '关注', '取消关注',
-    '登录', '注册', '搜索', '提交', '发送', '删除', '编辑',
-    '保存', '取消', '确认', '下载', '上传', '播放', '暂停',
-    '关闭', '打开', '展开', '收起', '刷新', '返回',
-  ]
-  for (const kw of actionKeywords) {
-    if (query.includes(kw)) return kw
-  }
-  return query
 }
 
 /**

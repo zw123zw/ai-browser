@@ -2,7 +2,7 @@
  * 统一输入处理层类型定义
  */
 
-import type { Command, NeedHtmlRequest } from '@/src/browser/types'
+import type { Command } from '@/src/browser/types'
 
 /** 输入上下文 */
 export interface InputContext {

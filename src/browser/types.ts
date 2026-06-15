@@ -53,7 +53,7 @@ export interface ActionResult {
 
 /** [need_html] 请求 */
 export interface NeedHtmlRequest {
-  query: string    // 搜索关键词
-  reason: string   // 为什么需要 HTML
-  contextId?: string // 离目标最近的骨架元素 ID，用于提取周围 HTML
+  keywords: string[] // AI 对用户意图分词，用于在页面 HTML 中搜索
+  reason: string     // 为什么需要 HTML
+  description: string // 操作描述
 }

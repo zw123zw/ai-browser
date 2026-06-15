@@ -83,15 +83,23 @@ class SkeletonManager {
 }
 ```
 
-### 1.5 局部 HTML 提取（`[need_html]` 兜底）
+### 1.5 关键词 HTML 搜索（`[need_html]` 兜底）
 
 ```typescript
 // src/browser/local-html.ts
-export function extractLocalHtml(query: string, contextId?: string): string | null
-  // 1. contextId → [data-skeleton-id] 定位
-  // 2. /^e\d+$/ → 骨架 ID 匹配
-  // 3. 文本内容搜索 → 模糊匹配 textContent/aria-label/placeholder/title/value
-  // 向上 3 层父级 → 克隆清理 → 返回 HTML 或 null
+export function searchByKeywords(keywords: string[]): string | null
+  // 1. 遍历整个页面 DOM（不限视口）
+  // 2. 对每个元素检查是否可交互（复用骨架的 isClickable 逻辑）
+  // 3. 对可交互元素做关键词 AND 模糊匹配（textContent/aria-label/placeholder/title/value）
+  // 4. 匹配到的元素只保留元素本身（不带父级）
+  // 5. 清洗属性，只保留: data-skeleton-id, href, src, type, name, placeholder, value, role, aria-label, title
+  // 6. 移除 script/style/noscript 子元素，压缩空白
+  // 7. 所有匹配片段拼接返回，未找到返回 null
+  // 注意: data-skeleton-id 只在视口内骨架元素上有，视口外元素靠 text/aria-label/title 定位
+
+function matchesKeywords(el: HTMLElement, keywords: string[]): boolean
+  // 逐个关键词在 textContent/aria-label/placeholder/title/value 中模糊匹配
+  // 所有关键词都必须命中（AND 逻辑）
 ```
 
 ---
@@ -214,15 +222,15 @@ class ActionExecutor {
 │    - 能力域（15 种操作）                                 │
 │                                                         │
 │  AI 回复 → extractTags() 提取标签：                      │
-│    [command] → 执行指令                                  │
-│    [skill]   → 执行技能                                  │
-│    [need_html] → 内部处理（提取 HTML → 第二次 AI 请求）  │
-│    无标签 → 重试（最多 5 次）                            │
+│    [command] → 跳过已完成 → 执行剩余                     │
+│    [skill]   → 跳过已完成 → 执行剩余                     │
+│    [need_html] → searchByKeywords → 存片段 → 当错误处理  │
+│    无标签 → 记录错误 → 重试                              │
 │                                                         │
-│  重试消息展示：                                           │
-│    提取失败 → "⚠️ 指令提取失败，重试 N/5..."              │
-│    执行失败 → "⚠️ 指令执行失败，重试 N/5..."              │
-│    need_html → "⚠️ 需要更多页面信息，重试 N/5..."         │
+│  统一重试循环（最多 5 次）：                              │
+│    错误消息 = 新骨架 + 错误 + HTML 片段 + 已完成列表     │
+│    AI 重新生成完整指令 → 代码跳过已完成 → 执行剩余       │
+│    超过 5 次 → 提示用户                                  │
 └─────────────────────────────────────────────────────────┘
     │
     ▼
@@ -273,84 +281,142 @@ await this.processPhase2WithRetry(ctx.text, callbacks)
 - 聊天：流式打字效果 → 完整回复
 - 操作：思考中... → 🔧 正在执行 N 条指令 → ✅/❌ 结果
 
-### 4.3 Phase 2 `[need_html]` 内部处理
+### 4.3 Phase 2 统一重试循环
 
-```typescript
-// src/input/intent-detector.ts → detectPhase2()
+> intent-detector 不再处理 need_html，只负责提取标签。所有错误（标签提取失败、指令执行失败、need_html）统一由 pipeline 重试循环处理。
 
-if (tags.needHtml && !tags.commands?.length && !tags.skill) {
-  // 1. 提取局部 HTML
-  let localHtml = extractLocalHtml(tags.needHtml.query, tags.needHtml.contextId)
+**设计原则：**
+- AI 每次返回完整指令序列
+- 代码标记已完成的指令，只执行剩余的
+- 错误消息 = 新骨架 + 错误 + HTML 片段 + 已完成/失败/未执行列表
+- AI 根据新骨架和错误上下文重新生成指令
 
-  // 2. contextId 失败 → 文本搜索
-  if (!localHtml && tags.needHtml.contextId) {
-    localHtml = extractLocalHtml(tags.needHtml.query)
-  }
+**流程示例：**
 
-  // 3. 文本搜索失败 → 简化查询
-  if (!localHtml) {
-    const simpleQuery = simplifyQuery(tags.needHtml.query)
-    if (simpleQuery !== tags.needHtml.query) {
-      localHtml = extractLocalHtml(simpleQuery)
-    }
-  }
-
-  // 4. HTML 提取成功 → 第二次 AI 请求
-  if (localHtml) {
-    const retryOutput = await this.callAI(
-      'Phase2-NeedHtml',
-      systemPrompt,
-      buildNeedHtmlUserMessage(text, tags.needHtml, localHtml),
-    )
-    // 5. 从第二次回复提取 [command]
-    const retryTags = extractTags(retryOutput)
-    if (retryTags.commands?.length || retryTags.skill) {
-      return { commands: retryTags.commands, skill: retryTags.skill, rawAiOutput: retryOutput }
-    }
-  }
-}
 ```
+用户: "切换到短信登录，输入手机号18674069215，点击发送验证码"
 
-### 4.4 Phase 2 重试循环
+attempt=0:
+  骨架 → AI → [click 短信登录, type 手机号, click 获取验证码]
+  逐条执行：
+    click e23 短信登录 ✅ → completed: [{action:"click", elementId:"e23"}]
+    type e30 手机号    ❌ → 中断
+
+attempt=1:
+  重新提取骨架（页面已切换到短信登录）
+  错误消息 = 新骨架 + "type e30 未找到" + 已完成: click e23 ✅
+  AI → [type e201 手机号, click e209 获取验证码]
+  逐条执行：
+    type e201  ✅
+    click e209 ✅
+  → 全部成功，结束
+```
 
 ```typescript
 // src/input/pipeline.ts → processPhase2WithRetry()
 
+const MAX_RETRY = 5
+let htmlFragments: string | null = null
+let completed: Array<{ action: string; elementId?: string }> = []
+let completedKeys = new Set<string>()  // 兜底 key 快速查找
+
 for (let attempt = 0; attempt <= MAX_RETRY; attempt++) {
   const skeleton = this.skeletonManager.getSkeleton()
 
-  // 首次 vs 重试
   if (attempt === 0) {
-    phase2Result = await this.detector.detectPhase2(text, skeleton)
+    result = await detectPhase2(text, skeleton)
   } else {
-    callbacks.onRetryMessage(...)  // 展示重试提示
-    phase2Result = await this.retryPhase2(text, skeleton, lastAiOutput, lastError, errorType)
+    result = await retryPhase2(text, skeleton, lastError, htmlFragments, completed)
   }
 
-  // 未提取到标签 → 重试
-  if (!phase2Result.commands?.length && !phase2Result.skill && !phase2Result.needHtml) {
-    lastErrorType = 'extract'
+  // [need_html] → 关键词搜 HTML 片段，当错误处理
+  if (result.needHtml) {
+    if (!htmlFragments) {
+      htmlFragments = searchByKeywords(result.needHtml.keywords)
+      // searchByKeywords: 遍历全页面 DOM → 找可交互元素（复用 isClickable）
+      // → 关键词 AND 模糊匹配（textContent/aria-label/placeholder/title/value）
+      // → 只取匹配元素本身（不带父级）→ 清洗属性 → 压缩 → 拼接
+    }
+    lastError = `未找到 "${result.needHtml.query}" 对应元素`
     continue
   }
 
-  // 技能 → 执行
-  if (phase2Result.skill) { ... }
+  // [command] → 用兜底 key 匹配，跳过已完成，执行剩余
+  if (result.commands?.length) {
+    // 兜底 key 匹配：检查新指令是否能对上已完成的
+    const newKeys = result.commands.map(getCommandKey)
+    const matchedAny = newKeys.some(k => completedKeys.has(k))
 
-  // 指令 → 执行
-  if (phase2Result.commands?.length) { ... }
+    // 所有新指令的 key 都匹配不到 → 整个指令流重新执行
+    const toExecute = matchedAny
+      ? result.commands.filter(cmd => !completedKeys.has(getCommandKey(cmd)))
+      : result.commands
 
-  // need_html → pipeline 层重试
-  if (phase2Result.needHtml) {
-    if (!needHtmlRetried) {
-      lastErrorType = 'need_html'  // 显示"需要更多页面信息"
-      continue
+    let allSuccess = true
+    for (const cmd of toExecute) {
+      const execResult = await executor.execute(cmd)
+      if (execResult.success) {
+        const key = getCommandKey(cmd)
+        completedKeys.add(key)
+        completed.push({ action: cmd.action, elementId: cmd.elementId })
+      } else {
+        lastError = `[${cmd.action}] ${execResult.message}`
+        allSuccess = false
+        break
+      }
     }
-    // 二次放弃
-    callbacks.onError(...)
-    return
+
+    if (allSuccess) return
+    continue
   }
+
+  // 兜底 key：action + elementId，无 elementId 用 action + description/url
+  function getCommandKey(cmd: Command): string {
+    return `${cmd.action}:${cmd.elementId || cmd.description || cmd.url || ''}`
+  }
+
+  // [skill] → 执行
+  if (result.skill) {
+    const execResult = await onSkillActivate(result.skill.name, result.skill.userText)
+    if (execResult?.success) {
+      completed.push({ action: 'skill', elementId: result.skill.name })
+      return
+    }
+    lastError = execResult?.message || '技能执行失败'
+    continue
+  }
+
+  lastError = '未找到有效指令标签'
+}
+
+callbacks.onError('未找到对应元素，请准确说出您的需求')
+```
+
+### 4.4 重试消息构建
+
+```typescript
+// src/input/pipeline.ts → retryPhase2()
+
+async function retryPhase2(text, skeleton, lastError, htmlFragments, completed) {
+  let msg = `用户: "${text}"\n\n`
+  msg += `页面骨架:\n${JSON.stringify(skeleton)}\n\n`
+  msg += `已完成: ${completed.map(c => `${c.action} ${c.elementId || ''}`).join(', ') || '无'}\n`
+  msg += `错误: ${lastError}\n`
+  if (htmlFragments) msg += `相关HTML:\n${htmlFragments}\n`
+  msg += '请根据新骨架重新生成剩余指令。'
+  return callAI(msg)
 }
 ```
+
+**重试消息组成：**
+
+| 字段 | 作用 |
+|------|------|
+| 用户原文 | AI 知道原始意图 |
+| 新骨架 | 页面可能已变化，AI 基于当前状态生成 |
+| 已完成列表 | AI 知道哪些步骤不需要重复 |
+| 错误信息 | AI 知道哪里失败，避免重复错误 |
+| HTML 片段 | need_html 搜索到的补充信息（如有） |
 
 ---
 
@@ -364,8 +430,8 @@ for (let attempt = 0; attempt <= MAX_RETRY; attempt++) {
 | 单条指令失败 | `❌ **action** — message` | system |
 | 提取失败重试 | `⚠️ 指令提取失败，重试 N/5...` | system |
 | 执行失败重试 | `⚠️ 指令执行失败，重试 N/5...` | system |
-| need_html 重试 | `⚠️ 需要更多页面信息，重试 N/5...` | system |
-| 最终错误 | `❌ 多次尝试后仍无法完成操作（5 次），请重新描述` | system |
+| need_html 重试 | `🔍 正在搜索页面元素...` | system |
+| 最终失败 | `❌ 未找到对应元素，请准确说出您的需求` | system |
 
 ---
 
@@ -439,7 +505,9 @@ export const PHASE2_SYSTEM_PROMPT = `\`\`\`
 指令格式：
 [command]{"action":"click","elementId":"e3","description":"登录"}[/command]
 [skill]{"name":"翻译","userText":"这个页面"}[/skill]
-[need_html]{"query":"下载","reason":"骨架未找到","contextId":"e3"}[/need_html]
+[need_html]{"keywords":["收藏","按钮"],"reason":"骨架未找到","description":"点击收藏"}[/need_html]
+
+keywords: 对用户意图分词，尽量保留原始语句中的关键词，用于在页面 HTML 中搜索目标元素。
 
 能力域：${CAPABILITY_DOMAIN}
 定位优先级：elementId > fallbackSelector > description
@@ -451,7 +519,7 @@ export const PHASE2_SYSTEM_PROMPT = `\`\`\`
 3. 打开网站/搜索/滚动 → 直接返回[command]（不需要骨架）
 4. 操作页面元素 → 用骨架elementId定位
 5. 有匹配技能 → 返回[skill]
-6. 找不到目标 → 返回[need_html]
+6. 找不到目标 → 返回[need_html]，keywords 从用户原始语句中提取
 7. 多步操作按顺序输出多个[command]
 
 图标按钮识别：
@@ -465,12 +533,13 @@ export const PHASE2_SYSTEM_PROMPT = `\`\`\`
 
 ```typescript
 export const PHASE2_RETRY_SYSTEM_PROMPT = `\`\`\`
-你上一次的操作失败了。根据错误信息和最新骨架重新生成指令。
+你上一次的操作失败了。根据错误信息和最新骨架重新生成完整指令序列。
+跳过已完成的步骤，只生成剩余步骤。
 
 指令格式：
 [command]{"action":"click","elementId":"e3","description":"登录"}[/command]
 [skill]{"name":"翻译","userText":"这个页面"}[/skill]
-[need_html]{"query":"下载","reason":"骨架未找到","contextId":"e3"}[/need_html]
+[need_html]{"keywords":["收藏","按钮"],"reason":"骨架未找到","description":"点击收藏"}[/need_html]
 \`\`\``
 ```
 
@@ -480,14 +549,14 @@ export const PHASE2_RETRY_SYSTEM_PROMPT = `\`\`\`
 function buildPhase2UserMessage(text: string, skeleton: SemanticSkeleton): string
   // → "用户: \"...\"\n\n页面骨架:\n{...}"
 
-function buildRetryUserMessage(text, skeleton, lastAiOutput, lastError, errorType, recentMessages): string
-  // errorType: 'extract' | 'exec' | 'need_html'
-  // extract → "请在回复中包含有效指令标签。"
-  // exec → "骨架已更新，请根据新骨架重新定位。"
-  // need_html → "请改用 description 字段描述目标，禁止使用 [need_html]。"
-
-function buildNeedHtmlUserMessage(text, needHtml, localHtml): string
-  // → "用户: \"...\"\n\n未找到: ...\n\n\"...\"附近HTML:\n```html\n...\n```"
+function buildRetryUserMessage(
+  text: string,
+  skeleton: SemanticSkeleton,
+  lastError: string,
+  htmlFragments: string | null,
+  completed: Array<{ action: string; elementId?: string }>,
+): string
+  // → 用户原文 + 新骨架 + 已完成列表 + 错误 + HTML 片段（如有）+ "请根据新骨架重新生成剩余指令"
 ```
 
 ---
@@ -510,8 +579,8 @@ class InputPipeline {
   private async executeCommands(commands: Command[], callbacks: PipelineCallbacks): Promise<{ success: boolean; error: string }>
     // 串行执行, navigate 后 invalidate 骨架
 
-  private async retryPhase2(text, skeleton, lastAiOutput, lastError, errorType): Promise<Phase2Result>
-    // errorType: 'extract' | 'exec' | 'need_html'
+  private async retryPhase2(text, skeleton, lastError, htmlFragments, completed): Promise<Phase2Result>
+    // completed: 已完成指令列表，AI 跳过这些步骤
 }
 ```
 
@@ -527,10 +596,10 @@ class IntentDetector {
 
   async detectPhase2(text: string, skeleton: SemanticSkeleton): Promise<Phase2Result>
     // 返回: { commands?, skill?, needHtml?, rawAiOutput }
-    // 内部处理 [need_html]: extractLocalHtml → 第二次 AI 请求
+    // 不再内部处理 [need_html]，由 pipeline 统一重试循环管理
 
   private async callAI(scene, systemPrompt, userContent, onChunk?): Promise<string>
-    // scene: 'Phase1' | 'Phase2' | 'Phase2-NeedHtml'
+    // scene: 'Phase1' | 'Phase2'（不再有 'Phase2-NeedHtml'）
 }
 ```
 
@@ -622,6 +691,15 @@ src/
 - [x] [need_html] 内部处理（提取 HTML → 第二次 AI 请求）
 - [x] [need_html] pipeline 层重试（need_html 错误类型）
 - [x] 重试 5 次（提取失败 / 执行失败 / need_html 三种类型）
+- [ ] 统一重试循环（最多 5 次），所有错误类型统一处理
+- [ ] completed 追踪：兜底 key（action + elementId/description）标记已完成指令
+- [ ] 兜底 key 匹配：新指令 key 全部匹配不到 → 整个指令流重新执行
+- [ ] 重试消息 = 新骨架 + 错误 + HTML 片段 + 已完成列表
+- [ ] [need_html] 新增 keywords 字段（AI 对用户意图分词）
+- [ ] searchByKeywords() — 全页面 DOM 搜索可交互元素 + 关键词 AND 匹配
+- [ ] HTML 清洗：只保留 data-skeleton-id 等关键属性，只返回匹配元素本身
+- [ ] intent-detector 移除 need_html 内部处理，pipeline 统一管理
+- [ ] 失败提示 "未找到对应元素，请准确说出您的需求"
 - [x] "然后/接着/再" 语义规则
 - [x] 图标按钮识别提示词（svg/img/i/class含icon）
 - [x] 提示词集中在 prompts.ts
@@ -634,7 +712,7 @@ src/
 - 移动端浏览器
 - 拖拽操作
 - 文件上传/下载
-- iframe / Shadow DOM
+- iframe / Shadow DOM（骨架不覆盖，但 need_html 回退搜索可触达）
 - 跨页面连续指令队列
 
 
@@ -644,46 +722,19 @@ Phase 2 完整流程
 
   Phase 1 返回 [action] 后进入 Phase 2，调用 processPhase2WithRetry(text, callbacks)
 
-  重试循环（最多 5 次）
+  统一重试循环（最多 5 次）
 
   for attempt = 0 to 5:
     1. 提取骨架（每次重新提取）
-    2. 调用 AI 获取指令
-    3. 解析结果 → 分支处理
+    2. 调用 AI 获取指令（重试时带新骨架 + 错误 + HTML 片段 + 已完成列表）
+    3. 解析结果 → 统一处理
 
-  分支处理（按优先级）
+  [need_html] → searchByKeywords(keywords) → 存 htmlFragments → 当错误处理 → continue
+  [command] → 兜底 key 匹配已完成 → 跳过匹配到的 → 执行剩余
+    所有新指令 key 都匹配不到 → 整个指令流重新执行
+    兜底 key = action + elementId（无 elementId 用 action + description/url）
+    逐条执行 → 记录 completedKeys → 全部成功 return / 失败 continue
+  [skill] → 执行 → 记录 completed → 成功 return / 失败 continue
+  无标签 → lastError → continue
 
-  分支 A：标签提取失败（AI 没返回 [command]/[skill]/[need_html]）
-  → lastError = "未找到有效指令标签"
-  → lastErrorType = "extract"
-  → continue（重试）
-
-  分支 B：技能触发（AI 返回 [skill]）
-  → 调用 onSkillActivate(name, userText)
-  → 成功 → return
-  → 失败 → lastError = 错误信息，lastErrorType = "exec"，continue
-
-  分支 C：浏览器指令（AI 返回 [command]）
-  → 逐条执行 executeCommands()
-  → 全部成功 → return
-  → 任意失败 → lastError = 错误信息，lastErrorType = "exec"，continue
-  → 特殊：navigate 成功后调用 skeletonManager.invalidate() 清缓存
-
-  分支 D：need_html（AI 返回 [need_html]）
-  needHtmlRetried 计数器 +1
-
-  第 1 次：depth=1，提取 contextId 周围 HTML → 拼接给 AI 重试
-  第 2 次：depth=2，扩大范围
-  第 3 次：depth=3，再扩大
-  第 4 次：放弃 HTML 提取，告诉 AI "用 description 字段定位，禁止 [need_html]"
-  第 5 次：放弃，报错 "未找到对应元素"
-
-  提取失败 → 降级到 description 重试
-
-  重试时 AI 请求的构建
-
-  首次：detectPhase2(text, skeleton) → 完整的 Phase2 系统提示词 + 骨架 + 用户消息
-
-  重试：retryPhase2(...) → 用 PHASE2_RETRY_SYSTEM_PROMPT（精简版）+ 骨架 + 上次 AI 回复 + 错误信息
-
-  need_html 重试：直接用 buildNeedHtmlUserMessage() → 用户原文 + 局部 HTML + 指令
+  超过 5 次 → callbacks.onError("未找到对应元素，请准确说出您的需求")

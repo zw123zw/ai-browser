@@ -10,7 +10,7 @@
  * 3. 最优 — 参照能力域列表和技能列表的格式
  */
 
-import type { SemanticSkeleton, NeedHtmlRequest } from '@/src/browser/types'
+import type { SemanticSkeleton } from '@/src/browser/types'
 
 // ═══════════════════════════════════════════════════════════════
 // 能力域（所有 Prompt 共用）
@@ -72,8 +72,8 @@ export const PHASE2_SYSTEM_PROMPT = `\`\`\`
 [command]{"action":"click","elementId":"e3","description":"登录"}[/command]
 [command]{"action":"navigate","url":"https://..."}[/command]
 [skill]{"name":"翻译","userText":"这个页面"}[/skill]
-[need_html]{"query":"下载","reason":"骨架未找到","contextId":"e3"}[/need_html]
-contextId 是离目标最近的骨架元素ID（如按钮所在的卡片、容器），用于提取周围HTML。
+[need_html]{"keywords":["收藏","按钮"],"reason":"骨架未找到","description":"点击收藏"}[/need_html]
+keywords: 对用户意图分词，尽量保留原始语句中的关键词，用于在页面HTML中搜索目标元素。
 
 能力域：
 ${CAPABILITY_DOMAIN}
@@ -89,8 +89,9 @@ ${CAPABILITY_DOMAIN}
 3. 打开网站/搜索/滚动 → 直接返回[command]（不需要骨架）
 4. 操作页面元素 → 用骨架elementId定位
 5. 有匹配技能 → 返回[skill]
-6. 找不到目标 → 返回[need_html]
+6. 找不到目标 → 返回[need_html]，keywords从用户原始语句中提取
 7. 多步操作按顺序输出多个[command]
+8. 输入手机号/密码等文本 → 找input[type=text/password]，不要找select（select是下拉选择，如国家代码）
 
 图标按钮识别：
 - 骨架中text为"(icon)"的元素，优先检查aria-label/title属性来判断功能
@@ -101,13 +102,18 @@ ${CAPABILITY_DOMAIN}
 // ═══════════════════════════════════════════════════════════════
 
 export const PHASE2_RETRY_SYSTEM_PROMPT = `\`\`\`
-上次操作失败，根据错误和新骨架重新生成指令。只输出指令标签，不要解释。
+上次操作失败，根据错误信息和最新骨架重新生成完整指令序列。
+跳过已完成的步骤，只生成剩余步骤。只输出指令标签，不要解释。
 
 指令格式：
 [command]{"action":"click","elementId":"e3","description":"登录"}[/command]
 [skill]{"name":"翻译","userText":"这个页面"}[/skill]
-[need_html]{"query":"下载","reason":"骨架未找到","contextId":"e3"}[/need_html]
-contextId 是离目标最近的骨架元素ID，用于提取周围HTML。
+[need_html]{"keywords":["收藏","按钮"],"reason":"骨架未找到","description":"点击收藏"}[/need_html]
+
+规则：
+- 跳过已完成的步骤
+- elementId不确定时，同时提供description（系统会用description做文本匹配兜底）
+- 输入手机号/密码等文本 → 找input[type=text/password]，不要找select
 \`\`\``
 
 // ═══════════════════════════════════════════════════════════════
@@ -131,53 +137,33 @@ export function buildPhase2UserMessage(
 
 /**
  * 构建重试用户消息
+ *
+ * 错误消息 = 新骨架 + 已完成列表 + 错误 + HTML 片段（如有）
  */
 export function buildRetryUserMessage(
   text: string,
   skeleton: SemanticSkeleton,
-  lastAiOutput: string,
   lastError: string,
-  errorType: 'extract' | 'exec' | 'need_html',
-  recentMessages: Array<{ role: 'user' | 'assistant'; content: string }>,
+  htmlFragments: string | null,
+  completed: Array<{ action: string; elementId?: string }>,
 ): string {
   const parts: string[] = []
 
-  if (recentMessages.length > 0) {
-    const history = recentMessages
-      .map(m => `${m.role === 'user' ? '用户' : '助手'}: ${m.content.slice(0, 200)}`)
-      .join('\n')
-    parts.push(`对话历史:\n${history}`)
-  }
-
   parts.push(`用户: "${text}"`)
   parts.push(`页面骨架:\n${JSON.stringify(skeleton)}`)
-  parts.push(`你上次的回复:\n${lastAiOutput}`)
-  parts.push(`错误: ${lastError}`)
 
-  if (errorType === 'exec') {
-    parts.push('骨架已更新，请根据新骨架重新定位。')
-  } else if (errorType === 'need_html') {
-    parts.push('请改用 description 字段描述目标，禁止使用 [need_html]。')
-  } else {
-    parts.push('请在回复中包含有效指令标签。')
+  if (completed.length > 0) {
+    const completedStr = completed.map(c => `${c.action} ${c.elementId || ''}`).join(', ')
+    parts.push(`已完成: ${completedStr}`)
   }
 
-  return parts.join('\n\n')
-}
+  parts.push(`错误: ${lastError}`)
 
-/**
- * 构建 need_html 兜底消息
- */
-export function buildNeedHtmlUserMessage(
-  text: string,
-  needHtml: NeedHtmlRequest,
-  localHtml: string,
-): string {
-  return [
-    `用户: "${text}"`,
-    `未找到: ${needHtml.reason}`,
-    `"${needHtml.query}"附近HTML:\n\`\`\`html\n${localHtml}\n\`\`\``,
-    '根据HTML生成精确指令。',
-    '注意：HTML中的SVG是图标，不是交互目标。点击目标是SVG的父元素（通常是<button>或<a>），通过父元素的aria-label、title、class判断其功能。',
-  ].join('\n\n')
+  if (htmlFragments) {
+    parts.push(`相关HTML:\n${htmlFragments}`)
+  }
+
+  parts.push('请根据新骨架重新生成剩余指令。')
+
+  return parts.join('\n\n')
 }
