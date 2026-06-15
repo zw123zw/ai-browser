@@ -26,6 +26,8 @@ export interface ExtractedTags {
   isAction: boolean
   /** 提取到的 [need_html] */
   needHtml?: NeedHtmlRequest
+  /** 提取到的 [steps] 步骤预告 */
+  steps?: string[]
   /** 是否提取到了任何标签 */
   hasAnyTag: boolean
   /** 原始文本 */
@@ -45,8 +47,9 @@ export function extractTags(rawText: string): ExtractedTags {
     rawText,
   }
 
-  // [chat] 提取
+  // [chat] 提取 — 先匹配闭合标签，匹配不到则取 [chat] 后的整个内容
   const chatMatch = rawText.match(/\[chat\]([\s\S]*?)\[\/chat\]/)
+    || rawText.match(/\[chat\]([\s\S]+)/)
   if (chatMatch) {
     try {
       const parsed = JSON.parse(chatMatch[1])
@@ -57,13 +60,14 @@ export function extractTags(rawText: string): ExtractedTags {
     result.hasAnyTag = true
   }
 
-  // [command] 提取（支持多条）
+  // [command] 提取（支持多条）— 先匹配闭合标签，匹配不到则取 [command] 后的整个 JSON 对象
   const cmdMatches = [...rawText.matchAll(/\[command\]([\s\S]*?)\[\/command\]/g)]
-  if (cmdMatches.length > 0) {
+  const cmdFallback = cmdMatches.length > 0 ? cmdMatches : [...rawText.matchAll(/\[command\](\{[\s\S]*\})/g)]
+  if (cmdFallback.length > 0) {
     const commands: Command[] = []
-    for (const m of cmdMatches) {
+    for (const m of cmdFallback) {
       try {
-        commands.push(JSON.parse(m[1]))
+        commands.push(JSON.parse(m[1].trim()))
       } catch {
         log.warn('command JSON 解析失败', { raw: m[1].slice(0, 100) })
       }
@@ -74,11 +78,12 @@ export function extractTags(rawText: string): ExtractedTags {
     }
   }
 
-  // [skill] 提取
+  // [skill] 提取 — 先匹配闭合标签，匹配不到则取 [skill] 后的整个 JSON 对象
   const skillMatch = rawText.match(/\[skill\]([\s\S]*?)\[\/skill\]/)
+    || rawText.match(/\[skill\](\{[\s\S]*\})/)
   if (skillMatch) {
     try {
-      const d = JSON.parse(skillMatch[1])
+      const d = JSON.parse(skillMatch[1].trim())
       result.skill = { name: d.name, userText: d.userText || '' }
       result.hasAnyTag = true
     } catch {
@@ -92,14 +97,39 @@ export function extractTags(rawText: string): ExtractedTags {
     result.hasAnyTag = true
   }
 
-  // [need_html] 提取
+  // [need_html] 提取 — 先匹配闭合标签，匹配不到则取 [need_html] 后的整个 JSON 对象
   const htmlMatch = rawText.match(/\[need_html\]([\s\S]*?)\[\/need_html\]/)
+    || rawText.match(/\[need_html\](\{[\s\S]*\})/)
   if (htmlMatch) {
     try {
-      result.needHtml = JSON.parse(htmlMatch[1])
+      result.needHtml = JSON.parse(htmlMatch[1].trim())
       result.hasAnyTag = true
     } catch {
-      log.warn('need_html JSON 解析失败', { raw: htmlMatch[1].slice(0, 100) })
+      log.warn('need_html JSON 解析失败，尝试容错提取', { raw: htmlMatch[1].slice(0, 200) })
+      // 容错：尝试提取 keywords、reason、description 字段
+      const keywords = htmlMatch[1].match(/"keywords"\s*:\s*(\[[^\]]*\])/)?.[1]
+      const reason = htmlMatch[1].match(/"reason"\s*:\s*"([^"]*)"/)?.[1]
+      const description = htmlMatch[1].match(/"description"\s*:\s*"([^"]*)"/)?.[1]
+      if (keywords && description) {
+        try {
+          result.needHtml = { keywords: JSON.parse(keywords), reason: reason || '', description }
+          result.hasAnyTag = true
+          log.info('need_html 容错提取成功', result.needHtml)
+        } catch {
+          log.warn('need_html 容错提取也失败了')
+        }
+      }
+    }
+  }
+
+  // [steps] 提取 — 步骤预告，步骤名用空格隔开；先匹配闭合标签，匹配不到则取 [steps] 后到行尾
+  const stepsMatch = rawText.match(/\[steps\]([\s\S]*?)\[\/steps\]/)
+    || rawText.match(/\[steps\](.+?)(?:\n|$)/)
+  if (stepsMatch) {
+    const steps = stepsMatch[1].trim().split(/\s+/).filter(Boolean)
+    if (steps.length > 0) {
+      result.steps = steps
+      result.hasAnyTag = true
     }
   }
 

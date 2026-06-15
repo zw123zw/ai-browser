@@ -26,7 +26,7 @@ const KEEP_ATTRS = new Set([
 /**
  * 根据关键词在整个页面 DOM 搜索可交互元素，返回清洗后的 HTML 片段
  *
- * @param keywords AI 对用户意图分词结果，所有关键词必须全部命中（AND）
+ * @param keywords AI 对用户意图分词结果，任一关键词命中即可（OR）
  * @returns 拼接的 HTML 片段，未找到返回 null
  */
 export function searchByKeywords(keywords: string[]): string | null {
@@ -101,9 +101,9 @@ function isElementVisible(el: HTMLElement): boolean {
 }
 
 /**
- * 关键词 AND 模糊匹配
+ * 关键词 OR 模糊匹配
  *
- * 每个关键词都必须在 textContent/aria-label/placeholder/title/value 中出现
+ * 任一关键词在 textContent/aria-label/placeholder/title/value 中出现即命中
  */
 function matchesKeywords(el: HTMLElement, keywords: string[]): boolean {
   const text = (el.textContent || '').replace(/\s+/g, ' ').trim()
@@ -114,7 +114,7 @@ function matchesKeywords(el: HTMLElement, keywords: string[]): boolean {
 
   const sources = [text, ariaLabel, placeholder, titleAttr, value]
 
-  return keywords.every(kw => {
+  return keywords.some(kw => {
     const normalizedKw = kw.replace(/\s+/g, ' ').trim().toLowerCase()
     return sources.some(s => s.toLowerCase().includes(normalizedKw))
   })

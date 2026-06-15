@@ -43,6 +43,7 @@ export interface Command {
   description?: string     // 操作描述（日志用 / 文本匹配兜底）
   tabAction?: 'newTab' | 'closeTab' | 'switchTab' | 'nextTab' | 'prevTab' // 标签页操作类型
   tabQuery?: string        // switchTab 的目标标签关键词（如 "B站"、"淘宝"）
+  done?: number            // 1=最后一步，0=还有步骤（用于停止判断）
 }
 
 /** 执行结果 */

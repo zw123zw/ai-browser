@@ -55,7 +55,6 @@ function onMessage(msg: any, sender: chrome.runtime.MessageSender, sendResponse:
 function onKeydown(e: KeyboardEvent) {
   const sc = settingsStore.settings.shortcut;
   if (matchShortcut(e, sc)) {
-    console.log('[App] 快捷键触发:', sc);
     e.preventDefault();
     e.stopPropagation();
     toggle();

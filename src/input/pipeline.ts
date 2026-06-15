@@ -17,7 +17,7 @@ import { ActionExecutor } from '@/src/browser/action-executor'
 import { SkeletonManager } from '@/src/browser/skeleton'
 import { searchByKeywords } from '@/src/browser/local-html'
 import { extractTags } from './tag-parser'
-import { PHASE2_RETRY_SYSTEM_PROMPT, buildRetryUserMessage } from './prompts'
+import { PHASE2_SYSTEM_PROMPT, buildStreamingUserMessage } from './prompts'
 import type { InputContext, PipelineCallbacks } from './types'
 import type { AppSettings } from '@/src/types'
 import type { Command, SemanticSkeleton } from '@/src/browser/types'
@@ -119,157 +119,63 @@ export class InputPipeline {
   }
 
   // ═══════════════════════════════════════════════
-  // Phase 2 + 统一重试循环
+  // Phase 2 — 流式执行（每次 1 条指令）
   // ═══════════════════════════════════════════════
 
   private async processPhase2WithRetry(text: string, callbacks: PipelineCallbacks): Promise<void> {
-    log.info('[Phase 2] ─── 操作决策 + 统一重试循环 ───', { maxRetry: MAX_RETRY })
+    log.info('[Phase 2] ─── 流式执行模式 ───', { maxRetry: MAX_RETRY })
 
+    const completed: Array<{ action: string; elementId?: string; description?: string }> = []
+    let totalSteps = -1          // -1 = AI 未返回 [steps]，未知总数
+    let consecutiveErrors = 0
     let lastError = ''
-    let htmlFragments: string | null = null
-    let completed: Array<{ action: string; elementId?: string }> = []
-    let completedKeys = new Set<string>()
 
-    for (let attempt = 0; attempt <= MAX_RETRY; attempt++) {
-      const skeleton = this.skeletonManager.getSkeleton()
-
-      log.info(`[Phase 2] ─── 第 ${attempt === 0 ? '首次' : `重试 ${attempt}/${MAX_RETRY}`} ───`, {
-        skeletonUrl: skeleton.url,
-        skeletonElements: skeleton.elements.length,
-        completedCount: completed.length,
-      })
-
-      // ── 首次 vs 重试 ──
-      let phase2Result
-      if (attempt === 0) {
-        phase2Result = await this.detector.detectPhase2(text, skeleton)
-      } else {
-        callbacks.onRetryMessage(`⚠️ 操作失败，重试 ${attempt}/${MAX_RETRY}...`)
-        phase2Result = await this.retryPhase2(text, skeleton, lastError, htmlFragments, completed)
+    while (consecutiveErrors < MAX_RETRY) {
+      // ★ 双重停止条件 1：[steps] 步数已到
+      if (totalSteps > 0 && completed.length >= totalSteps) {
+        log.info(`[Phase 2] ═══ [steps] 步数已到 ${totalSteps}，全部完成 ═══`)
+        break
       }
 
-      // ── [command] + [need_html] 共存时：先执行 command，need_html 留给下轮 ──
-      // ── 纯 [need_html]（无 command）→ 搜 HTML 片段，当错误处理 ──
-      if (phase2Result.needHtml && !phase2Result.commands?.length) {
-        log.info('[Phase 2] → need_html（无 command）', {
+      // 每轮重新提取骨架
+      const skeleton = this.skeletonManager.getSkeleton()
+
+      log.info(`[Phase 2] ─── 第 ${completed.length + 1} 步 ───`, {
+        skeletonElements: skeleton.elements.length,
+        completedCount: completed.length,
+        totalSteps,
+        consecutiveErrors,
+      })
+
+      // AI 生成 1 条指令
+      const phase2Result = await this.callStreamingAI(text, skeleton, completed, lastError)
+
+      // ★ 首次解析 [steps]，记录总步骤数
+      if (phase2Result.steps?.length) {
+        totalSteps = phase2Result.steps.length
+        log.info(`[Phase 2] [steps] ${totalSteps} 步: ${phase2Result.steps.join(' → ')}`)
+      }
+
+      // ── 无标签 → 所有步骤完成或 AI 无输出 ──
+      if (!phase2Result.commands?.length && !phase2Result.skill && !phase2Result.needHtml) {
+        log.info('[Phase 2] ═══ AI 无更多指令，任务完成 ═══')
+        break
+      }
+
+      // ── need_html → 搜索 HTML 片段后重试 ──
+      if (phase2Result.needHtml) {
+        log.info('[Phase 2] → need_html', {
           keywords: phase2Result.needHtml.keywords,
           reason: phase2Result.needHtml.reason,
         })
-        if (!htmlFragments) {
-          htmlFragments = searchByKeywords(phase2Result.needHtml.keywords)
-          log.info('[Phase 2] 关键词搜索结果', {
-            found: !!htmlFragments,
-            length: htmlFragments?.length || 0,
-          })
-        }
+        const htmlFragments = searchByKeywords(phase2Result.needHtml.keywords)
+        log.info('[Phase 2] 关键词搜索结果', { found: !!htmlFragments })
         lastError = `未找到 "${phase2Result.needHtml.description}" 对应元素`
+        consecutiveErrors++
         continue
       }
 
-      // 有 command + need_html 共存 → 先执行 command，执行完再搜 HTML
-      let pendingNeedHtml = phase2Result.needHtml && phase2Result.commands?.length
-        ? phase2Result.needHtml
-        : null
-
-      if (pendingNeedHtml) {
-        log.info('[Phase 2] → command + need_html 共存，先执行 command', {
-          needHtmlKeywords: pendingNeedHtml.keywords,
-          commandCount: phase2Result.commands!.length,
-        })
-      }
-
-      // ── [command] → 兜底 key 匹配，跳过已完成，执行剩余 ──
-      if (phase2Result.commands?.length) {
-        log.info('[Phase 2] → 指令执行', {
-          count: phase2Result.commands.length,
-          completedCount: completed.length,
-        })
-        log.info('[Phase 2] 指令详情:', phase2Result.commands.map(c => ({
-          action: c.action,
-          elementId: c.elementId,
-          description: c.description,
-          url: c.url,
-          text: c.text,
-          key: c.key,
-          direction: c.direction,
-        })))
-
-        callbacks.onCommandsParsed(phase2Result.commands)
-
-        // 兜底 key 匹配：检查新指令是否能对上已完成的
-        const newKeys = phase2Result.commands.map(getCommandKey)
-        const matchedAny = newKeys.some(k => completedKeys.has(k))
-
-        // 所有新指令的 key 都匹配不到 → 整个指令流重新执行
-        const toExecute = matchedAny
-          ? phase2Result.commands.filter(cmd => !completedKeys.has(getCommandKey(cmd)))
-          : phase2Result.commands
-
-        log.info('[Phase 2] 待执行指令', {
-          total: phase2Result.commands.length,
-          toExecute: toExecute.length,
-          skipped: phase2Result.commands.length - toExecute.length,
-          matchedAny,
-        })
-
-        let allSuccess = true
-        for (const cmd of toExecute) {
-          log.info('[Phase 2] ── 执行指令 ──', {
-            action: cmd.action,
-            elementId: cmd.elementId,
-            description: cmd.description,
-          })
-
-          const result = await this.executor.execute(cmd)
-
-          log.info('[Phase 2] 指令结果', {
-            action: cmd.action,
-            success: result.success,
-            message: result.message,
-          })
-
-          callbacks.onCommandResult(cmd.action, result.success, result.message)
-
-          if (result.success) {
-            const key = getCommandKey(cmd)
-            completedKeys.add(key)
-            completed.push({ action: cmd.action, elementId: cmd.elementId })
-
-            if (cmd.action === 'navigate') {
-              log.info('[Phase 2] navigate 成功，标记骨架失效')
-              this.skeletonManager.invalidate()
-            }
-          } else {
-            lastError = `[${cmd.action}] ${result.message}`
-            allSuccess = false
-            log.warn('[Phase 2] 指令执行失败', { action: cmd.action, error: lastError })
-            break
-          }
-        }
-
-        if (allSuccess) {
-          if (pendingNeedHtml) {
-            // command 执行成功，页面已变，现在搜 HTML 片段
-            log.info('[Phase 2] command 成功，页面已变，搜索 need_html 片段', {
-              keywords: pendingNeedHtml.keywords,
-            })
-            htmlFragments = searchByKeywords(pendingNeedHtml.keywords)
-            lastError = `未找到 "${pendingNeedHtml.description}" 对应元素`
-            log.info('[Phase 2] need_html 搜索结果', {
-              found: !!htmlFragments,
-              length: htmlFragments?.length || 0,
-            })
-            continue
-          }
-          log.info('[Phase 2] ═══ 全部指令执行成功 ═══')
-          callbacks.onAllCommandsDone?.(text, phase2Result.commands)
-          return
-        }
-
-        continue
-      }
-
-      // ── [skill] → 执行 ──
+      // ── skill → 执行 ──
       if (phase2Result.skill) {
         const { name, userText } = phase2Result.skill
         log.info('[Phase 2] → 技能触发', { name, userText })
@@ -277,61 +183,103 @@ export class InputPipeline {
 
         try {
           const result = await this.options.onSkillActivate?.(name, userText)
-          log.info('[Phase 2] 技能执行结果', { name, success: result?.success, message: result?.message })
           if (result && result.success) {
-            completedKeys.add(getCommandKey({ action: 'skill', elementId: name }))
             completed.push({ action: 'skill', elementId: name })
-            log.info('[Phase 2] ═══ 技能执行成功 ═══')
-            return
+            consecutiveErrors = 0
+            lastError = ''
+            continue
           }
           lastError = result?.message || `技能 "${name}" 执行失败`
         } catch (error) {
           lastError = `技能异常: ${error instanceof Error ? error.message : String(error)}`
           log.error('[Phase 2] 技能执行异常', error)
         }
+        consecutiveErrors++
         continue
       }
 
-      // ── 无标签 ──
-      lastError = '未找到有效指令标签'
-      log.warn('[Phase 2] 未提取到有效标签', { attempt: attempt + 1 })
-      continue
+      // ── command → 执行单条指令 ──
+      const cmd = phase2Result.commands![0]
+      log.info('[Phase 2] ── 执行指令 ──', {
+        action: cmd.action,
+        elementId: cmd.elementId,
+        description: cmd.description,
+        done: cmd.done,
+      })
+
+      callbacks.onCommandsParsed([cmd])
+      const result = await this.executor.execute(cmd)
+
+      log.info('[Phase 2] 指令结果', {
+        action: cmd.action,
+        success: result.success,
+        message: result.message,
+      })
+
+      callbacks.onCommandResult(cmd.action, result.success, result.message)
+
+      if (result.success) {
+        completed.push({ action: cmd.action, elementId: cmd.elementId, description: cmd.description })
+        consecutiveErrors = 0
+        lastError = ''
+
+        if (cmd.action === 'navigate') {
+          this.skeletonManager.invalidate()
+        }
+
+        // ★ 双重停止条件 2：AI 标记 done=1，最后一步
+        if (cmd.done === 1) {
+          log.info('[Phase 2] ═══ done=1，最后一步完成，停止 ═══')
+          break
+        }
+
+        // 等待页面更新（弹窗/新内容渲染），再进入下一轮提取骨架
+        await new Promise(resolve => setTimeout(resolve, 500))
+      } else {
+        lastError = `[${cmd.action}] ${result.message}`
+        consecutiveErrors++
+        log.warn('[Phase 2] 指令执行失败', { action: cmd.action, error: lastError })
+      }
     }
 
-    log.error(`[Phase 2] ═══ 超过 ${MAX_RETRY} 次重试上限，放弃 ═══`)
-    callbacks.onError('未找到对应元素，请准确说出您的需求')
+    if (consecutiveErrors >= MAX_RETRY) {
+      log.error(`[Phase 2] ═══ 连续 ${MAX_RETRY} 次失败，放弃 ═══`)
+      callbacks.onError('未找到对应元素，请准确说出您的需求')
+    } else if (completed.length > 0) {
+      log.info('[Phase 2] ═══ 流式执行完成 ═══', { totalSteps: completed.length })
+      callbacks.onAllCommandsDone?.(text, completed.map(c => ({ action: c.action, elementId: c.elementId })))
+    }
   }
 
   // ═══════════════════════════════════════════════
-  // 重试 AI 请求
+  // 流式 AI 调用（每次 1 条指令）
   // ═══════════════════════════════════════════════
 
-  private async retryPhase2(
+  private async callStreamingAI(
     text: string,
     skeleton: SemanticSkeleton,
+    completed: Array<{ action: string; elementId?: string; description?: string }>,
     lastError: string,
-    htmlFragments: string | null,
-    completed: Array<{ action: string; elementId?: string }>,
   ): Promise<import('./intent-detector').Phase2Result> {
     const settings = this.options.getSettings()
     const model = settings.models.find(m => m.id === settings.defaultModelId) || settings.models[0]
     if (!model) {
-      log.error('[重试] 未找到可用模型')
+      log.error('[流式] 未找到可用模型')
       return { rawAiOutput: '' }
     }
 
     const { createAdapter } = await import('@/src/adapters')
     const adapter = createAdapter(model.provider || settings.provider)
 
-    const userContent = buildRetryUserMessage(text, skeleton, lastError, htmlFragments, completed)
+    const skillList = this.options.getSkillList?.() || '（暂无可用技能）'
+    const systemPrompt = PHASE2_SYSTEM_PROMPT.replace('{skillList}', skillList)
+    const userContent = buildStreamingUserMessage(text, skeleton, completed, lastError || undefined)
 
-    log.info('[重试] ═══ 重试 AI 请求 ═══', {
-      skeletonUrl: skeleton.url,
+    log.info('[流式] ═══ AI 请求 ═══', {
       skeletonElements: skeleton.elements.length,
       completedCount: completed.length,
-      hasHtmlFragments: !!htmlFragments,
+      hasError: !!lastError,
     })
-    log.info('[重试] 重试用户消息:', userContent)
 
     let fullResponse = ''
     try {
@@ -341,7 +289,7 @@ export class InputPipeline {
           apiKey: model.apiKey || settings.apiKey,
           modelName: model.modelName || settings.defaultModelId,
           messages: [
-            { id: Date.now().toString(), role: 'user', content: `${PHASE2_RETRY_SYSTEM_PROMPT}\n\n${userContent}`, timestamp: Date.now() },
+            { id: Date.now().toString(), role: 'user', content: `${systemPrompt}\n\n${userContent}`, timestamp: Date.now() },
           ],
           signal: this.options.getSignal?.(),
         },
@@ -351,25 +299,34 @@ export class InputPipeline {
       )
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') throw error
-      log.error('[重试] AI 请求失败', error)
+      log.error('[流式] AI 请求失败', error)
       return { rawAiOutput: '' }
     }
 
-    log.info('[重试] ═══ 重试 AI 响应 ═══', { responseLength: fullResponse.length })
-    log.info('[重试] AI 回复全文:', fullResponse)
+    log.info('[流式] ═══ AI 响应 ═══', { responseLength: fullResponse.length })
+    log.info('[流式] AI 回复:', fullResponse)
 
     const tags = extractTags(fullResponse)
-    log.info('[重试] 标签提取结果', {
-      commandsCount: tags.commands?.length || 0,
-      commands: tags.commands?.map(c => ({ action: c.action, elementId: c.elementId, description: c.description })),
-      skill: tags.skill,
-      needHtml: tags.needHtml,
+
+    // 流式模式：只取第一条指令
+    const firstCommand = tags.commands?.slice(0, 1)
+
+    log.info('[流式] 标签提取', {
+      hasCommand: !!firstCommand?.length,
+      action: firstCommand?.[0]?.action,
+      elementId: firstCommand?.[0]?.elementId,
+      description: firstCommand?.[0]?.description,
+      done: firstCommand?.[0]?.done,
+      hasSkill: !!tags.skill,
+      hasNeedHtml: !!tags.needHtml,
+      steps: tags.steps,
     })
 
     return {
-      commands: tags.commands,
+      commands: firstCommand,
       skill: tags.skill,
       needHtml: tags.needHtml,
+      steps: tags.steps,
       rawAiOutput: fullResponse,
     }
   }

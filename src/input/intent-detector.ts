@@ -35,6 +35,7 @@ export interface Phase2Result {
   commands?: Command[]
   skill?: { name: string; userText: string }
   needHtml?: NeedHtmlRequest
+  steps?: string[]
   rawAiOutput: string
 }
 
@@ -127,9 +128,9 @@ export class IntentDetector {
     })
 
     // 提取到有效标签（need_html 由 pipeline 统一处理）
-    if (tags.commands?.length || tags.skill || tags.needHtml) {
+    if (tags.commands?.length || tags.skill || tags.needHtml || tags.steps?.length) {
       log.info('[Phase 2] ─── 提取成功 ───')
-      return { commands: tags.commands, skill: tags.skill, needHtml: tags.needHtml, rawAiOutput: aiOutput }
+      return { commands: tags.commands, skill: tags.skill, needHtml: tags.needHtml, steps: tags.steps, rawAiOutput: aiOutput }
     }
 
     log.warn('[Phase 2] ─── 未提取到有效标签 ───')

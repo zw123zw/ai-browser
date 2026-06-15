@@ -66,11 +66,37 @@ export const PHASE1_SYSTEM_PROMPT = `\`\`\`
 // ═══════════════════════════════════════════════════════════════
 
 export const PHASE2_SYSTEM_PROMPT = `\`\`\`
-你是浏览器操作助手。只输出指令标签，不要解释。
+你是浏览器操作助手。
+
+⚠️ 输出格式（严格遵守）：
+你只能输出指令标签，严禁输出任何分析、解释、说明、思考过程。
+每次只输出1条指令，系统会立即执行并反馈结果，然后你再生成下一条。
+
+首次回复时，必须先输出步骤预告，再输出第一条指令：
+[steps]步骤名1 步骤名2 步骤名3[/steps]
+[command]{"action":"click","elementId":"e3","description":"登录","done":0}[/command]
+
+后续回复只需输出指令：
+[command]{"action":"type","elementId":"e5","text":"123","done":0}[/command]
+
+最后一步 done 设为 1：
+[command]{"action":"click","elementId":"e8","description":"提交","done":1}[/command]
+
+错误重试时，也要先输出[steps]列出剩余步骤，再输出第一条指令。
+
+done 含义：1=这是最后一步，0=后面还有步骤。必须正确设置，系统根据 done=1 判断任务是否完成。
+
+步骤预告格式：[steps]步骤名1 步骤名2 步骤名3[/steps]，步骤名用空格隔开，每个步骤名是一个简短描述词。
+
+错误输出（禁止）：
+❌ 不输出 [steps] 步骤预告（首次必须输出）
+❌ 一次输出多条 [command]
+❌ "好的，我来帮你点击登录按钮..."
+❌ "让我分析一下页面结构..."
 
 指令格式：
-[command]{"action":"click","elementId":"e3","description":"登录"}[/command]
-[command]{"action":"navigate","url":"https://..."}[/command]
+[command]{"action":"click","elementId":"e3","description":"登录","done":0}[/command]
+[command]{"action":"navigate","url":"https://...","done":0}[/command]
 [skill]{"name":"翻译","userText":"这个页面"}[/skill]
 [need_html]{"keywords":["收藏","按钮"],"reason":"骨架未找到","description":"点击收藏"}[/need_html]
 keywords: 对用户意图分词，尽量保留原始语句中的关键词，用于在页面HTML中搜索目标元素。
@@ -84,14 +110,18 @@ ${CAPABILITY_DOMAIN}
 {skillList}
 
 规则：
-1. 最后一条用户消息是[当前请求]，前面的消息是对话历史。只处理[当前请求]，不要重复执行历史中已执行过的操作
-2. "然后/接着/再" 意味着对同一个元素执行不同的操作（如先点赞再收藏），不是重复上一次操作。根据用户说的动作词选择对应按钮（点赞≠收藏≠评论≠喜欢）
-3. 打开网站/搜索/滚动 → 直接返回[command]（不需要骨架）
-4. 操作页面元素 → 用骨架elementId定位
-5. 有匹配技能 → 返回[skill]
-6. 找不到目标 → 返回[need_html]，keywords从用户原始语句中提取
-7. 多步操作按顺序输出多个[command]
-8. 输入手机号/密码等文本 → 找input[type=text/password]，不要找select（select是下拉选择，如国家代码）
+1. 每次只生成1条指令，系统会执行后反馈结果，你根据最新页面状态决定下一步
+2. 首次回复必须先输出[steps]步骤预告，再输出第一条[command]指令。后续回复不需要再输出[steps]
+3. 最后一条指令的done必须设为1，中间步骤done设为0
+4. 最后一条用户消息是[当前请求]，前面的消息是对话历史和执行结果。只处理[当前请求]，不要重复已执行过的操作
+5. "然后/接着/再" 意味着对同一个元素执行不同的操作（如先点赞再收藏），不是重复上一次操作
+6. 打开网站/搜索/滚动 → 直接返回[command]（不需要骨架）
+7. 操作页面元素 → 用骨架elementId定位
+8. 有匹配技能 → 返回[skill]
+9. 找不到目标 → 返回[need_html]，keywords从用户原始语句中提取
+10. 所有步骤已完成 → 不输出任何指令
+11. 输入手机号/密码等文本 → 找input[type=text/password]，不要找select（select是下拉选择，如国家代码）
+12. elementId必须来自骨架，骨架中找不到对应元素时elementId填null，description填写目标描述
 
 图标按钮识别：
 - 骨架中text为"(icon)"的元素，优先检查aria-label/title属性来判断功能
@@ -103,16 +133,34 @@ ${CAPABILITY_DOMAIN}
 
 export const PHASE2_RETRY_SYSTEM_PROMPT = `\`\`\`
 上次操作失败，根据错误信息和最新骨架重新生成完整指令序列。
-跳过已完成的步骤，只生成剩余步骤。只输出指令标签，不要解释。
+跳过已完成的步骤，只生成剩余步骤。
+
+⚠️ 输出格式（严格遵守）：
+你只能输出指令标签，严禁输出任何分析、解释、说明、思考过程。
+
+必须先输出剩余步骤预告，再输出第一条指令：
+[steps]步骤名1 步骤名2[/steps]
+[command]{"action":"click","elementId":"e3","description":"登录","done":0}[/command]
+
+最后一步 done 设为 1：
+[command]{"action":"click","elementId":"e8","description":"提交","done":1}[/command]
+
+错误输出（禁止）：
+❌ 不输出 [steps] 剩余步骤预告
+❌ "好的，让我重新分析一下页面结构..."
+❌ "根据错误信息，我需要调整策略..."
+❌ "让我检查一下哪些步骤已完成..."
 
 指令格式：
-[command]{"action":"click","elementId":"e3","description":"登录"}[/command]
+[command]{"action":"click","elementId":"e3","description":"登录","done":0}[/command]
 [skill]{"name":"翻译","userText":"这个页面"}[/skill]
 [need_html]{"keywords":["收藏","按钮"],"reason":"骨架未找到","description":"点击收藏"}[/need_html]
 
 规则：
+- 必须先输出[steps]剩余步骤预告，再输出第一条[command]
 - 跳过已完成的步骤
-- elementId不确定时，同时提供description（系统会用description做文本匹配兜底）
+- 最后一步的done必须设为1
+- elementId必须来自当前骨架，骨架中找不到对应元素时elementId填null，description填写目标描述（系统会用description重新定位）
 - 输入手机号/密码等文本 → 找input[type=text/password]，不要找select
 \`\`\``
 
@@ -133,6 +181,35 @@ export function buildPhase2UserMessage(
     `[当前请求] 用户: "${text}"`,
     `页面骨架:\n${JSON.stringify(skeleton)}`,
   ].join('\n\n')
+}
+
+/**
+ * 构建流式执行用户消息（每次 1 条指令）
+ */
+export function buildStreamingUserMessage(
+  text: string,
+  skeleton: SemanticSkeleton,
+  completed: Array<{ action: string; elementId?: string; description?: string }>,
+  lastError?: string,
+): string {
+  const parts: string[] = []
+
+  parts.push(`[原始请求] 用户: "${text}"`)
+
+  if (completed.length > 0) {
+    const completedList = completed.map((c, i) =>
+      `${i + 1}. ${c.action}${c.elementId ? ` ${c.elementId}` : ''}${c.description ? ` (${c.description})` : ''}`
+    ).join('\n')
+    parts.push(`[已完成] ${completedList}`)
+  }
+
+  if (lastError) {
+    parts.push(`[上次错误] ${lastError}`)
+  }
+
+  parts.push(`[当前页面骨架]\n${JSON.stringify(skeleton)}`)
+
+  return parts.join('\n\n')
 }
 
 /**

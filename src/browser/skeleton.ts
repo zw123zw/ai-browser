@@ -66,6 +66,7 @@ export class SkeletonManager {
  */
 export function extractSkeleton(doc: Document): SemanticSkeleton {
   const elements: SkeletonElement[] = []
+  const domParentIdMap = new Map<string, string>() // element id → DOM parent skeleton id
   let idCounter = 0
   let scannedCount = 0
   let clickableCount = 0
@@ -75,9 +76,19 @@ export function extractSkeleton(doc: Document): SemanticSkeleton {
   const viewportWidth = window.innerWidth
   const allElements = doc.body.querySelectorAll('*')
 
+  // 统计已有的最大 ID 编号，避免新旧 ID 冲突
+  for (const el of allElements) {
+    const existingId = (el as HTMLElement).dataset.skeletonId
+    if (existingId) {
+      const num = parseInt(existingId.slice(1), 10)
+      if (!isNaN(num) && num > idCounter) idCounter = num
+    }
+  }
+
   for (const el of allElements) {
     const htmlEl = el as HTMLElement
-    const id = `e${++idCounter}`
+    // 保留已有的 ID，只给新元素分配
+    const id = htmlEl.dataset.skeletonId || `e${++idCounter}`
     htmlEl.dataset.skeletonId = id
 
     // 1. 只保留可交互标签
@@ -97,22 +108,51 @@ export function extractSkeleton(doc: Document): SemanticSkeleton {
     const element = extractElement(htmlEl, id)
     if (element) {
       element.parent = findLandmarkParent(htmlEl)
+      // 追踪 DOM 父级的 skeleton ID（用于父子同文本去重）
+      const parentEl = htmlEl.parentElement as HTMLElement
+      if (parentEl?.dataset?.skeletonId) {
+        domParentIdMap.set(id, parentEl.dataset.skeletonId)
+      }
       elements.push(element)
     }
   }
   scannedCount = allElements.length
 
-  // 过滤空文本元素 + 按 parent+text 去重（同一 parent 下同 text 只保留第一个）
+  // 过滤空文本元素 + 父子同文本去重（保留子级）+ 同级去重
+  // Step 1: 标记与子级同文本的父级
+  const elMap = new Map<string, SkeletonElement>()
+  for (const el of elements) elMap.set(el.id, el)
+
+  const parentsToRemove = new Set<string>()
+  for (const htmlEl of allElements) {
+    const sId = (htmlEl as HTMLElement).dataset.skeletonId
+    if (!sId) continue
+    const el = elMap.get(sId)
+    if (!el || !el.text) continue
+    for (const child of htmlEl.children) {
+      const cId = (child as HTMLElement).dataset?.skeletonId
+      if (!cId) continue
+      const childEl = elMap.get(cId)
+      if (childEl && childEl.text === el.text) {
+        parentsToRemove.add(sId)
+        break
+      }
+    }
+  }
+
+  // Step 2: 过滤 + 同级去重（父级被移除时子级跳过去重，自动提升到祖父级）
   const seenByParent = new Map<string, Set<string>>()
   const filtered = elements.filter(el => {
+    if (parentsToRemove.has(el.id)) return false
     if (!el.text && !['a', 'button', 'input', 'select', 'textarea'].includes(el.tag) && !el.role) return false
-    // 按 parent+text 去重
     if (el.text && el.text !== '(icon)') {
       const parentKey = el.parent || '_root'
       if (!seenByParent.has(parentKey)) seenByParent.set(parentKey, new Set())
       const seen = seenByParent.get(parentKey)!
-      if (seen.has(el.text)) return false
-      seen.add(el.text)
+      const domParentId = domParentIdMap.get(el.id)
+      const shouldSkipDedup = domParentId && parentsToRemove.has(domParentId)
+      if (!shouldSkipDedup && seen.has(el.text)) return false
+      if (!shouldSkipDedup) seen.add(el.text)
     }
     return true
   })
@@ -181,7 +221,12 @@ function extractElement(el: HTMLElement, id: string): SkeletonElement | null {
   const hasIcon = !!el.querySelector('svg, img, i, [class*="icon"]')
 
   // 无文字 + 无 role + 无图标子元素 → 跳过
-  if (!text && !el.getAttribute('role') && !hasIcon) return null
+  // 但 input/textarea 有 placeholder 或 value 时保留（如手机号输入框只有 placeholder）
+  const isFormElement = ['input', 'textarea', 'select'].includes(tag)
+  const hasFormContent = isFormElement && (
+    el.getAttribute('placeholder') || (el as HTMLInputElement).value
+  )
+  if (!text && !el.getAttribute('role') && !hasIcon && !hasFormContent) return null
 
   const base: SkeletonElement = { id, tag }
 

@@ -97,12 +97,13 @@ export class ActionExecutor {
   /** 文本模糊匹配查找元素 */
   private findByText(text: string): HTMLElement | null {
     // 优先搜索交互元素
-    const interactive = document.querySelectorAll('a, button, input, select, [role="button"], [onclick], [tabindex]')
+    const interactive = document.querySelectorAll('a, button, input, select, textarea, [role="button"], [onclick], [tabindex]')
     for (const el of interactive) {
       const elText = el.textContent?.trim() || ''
       const ariaLabel = el.getAttribute('aria-label') || ''
       const title = el.getAttribute('title') || ''
-      if (elText.includes(text) || ariaLabel.includes(text) || title.includes(text)) {
+      const placeholder = el.getAttribute('placeholder') || ''
+      if (elText.includes(text) || ariaLabel.includes(text) || title.includes(text) || placeholder.includes(text)) {
         return el as HTMLElement
       }
     }
@@ -114,7 +115,8 @@ export class ActionExecutor {
       const elText = el.textContent?.trim() || ''
       const ariaLabel = el.getAttribute('aria-label') || ''
       const title = el.getAttribute('title') || ''
-      if (elText.includes(text) || ariaLabel.includes(text) || title.includes(text)) {
+      const placeholder = (el as HTMLElement).getAttribute?.('placeholder') || ''
+      if (elText.includes(text) || ariaLabel.includes(text) || title.includes(text) || placeholder.includes(text)) {
         // 过滤不可见元素
         const style = window.getComputedStyle(el as HTMLElement)
         if (style.display === 'none' || style.visibility === 'hidden') continue
