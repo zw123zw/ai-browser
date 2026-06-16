@@ -1,3 +1,7 @@
+import { Logger } from '@/src/utils/logger';
+
+const log = new Logger('Background');
+
 export default defineBackground(() => {
   // 存储进行中的流式请求，便于中止
   const activeStreams = new Map<string, { reader: ReadableStreamDefaultReader; tabId: number }>();
@@ -104,7 +108,6 @@ export default defineBackground(() => {
             while (true) {
               // 检查是否已被中止
               if (!activeStreams.has(requestId)) {
-                console.log('[Background] 流已被中止，停止读取', { requestId });
                 break;
               }
 
@@ -125,10 +128,9 @@ export default defineBackground(() => {
           } catch (streamErr) {
             // 如果是中止导致的错误，不发送错误消息
             if (!activeStreams.has(requestId)) {
-              console.log('[Background] 流已中止', { requestId });
               return;
             }
-            console.error('[Background] 流读取异常:', streamErr);
+            log.error('流读取异常:', streamErr);
             chrome.tabs.sendMessage(sender.tab.id, {
               type: 'stream-error',
               requestId,
@@ -147,7 +149,7 @@ export default defineBackground(() => {
           }).catch(() => {});
         })
         .catch((err) => {
-          console.error('[Background] 流式请求异常:', err);
+          log.error('流式请求异常:', err);
           // sendResponse 可能已调用过，用 stream-error 通知 content script
           if (sender.tab?.id) {
             chrome.tabs.sendMessage(sender.tab.id, {
@@ -297,7 +299,6 @@ export default defineBackground(() => {
       const { requestId } = message;
       const stream = activeStreams.get(requestId);
       if (stream) {
-        console.log('[Background] 中止流式请求', { requestId });
         // 取消读取
         stream.reader.cancel().catch(() => {});
         // 从活跃流中移除

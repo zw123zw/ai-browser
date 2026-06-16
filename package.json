@@ -29,10 +29,9 @@
   ],
   "scripts": {
     "dev": "wxt",
-    "dev:firefox": "wxt -b firefox",
-    "build": "wxt build",
-    "build:firefox": "wxt build -b firefox",
-    "zip": "wxt zip",
+    "build": "bash -c \"D=$(date +%Y%m%d-%H%M%S) && rm -rf .output && wxt build && mv .output/chrome-mv3 .output/ai-browser-prod-$D && cross-env VITE_LOG_ENABLED=true wxt build && mv .output/chrome-mv3 .output/ai-browser-test-$D\"",
+    "build:prod": "bash -c \"D=$(date +%Y%m%d-%H%M%S) && wxt build && mv .output/chrome-mv3 .output/ai-browser-prod-$D\"",
+    "build:debug": "bash -c \"D=$(date +%Y%m%d-%H%M%S) && cross-env VITE_LOG_ENABLED=true wxt build && mv .output/chrome-mv3 .output/ai-browser-test-$D\"",
     "compile": "vue-tsc --noEmit",
     "postinstall": "wxt prepare",
     "download-model": "bash scripts/download-model.sh"
@@ -58,6 +57,7 @@
     "@types/markdown-it": "^14.1.2",
     "@types/uuid": "^10.0.0",
     "@wxt-dev/module-vue": "^1.0.2",
+    "cross-env": "^10.1.0",
     "sharp": "^0.35.1",
     "typescript": "^5.7.2",
     "vue-tsc": "^2.1.10",

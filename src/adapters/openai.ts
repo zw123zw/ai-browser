@@ -1,5 +1,6 @@
 import { BaseAdapter } from './base';
 import { Logger } from '@/src/utils/logger';
+import { saveApiLog } from '@/src/utils/log-storage';
 import { proxyFetchStream, proxyFetch } from './proxy';
 import type { ChatMessage, ChatRequestOptions, StreamChunk } from '@/src/types';
 
@@ -86,7 +87,7 @@ export class OpenAIAdapter extends BaseAdapter {
       url = `${base}/chat/completions`;
     }
 
-    log.debug('请求开始', { url, model: opts.modelName });
+    log.info('请求开始', { url, model: opts.modelName, messages: opts.messages.length + '条' });
 
     const startTime = Date.now();
 
@@ -121,6 +122,7 @@ export class OpenAIAdapter extends BaseAdapter {
     }
 
     let chunkCount = 0;
+    let fullResponse = '';
     let doneFired = false;
     const fireDone = () => {
       if (doneFired) return;
@@ -144,6 +146,7 @@ export class OpenAIAdapter extends BaseAdapter {
               if (json.delta?.type === 'text_delta' && json.delta.text) {
                 const chunk: StreamChunk = { delta: json.delta.text };
                 chunkCount++;
+                fullResponse += json.delta.text;
                 onChunk(chunk);
               }
               // 思考增量（Claude 3.7+ 支持）
@@ -186,7 +189,10 @@ export class OpenAIAdapter extends BaseAdapter {
           const content = delta.content ?? delta.text;
           const chunk: StreamChunk = {};
           if (reasoning) chunk.reasoningDelta = reasoning;
-          if (content) chunk.delta = content;
+          if (content) {
+            chunk.delta = content;
+            fullResponse += content;
+          }
           if (chunk.delta || chunk.reasoningDelta) {
             chunkCount++;
             onChunk(chunk);
@@ -232,7 +238,9 @@ export class OpenAIAdapter extends BaseAdapter {
         }
       });
       fireDone();
-      log.debug('代理请求完成', { chunks: chunkCount, duration: `${Date.now() - startTime}ms` });
+      const duration = Date.now() - startTime;
+      log.info('请求完成', { model: opts.modelName, chunks: chunkCount, duration: `${duration}ms` });
+      saveApiLog('INFO', 'API', `← [stream] ${url} 响应 (${duration}ms):\n${fullResponse}`);
       return;
     } catch (proxyError) {
       log.warn('代理请求失败，尝试直接请求:', proxyError);
@@ -272,6 +280,8 @@ export class OpenAIAdapter extends BaseAdapter {
       processChunk(data);
     }
     fireDone();
-    log.debug('直接请求完成', { chunks: chunkCount, duration: `${Date.now() - startTime}ms` });
+    const duration2 = Date.now() - startTime;
+    log.info('请求完成', { model: opts.modelName, chunks: chunkCount, duration: `${duration2}ms` });
+    saveApiLog('INFO', 'API', `← ${url} 响应 (${duration2}ms):\n${fullResponse}`);
   }
 }

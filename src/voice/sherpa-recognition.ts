@@ -5,7 +5,9 @@
  * 使用 WebAssembly 技术在浏览器中运行
  */
 
-const LOG_PREFIX = '[SherpaRecognition]'
+import { Logger } from '@/src/utils/logger';
+
+const log = new Logger('SherpaRecognition');
 
 export type VoiceStatus =
   | 'idle'        // 未启动
@@ -64,11 +66,11 @@ export class SherpaRecognition {
   /** 启动语音识别 */
   async start(): Promise<void> {
     if (this._isActive) {
-      console.warn(LOG_PREFIX, '已在运行中')
+      log.warn('已在运行中')
       return
     }
 
-    console.log(LOG_PREFIX, '启动 Sherpa-onnx 语音识别')
+    log.info('启动 Sherpa-onnx 语音识别')
 
     try {
       // 1. 加载模型（如果还没加载）
@@ -77,7 +79,7 @@ export class SherpaRecognition {
       }
 
       // 2. 获取麦克风权限
-      console.log(LOG_PREFIX, '请求麦克风权限...')
+      log.info('请求麦克风权限...')
       this.mediaStream = await navigator.mediaDevices.getUserMedia({
         audio: {
           sampleRate: 16000,
@@ -86,7 +88,7 @@ export class SherpaRecognition {
           noiseSuppression: true,
         },
       })
-      console.log(LOG_PREFIX, '麦克风权限已获取')
+      log.info('麦克风权限已获取')
 
       // 3. 创建音频处理管道
       this.audioContext = new AudioContext({ sampleRate: 16000 })
@@ -112,7 +114,7 @@ export class SherpaRecognition {
           // 避免重复回调
           if (text !== lastText) {
             lastText = text
-            console.log(LOG_PREFIX, '识别结果:', text)
+            log.info('识别结果:', text)
             this.options.onResult(text, true, 0.9)
           }
         }
@@ -123,10 +125,10 @@ export class SherpaRecognition {
 
       this._isActive = true
       this.updateStatus('listening')
-      console.log(LOG_PREFIX, '语音识别已启动')
+      log.info('语音识别已启动')
 
     } catch (error) {
-      console.error(LOG_PREFIX, '启动失败:', error)
+      log.error('启动失败:', error)
       this.updateStatus('error')
       this.options.onError?.(`启动失败: ${error}`)
       this.cleanup()
@@ -135,7 +137,7 @@ export class SherpaRecognition {
 
   /** 停止语音识别 */
   stop(): void {
-    console.log(LOG_PREFIX, '停止语音识别')
+    log.info('停止语音识别')
     this._isActive = false
     this.cleanup()
     this.updateStatus('idle')
@@ -173,12 +175,12 @@ export class SherpaRecognition {
 
   /** 加载 Sherpa-onnx 模型 */
   private async loadModel(): Promise<void> {
-    console.log(LOG_PREFIX, '加载模型...')
+    log.info('加载模型...')
 
     try {
       // 动态导入 sherpa-onnx WASM 版本
       const sherpa = await import('sherpa-onnx/sherpa-onnx-asr.js')
-      console.log(LOG_PREFIX, 'sherpa-onnx ASR 模块加载成功')
+      log.info('sherpa-onnx ASR 模块加载成功')
 
       // 模型配置 - 使用流式中文模型
       const modelPath = '/models/sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20'
@@ -195,13 +197,13 @@ export class SherpaRecognition {
         featureDim: 80,
       }
 
-      console.log(LOG_PREFIX, '创建识别器...')
+      log.info('创建识别器...')
       this.recognizer = new sherpa.OnlineRecognizer(config)
       this.isModelLoaded = true
-      console.log(LOG_PREFIX, '模型加载完成')
+      log.info('模型加载完成')
 
     } catch (error) {
-      console.error(LOG_PREFIX, '模型加载失败:', error)
+      log.error('模型加载失败:', error)
       throw new Error(`模型加载失败: ${error}`)
     }
   }

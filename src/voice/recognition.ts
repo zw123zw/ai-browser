@@ -8,6 +8,10 @@
  * - 手动启停控制
  */
 
+import { Logger } from '@/src/utils/logger';
+
+const log = new Logger('VoiceRecognition');
+
 // Web Speech API 类型声明
 interface SpeechRecognitionEvent {
   resultIndex: number;
@@ -140,7 +144,7 @@ export class VoiceRecognition {
 
         if (text) {
           if (isFinal) {
-            console.info(`${this.logPrefix} 识别完成: "${text}" (confidence=${confidence.toFixed(2)})`);
+            log.info(`识别完成: "${text}" (confidence=${confidence.toFixed(2)})`);
           }
           this.options.onResult(text, isFinal, confidence);
         }
@@ -148,7 +152,7 @@ export class VoiceRecognition {
     };
 
     this.recognition.onerror = (event: any) => {
-      console.warn('[VoiceRecognition] Error:', event.error);
+      log.warn('Error:', event.error);
 
       // 不是致命错误时自动重启
       if (event.error === 'no-speech' || event.error === 'audio-capture') {
@@ -166,13 +170,13 @@ export class VoiceRecognition {
 
       // 网络错误 - 语音识别需要联网（Chrome 使用 Google 服务）
       if (event.error === 'network') {
-        console.warn('[VoiceRecognition] 网络错误，语音识别需要联网');
+        log.warn('网络错误，语音识别需要联网');
         this.scheduleRestart(3000);
         return;
       }
 
       // 其他错误
-      console.warn('[VoiceRecognition] 未知错误:', event.error);
+      log.warn('未知错误:', event.error);
       this.scheduleRestart(2000);
     };
 
@@ -192,9 +196,9 @@ export class VoiceRecognition {
       this.recognition.start();
       this._isActive = true;
       this.updateStatus('listening');
-      console.info(`${this.logPrefix} 语音识别已启动, lang=${this.options.lang}`);
+      log.info(`语音识别已启动, lang=${this.options.lang}`);
     } catch (e) {
-      console.error(`${this.logPrefix} 启动失败:`, e);
+      log.error('启动失败:', e);
       this.updateStatus('error');
       this.options.onError?.('语音识别启动失败');
     }
@@ -202,7 +206,7 @@ export class VoiceRecognition {
 
   /** 停止语音识别 */
   stop(): void {
-    console.info(`${this.logPrefix} 停止语音识别`);
+    log.info('停止语音识别');
     this._isActive = false;
     this.clearRestartTimer();
 

@@ -6,7 +6,7 @@
 
 import { Logger } from '@/src/utils/logger';
 
-const log = new Logger('Proxy');
+const log = new Logger('API');
 
 export interface ProxyRequestOptions {
   url: string;
@@ -23,6 +23,19 @@ export interface ProxyResponse {
   error?: string;
 }
 
+/** 格式化请求体（隐藏 apiKey） */
+function bodySummary(body?: string): string {
+  if (!body) return ''
+  try {
+    const parsed = JSON.parse(body)
+    // 隐藏 apiKey
+    if (parsed.apiKey) parsed.apiKey = '***'
+    return JSON.stringify(parsed, null, 2)
+  } catch {
+    return body
+  }
+}
+
 /**
  * 通过 background script 代理请求
  */
@@ -33,23 +46,29 @@ export async function proxyFetch(options: ProxyRequestOptions): Promise<ProxyRes
       throw new Error('不在扩展环境中');
     }
 
-    log.debug('代理请求:', { url: options.url, method: options.method });
+    const { url, method, headers, body } = options
+    log.info(`→ ${method || 'POST'} ${url}`, { headers, body: bodySummary(body) })
 
+    const startTime = Date.now();
     const response = await chrome.runtime.sendMessage({
       type: 'proxy-fetch',
-      url: options.url,
-      method: options.method,
-      headers: options.headers,
-      body: options.body,
+      url,
+      method,
+      headers,
+      body,
     });
 
+    const duration = Date.now() - startTime
+
     if (!response?.success) {
+      log.error(`✗ ${url} - ${response?.error || '代理请求失败'}`, { duration: `${duration}ms` })
       throw new Error(response?.error || '代理请求失败');
     }
 
+    log.info(`← ${url} ${response.status || 'OK'} ${duration}ms`, { data: response.data })
     return response;
   } catch (error) {
-    log.error('代理请求失败:', error);
+    log.error(`✗ ${options.url} - ${error}`)
     throw error;
   }
 }
@@ -69,7 +88,10 @@ export async function proxyFetchStream(
       throw new Error('不在扩展环境中');
     }
 
-    log.debug('流式代理请求:', { url: options.url, method: options.method });
+    const { url, method, headers, body } = options
+    log.info(`→ [stream] ${method || 'POST'} ${url}`, { headers, body: bodySummary(body) })
+
+    const startTime = Date.now();
 
     // 用于存储请求 ID，便于中止
     let requestId: string | null = null;
@@ -85,18 +107,19 @@ export async function proxyFetchStream(
     // 发起请求
     const response = await chrome.runtime.sendMessage({
       type: 'proxy-fetch-stream',
-      url: options.url,
-      method: options.method,
-      headers: options.headers,
-      body: options.body,
+      url,
+      method,
+      headers,
+      body,
     });
 
     if (!response?.success) {
+      log.error(`✗ [stream] ${url} - ${response?.error || '流式请求失败'}`)
       throw new Error(response?.error || '流式请求失败');
     }
 
     requestId = response.requestId;
-    log.debug('流式请求已启动', { requestId });
+    log.debug(`→ [stream] 已启动 requestId=${requestId}`)
 
     // 注册监听器（在 sendMessage 之后但在流数据到达之前）
     chrome.runtime.onMessage.addListener(chunkListener);
@@ -105,7 +128,7 @@ export async function proxyFetchStream(
     if (options.signal) {
       options.signal.addEventListener('abort', () => {
         aborted = true;
-        log.debug('收到中止信号，通知 background 中止请求', { requestId });
+        log.debug(`→ [stream] 收到中止信号 requestId=${requestId}`)
         // 通知 background 中止请求
         chrome.runtime.sendMessage({
           type: 'abort-stream',
@@ -124,6 +147,8 @@ export async function proxyFetchStream(
 
       const endListener = (msg: any) => {
         if (msg.type === 'stream-end' && msg.requestId === requestId) {
+          const duration = Date.now() - startTime
+          log.info(`← [stream] ${url} 完成 ${duration}ms`)
           cleanup();
           resolve();
         }
@@ -131,6 +156,8 @@ export async function proxyFetchStream(
 
       const errorListener = (msg: any) => {
         if (msg.type === 'stream-error' && msg.requestId === requestId) {
+          const duration = Date.now() - startTime
+          log.error(`✗ [stream] ${url} 中断 ${duration}ms - ${msg.error || '未知错误'}`)
           cleanup();
           reject(new Error(msg.error || '流式请求中断'));
         }
@@ -138,6 +165,7 @@ export async function proxyFetchStream(
 
       // 检查是否已经中止
       if (aborted || options.signal?.aborted) {
+        log.info(`⊘ [stream] ${url} 已中止`)
         cleanup();
         reject(new DOMException('The operation was aborted.', 'AbortError'));
         return;
@@ -147,7 +175,7 @@ export async function proxyFetchStream(
       chrome.runtime.onMessage.addListener(errorListener);
     });
   } catch (error) {
-    log.error('流式代理请求失败:', error);
+    log.error(`✗ [stream] ${options.url} - ${error}`)
     throw error;
   }
 }

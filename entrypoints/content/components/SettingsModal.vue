@@ -11,7 +11,29 @@ const emit = defineEmits<{ (e: 'close'): void }>();
 const store = useSettingsStore();
 const toast = useToast();
 
-const tab = ref<'ai' | 'general'>('ai');
+// ========== License & 日志 ==========
+const licenseKey = ref('');
+const logEnabled = !!import.meta.env.VITE_LOG_ENABLED;
+
+function activateLicense() {
+  // TODO: 激活逻辑暂未实现
+  toast.info('激活功能暂未开放');
+}
+
+async function handleDownloadLogs() {
+  const { downloadLogs } = await import('@/src/utils/log-storage');
+  await downloadLogs();
+  toast.success('日志已下载');
+}
+
+async function handleClearLogs() {
+  if (!confirm('确定要清除所有日志吗？此操作不可恢复。')) return;
+  const { clearAllLogs } = await import('@/src/utils/log-storage');
+  await clearAllLogs();
+  toast.success('日志已清除');
+}
+
+const tab = ref<'ai' | 'general' | 'user'>('ai');
 
 // ========== 模型配置 ==========
 
@@ -411,6 +433,17 @@ function exportConfig() {
             </svg>
             通用配置
           </button>
+          <button
+            :class="['zwf-settings-tab', { 'zwf-tab-active': tab === 'user' }]"
+            @click="tab = 'user'"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+              <circle cx="12" cy="7" r="4"/>
+            </svg>
+            用户配置
+          </button>
         </aside>
 
         <div class="zwf-settings-pane">
@@ -630,6 +663,49 @@ function exportConfig() {
               <button class="zwf-btn zwf-btn-primary" @click="saveGeneral">保存</button>
             </div>
           </div>
+
+          <!-- ========== 用户配置 ========== -->
+          <div v-show="tab === 'user'" class="zwf-modal-body">
+            <div class="zwf-form-row">
+              <label>激活码</label>
+              <div class="zwf-input-group">
+                <input
+                  v-model="licenseKey"
+                  class="zwf-input zwf-input-with-btn"
+                  placeholder="请输入激活码"
+                />
+                <button class="zwf-btn-activate" @click="activateLicense">
+                  激活
+                </button>
+              </div>
+            </div>
+
+            <!-- 日志管理（仅 debug 包可见） -->
+            <template v-if="logEnabled">
+              <div class="zwf-form-row">
+                <label>日志管理</label>
+                <div class="zwf-log-actions">
+                  <button class="zwf-btn zwf-btn-icon" @click="handleDownloadLogs">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                      <polyline points="7 10 12 15 17 10"/>
+                      <line x1="12" y1="15" x2="12" y2="3"/>
+                    </svg>
+                    下载日志
+                  </button>
+                  <button class="zwf-btn zwf-btn-icon zwf-btn-danger" @click="handleClearLogs">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <polyline points="3 6 5 6 21 6"/>
+                      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                      <line x1="10" y1="11" x2="10" y2="17"/>
+                      <line x1="14" y1="11" x2="14" y2="17"/>
+                    </svg>
+                    清除日志
+                  </button>
+                </div>
+              </div>
+            </template>
+          </div>
         </div>
       </div>
     </div>
@@ -729,6 +805,69 @@ function exportConfig() {
 .zwf-btn-toggle:hover {
   background: var(--zwf-bg-hover);
   color: var(--zwf-text);
+}
+
+/* 激活按钮 — 与 chip/preset 统一风格 */
+.zwf-btn-activate {
+  padding: 10px 20px;
+  border: 1px solid var(--zwf-border-strong);
+  border-left: none;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  background: var(--zwf-bg-card);
+  color: var(--zwf-text-soft);
+  flex-shrink: 0;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-family: inherit;
+}
+
+.zwf-btn-activate:hover {
+  border-color: var(--zwf-primary);
+  color: var(--zwf-primary);
+  background: var(--zwf-primary-soft);
+}
+
+/* 日志管理按钮组 */
+.zwf-log-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.zwf-btn-icon {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid var(--zwf-border);
+  background: var(--zwf-bg-card);
+  color: var(--zwf-text);
+  transition: all 0.15s ease;
+  font-family: inherit;
+}
+
+.zwf-btn-icon:hover {
+  border-color: var(--zwf-primary);
+  color: var(--zwf-primary);
+  background: var(--zwf-primary-soft);
+}
+
+.zwf-btn-icon.zwf-btn-danger {
+  color: #ef4444;
+  border: 1px solid rgba(239,68,68,0.3);
+  background: rgba(239,68,68,0.06);
+}
+
+.zwf-btn-icon.zwf-btn-danger:hover {
+  background: rgba(239,68,68,0.12);
+  border-color: rgba(239,68,68,0.5);
+  color: #dc2626;
 }
 
 /* Tab 底部保存按钮 */

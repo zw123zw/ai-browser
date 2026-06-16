@@ -3,8 +3,6 @@ import { onMounted, onUnmounted, reactive, ref } from 'vue';
 import { fabPosStorage, type FabPos } from '@/src/storage';
 import { useSettingsStore } from '@/src/stores/settings';
 
-console.log('[FloatingButton] 组件初始化');
-
 const emit = defineEmits<{ (e: 'click'): void }>();
 const settingsStore = useSettingsStore();
 
@@ -21,11 +19,8 @@ let startRight = 0;
 let startBottom = 0;
 
 async function loadPos() {
-  console.log('[FloatingButton] 加载按钮位置...');
   const saved = await fabPosStorage.getValue();
-  console.log('[FloatingButton] 保存的位置:', saved);
   if (saved) Object.assign(pos, clampPos(saved));
-  console.log('[FloatingButton] 当前位置:', { right: pos.right, bottom: pos.bottom });
 }
 
 function clampPos(p: FabPos): FabPos {
@@ -80,10 +75,8 @@ function onResize() {
 }
 
 onMounted(() => {
-  console.log('[FloatingButton] onMounted 开始');
   loadPos();
   window.addEventListener('resize', onResize);
-  console.log('[FloatingButton] onMounted 完成，组件已挂载');
 });
 
 onUnmounted(() => {

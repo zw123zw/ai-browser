@@ -6,7 +6,7 @@
  *   log.info('识别完成', { text, confidence })
  *   log.error('请求失败', error)
  *
- * 输出格式：[14:32:05] [INFO] [Voice] 识别完成 { text: "打开B站", confidence: 0.92 }
+ * 日志写入 chrome.storage.local（仅 debug 包），不输出到 console。
  */
 
 export type LogLevel = 'DEBUG' | 'INFO' | 'WARN' | 'ERROR'
@@ -18,27 +18,12 @@ const LEVEL_PRIORITY: Record<LogLevel, number> = {
   ERROR: 3,
 }
 
-const LEVEL_COLORS: Record<LogLevel, string> = {
-  DEBUG: '#888',
-  INFO: '#1890ff',
-  WARN: '#faad14',
-  ERROR: '#ff4d4f',
-}
-
 /** 全局最低日志级别，默认 DEBUG（全部输出） */
 let globalMinLevel: LogLevel = 'DEBUG'
 
 /** 设置全局最低日志级别 */
 export function setLogLevel(level: LogLevel) {
   globalMinLevel = level
-}
-
-/** 获取当前时间字符串 HH:mm:ss */
-function timeStr(): string {
-  const d = new Date()
-  return [d.getHours(), d.getMinutes(), d.getSeconds()]
-    .map((n) => String(n).padStart(2, '0'))
-    .join(':')
 }
 
 /** 格式化参数：对象展开，Error 取 message+stack */
@@ -56,6 +41,21 @@ function formatArgs(args: unknown[]): string {
       return String(a)
     })
     .join(' ')
+}
+
+/** 缓存的日志写入函数 */
+let cachedSaveFrontendLog: ((level: LogLevel, module: string, msg: string) => Promise<void>) | null = null
+let cachedSaveApiLog: ((level: LogLevel, module: string, msg: string) => Promise<void>) | null = null
+let logStorageLoaded = false
+
+/** 加载 log-storage 模块 */
+function loadLogStorage() {
+  if (logStorageLoaded) return
+  logStorageLoaded = true
+  import('./log-storage').then((mod) => {
+    cachedSaveFrontendLog = mod.saveFrontendLog
+    cachedSaveApiLog = mod.saveApiLog
+  }).catch(() => {})
 }
 
 export class Logger {
@@ -84,27 +84,16 @@ export class Logger {
   private log(level: LogLevel, ...args: unknown[]) {
     if (LEVEL_PRIORITY[level] < LEVEL_PRIORITY[globalMinLevel]) return
 
-    const time = timeStr()
-    const prefix = `[${time}] [${level}] [${this.module}]`
+    if (!import.meta.env.VITE_LOG_ENABLED) return
+
     const msg = formatArgs(args)
-    const color = LEVEL_COLORS[level]
 
-    // 使用 console 原生方法，带颜色
-    const style = `color:${color};font-weight:bold`
+    if (!logStorageLoaded) loadLogStorage()
 
-    switch (level) {
-      case 'DEBUG':
-        console.debug(`%c${prefix}`, style, msg)
-        break
-      case 'INFO':
-        console.info(`%c${prefix}`, style, msg)
-        break
-      case 'WARN':
-        console.warn(`%c${prefix}`, style, msg)
-        break
-      case 'ERROR':
-        console.error(`%c${prefix}`, style, msg)
-        break
+    if (this.module === 'API') {
+      cachedSaveApiLog?.(level, this.module, msg)
+    } else {
+      cachedSaveFrontendLog?.(level, this.module, msg)
     }
   }
 }

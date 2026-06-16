@@ -7,6 +7,7 @@
 
 import { BaseAdapter } from './base';
 import { Logger } from '@/src/utils/logger';
+import { saveApiLog } from '@/src/utils/log-storage';
 import { proxyFetchStream } from './proxy';
 import type { ChatMessage, ChatRequestOptions, StreamChunk } from '@/src/types';
 
@@ -40,7 +41,7 @@ export class QwenAdapter extends BaseAdapter {
     onChunk: (chunk: StreamChunk) => void
   ): Promise<void> {
     const url = `${opts.baseUrl.replace(/\/$/, '')}/services/aigc/text-generation/generation`;
-    log.info('请求开始', { url, model: opts.modelName });
+    log.info('请求开始', { url, model: opts.modelName, messages: opts.messages.length + '条' });
 
     const startTime = Date.now();
     const headers = {
@@ -58,6 +59,7 @@ export class QwenAdapter extends BaseAdapter {
       },
     });
 
+    let fullResponse = '';
     let doneFired = false;
     const fireDone = () => {
       if (doneFired) return;
@@ -77,6 +79,7 @@ export class QwenAdapter extends BaseAdapter {
           const choice = choices[0];
           const content = choice.message?.content;
           if (content) {
+            fullResponse += content;
             onChunk({ delta: content });
           }
           if (choice.finish_reason) {
@@ -100,7 +103,9 @@ export class QwenAdapter extends BaseAdapter {
         }
       });
       fireDone();
-      log.info('代理请求完成', { duration: `${Date.now() - startTime}ms` });
+      const duration = Date.now() - startTime;
+      log.info('请求完成', { duration: `${duration}ms` });
+      saveApiLog('INFO', 'API', `← [stream] ${url} 响应 (${duration}ms):\n${fullResponse}`);
       return;
     } catch (proxyError) {
       log.warn('代理请求失败，尝试直接请求:', proxyError);
@@ -125,6 +130,8 @@ export class QwenAdapter extends BaseAdapter {
       processChunk(data);
     }
     fireDone();
-    log.info('直接请求完成', { duration: `${Date.now() - startTime}ms` });
+    const duration2 = Date.now() - startTime;
+    log.info('请求完成', { duration: `${duration2}ms` });
+    saveApiLog('INFO', 'API', `← ${url} 响应 (${duration2}ms):\n${fullResponse}`);
   }
 }

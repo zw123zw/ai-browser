@@ -88,13 +88,11 @@ function onMouseup(e: MouseEvent) {
 
   if (mode === 'manual') {
     // 手动模式：填入输入框，不自动发送
-    console.log('[App] 检测到选中文字，填入输入框', { length: text.length });
     if (convStore.conversation) {
       convStore.conversation.draftText = text;
     }
   } else {
     // 自动模式：直接发送给 AI
-    console.log('[App] 检测到选中文字，自动发送', { length: text.length });
     convStore.send(text);
   }
 }
@@ -112,7 +110,6 @@ function applyTheme() {
   // 兼容旧版 primaryColor
   host.style.setProperty('--zwf-primary', theme.vars['--zwf-primary'] || settingsStore.settings.primaryColor);
   host.style.setProperty('--zwf-drawer-width', '480px');
-  console.log('[App] 主题已应用:', theme.name);
 }
 
 watch(
@@ -129,12 +126,10 @@ watch(open, async (val) => {
 });
 
 onMounted(async () => {
-  console.log('[App] onMounted 开始');
   try {
     await Promise.all([settingsStore.init(), convStore.init()]);
-    console.log('[App] Store 初始化完成');
   } catch (error) {
-    console.error('[App] Store 初始化失败:', error);
+    log.error('Store 初始化失败:', error);
   }
   applyTheme();
 
@@ -143,17 +138,15 @@ onMounted(async () => {
     const savedOpen = await drawerOpenStorage.getValue();
     if (savedOpen) open.value = true;
   } catch (error) {
-    console.error('[App] 读取抽屉状态失败:', error);
+    log.error('读取抽屉状态失败:', error);
   }
 
   chrome.runtime?.onMessage?.addListener(onMessage);
   document.addEventListener('keydown', onKeydown, true);
   document.addEventListener('mouseup', onMouseup, true);
-  console.log('[App] onMounted 完成，事件监听器已注册');
 });
 
 onUnmounted(() => {
-  console.log('[App] onUnmounted，清理事件监听器');
   chrome.runtime?.onMessage?.removeListener?.(onMessage);
   document.removeEventListener('keydown', onKeydown, true);
   document.removeEventListener('mouseup', onMouseup, true);
