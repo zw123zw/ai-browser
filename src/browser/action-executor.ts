@@ -48,6 +48,7 @@ export class ActionExecutor {
         case 'switchTab': return await this.executeTabAction('switchTab', cmd.tabQuery || cmd.description)
         case 'nextTab':   return await this.executeTabAction('switchTab', 'next')
         case 'prevTab':   return await this.executeTabAction('switchTab', 'prev')
+        case 'video':     return await this.executeVideo(element!, cmd.subAction || '', cmd.value)
         default:          return { success: false, message: `未知操作类型: ${cmd.action}` }
       }
     } catch (error) {
@@ -153,10 +154,14 @@ export class ActionExecutor {
         // javascript: / # / 空 href → 依赖 JS 事件处理器，触发 click 事件
         el.dispatchEvent(new MouseEvent('click', mouseEventInit))
       } else if (el.href) {
-        // 真实 URL → 新标签页打开（保留原 target 指定的行为）
-        const target = el.target || '_blank'
-        const opened = window.open(el.href, target)
-        if (!opened) window.location.href = el.href
+        // 真实 URL → 根据 target 判断是否新开页面
+        const target = el.target || '_self'  // 默认当前页面
+        if (target === '_self') {
+          window.location.href = el.href  // 当前页面跳转
+        } else {
+          const opened = window.open(el.href, target)
+          if (!opened) window.location.href = el.href
+        }
       }
     } else {
       el.dispatchEvent(new MouseEvent('click', mouseEventInit))
@@ -356,4 +361,97 @@ export class ActionExecutor {
       return { success: false, message: msg }
     }
   }
+
+  // ========== Video 操作 ==========
+
+  /** Video 操作：play/pause/volume/mute/unmute/seek/jump/speed/fullscreen */
+  private async executeVideo(el: HTMLElement, subAction: string, value?: number): Promise<ActionResult> {
+    // 找到 video 元素（可能是 el 本身，也可能是 el 的子元素或父元素附近）
+    let video: HTMLVideoElement | null = null
+    if (el instanceof HTMLVideoElement) {
+      video = el
+    } else {
+      video = el.querySelector('video') || el.closest('video')
+    }
+
+    if (!video) {
+      return { success: false, message: '未找到视频元素' }
+    }
+
+    try {
+      switch (subAction) {
+        case 'fullscreen': {
+          // 找播放器容器（比 video 更适合全屏，保留播放器 UI）
+          const player = video.closest('[class*="player"], [id*="player"], [class*="Player"]') || video.parentElement || video
+          const el = player as any
+          if (el.requestFullscreen) {
+            await el.requestFullscreen()
+            return { success: true, message: '全屏成功' }
+          }
+          if (el.webkitRequestFullscreen) {
+            await el.webkitRequestFullscreen()
+            return { success: true, message: '全屏成功（webkit）' }
+          }
+          return { success: false, message: '当前页面不支持全屏' }
+        }
+
+        case 'play':
+          await video.play()
+          return { success: true, message: '播放' }
+
+        case 'pause':
+          video.pause()
+          return { success: true, message: '暂停' }
+
+        case 'volume': {
+          const vol = Math.max(0, Math.min(1, value ?? 0.5))
+          video.volume = vol
+          video.muted = false  // 设置音量时自动取消静音
+          return { success: true, message: `音量: ${Math.round(vol * 100)}%` }
+        }
+
+        case 'mute':
+          video.muted = true
+          return { success: true, message: '已静音' }
+
+        case 'unmute':
+          video.muted = false
+          return { success: true, message: '已取消静音' }
+
+        case 'seek': {
+          // 快进/快退（相对当前时间）
+          const delta = value ?? 10
+          video.currentTime = Math.max(0, Math.min(video.duration || Infinity, video.currentTime + delta))
+          return { success: true, message: `${delta > 0 ? '快进' : '快退'} ${Math.abs(delta)}秒 → ${formatTime(video.currentTime)}` }
+        }
+
+        case 'jump': {
+          // 跳转到指定时间（绝对时间）
+          const time = value ?? 0
+          video.currentTime = Math.max(0, Math.min(video.duration || Infinity, time))
+          return { success: true, message: `跳转到 ${formatTime(video.currentTime)}` }
+        }
+
+        case 'speed': {
+          const rate = value ?? 1
+          video.playbackRate = rate
+          return { success: true, message: `播放速度: ${rate}x` }
+        }
+
+        default:
+          return { success: false, message: `未知 video 子操作: ${subAction}` }
+      }
+    } catch (error) {
+      const msg = `video ${subAction} 失败: ${error instanceof Error ? error.message : String(error)}`
+      log.error(msg, error)
+      return { success: false, message: msg }
+    }
+  }
+}
+
+/** 格式化时间为 mm:ss */
+function formatTime(seconds: number): string {
+  const m = Math.floor(seconds / 60)
+  const s = Math.floor(seconds % 60)
+  return `${m}:${s.toString().padStart(2, '0')}`
 }

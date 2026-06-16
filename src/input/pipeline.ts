@@ -131,6 +131,13 @@ export class InputPipeline {
     let lastHtmlFragments: string | null = null
 
     while (consecutiveErrors < MAX_RETRY) {
+      // ★ 检查 abort signal，支持用户中途停止
+      const signal = this.options.getSignal?.()
+      if (signal?.aborted) {
+        log.info('[Phase 2] ═══ 收到 abort 信号，停止执行 ═══')
+        throw new DOMException('The operation was aborted.', 'AbortError')
+      }
+
       // 每轮重新提取骨架
       const skeleton = this.skeletonManager.getSkeleton()
 

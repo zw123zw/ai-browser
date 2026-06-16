@@ -44,6 +44,8 @@ export interface Command {
   tabAction?: 'newTab' | 'closeTab' | 'switchTab' | 'nextTab' | 'prevTab' // 标签页操作类型
   tabQuery?: string        // switchTab 的目标标签关键词（如 "B站"、"淘宝"）
   done?: number            // 1=最后一步，0=还有步骤（用于停止判断）
+  subAction?: string       // video 操作的子类型（play/pause/volume/mute/seek/jump/speed/fullscreen）
+  value?: number           // video 操作的值（音量 0-1、快进秒数、播放速度等）
 }
 
 /** 执行结果 */

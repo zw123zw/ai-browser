@@ -138,6 +138,7 @@ function scrollToBottom() {
       <InputBar
         :conversation="convStore.conversation"
         :models="settingsStore.settings.models"
+        :is-processing="pipeline.isProcessing.value"
         @send="onSend"
         @abort="onAbort"
         @switch-voice="emit('switch-voice')"

@@ -15,6 +15,7 @@ const log = new Logger('InputBar');
 const props = defineProps<{
   conversation: Conversation | null | undefined;
   models: ModelConfig[];
+  isProcessing?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -58,8 +59,9 @@ const currentModel = computed(
     props.models[0]
 );
 
-/** 当前会话是否处于流式响应中 */
+/** 当前会话是否处于流式响应或指令执行中 */
 const isStreaming = computed(() => {
+  if (props.isProcessing) return true;
   const last = props.conversation?.messages[props.conversation.messages.length - 1];
   return last?.status === 'streaming';
 });

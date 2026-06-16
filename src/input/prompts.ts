@@ -33,6 +33,10 @@ closeTab    — 关闭当前标签页
 switchTab   — 切换到指定标签页（需tabQuery关键词，如"B站"、"淘宝"）
 nextTab     — 切换到下一个标签页
 prevTab     — 切换到上一个标签页
+video       — 视频控制（需elementId+subAction）：
+              subAction: play/pause/fullscreen/mute/unmute
+              带value的: volume(0-1)/seek(秒)/jump(秒)/speed(倍速)
+              示例: {"action":"video","subAction":"volume","value":0.5,"elementId":"e5"}
 \`\`\``
 
 // ═══════════════════════════════════════════════════════════════
@@ -109,7 +113,7 @@ ${CAPABILITY_DOMAIN}
 \`\`\``
 
 /** 首次进入模式说明 */
-export const MODE_FIRST = '每次只生成1条指令，系统执行后反馈结果再生成下一条。'
+export const MODE_FIRST = '只根据当前[原始请求]生成指令，忽略上下文中的历史会话和[已完成]记录。每次只生成1条指令，系统执行后反馈结果再生成下一条。'
 /** 流式执行模式说明 */
 export const MODE_STREAMING = '按照以下信息和格式，生成下一条指令。'
 /** 错误重试模式说明 */
