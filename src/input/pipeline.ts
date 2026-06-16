@@ -17,7 +17,7 @@ import { ActionExecutor } from '@/src/browser/action-executor'
 import { SkeletonManager } from '@/src/browser/skeleton'
 import { searchByKeywords } from '@/src/browser/local-html'
 import { extractTags } from './tag-parser'
-import { PHASE2_SYSTEM_PROMPT, buildStreamingUserMessage, MODE_FIRST, MODE_STREAMING, MODE_RETRY, STEPS_INSTRUCTION } from './prompts'
+import { PHASE2_SYSTEM_PROMPT, buildStreamingUserMessage, MODE_FIRST, MODE_STREAMING, MODE_RETRY } from './prompts'
 import type { InputContext, PipelineCallbacks } from './types'
 import type { AppSettings } from '@/src/types'
 import type { Command, SemanticSkeleton } from '@/src/browser/types'
@@ -25,11 +25,6 @@ import type { Command, SemanticSkeleton } from '@/src/browser/types'
 const log = new Logger('Pipeline')
 
 const MAX_RETRY = 5
-
-/** 兜底 key：action + elementId/description/url */
-function getCommandKey(cmd: Command): string {
-  return `${cmd.action}:${cmd.elementId || cmd.description || cmd.url || ''}`
-}
 
 export interface PipelineOptions {
   getSettings: () => AppSettings
@@ -129,42 +124,28 @@ export class InputPipeline {
     log.info('[Phase 2] ─── 流式执行模式 ───', { maxRetry: MAX_RETRY })
 
     const completed: Array<{ action: string; elementId?: string; description?: string }> = []
-    let totalSteps = -1          // -1 = AI 未返回 [steps]，未知总数
+    const completedKeys = new Set<string>()  // 指令去重 key 集合
     let consecutiveErrors = 0
     let lastError = ''
     let lastFailedCommand: { action: string; elementId?: string; description?: string; text?: string; url?: string } | null = null
     let lastHtmlFragments: string | null = null
 
     while (consecutiveErrors < MAX_RETRY) {
-      // ★ 双重停止条件 1：[steps] 步数已到
-      if (totalSteps > 0 && completed.length >= totalSteps) {
-        log.info(`[Phase 2] ═══ [steps] 步数已到 ${totalSteps}，全部完成 ═══`)
-        break
-      }
-
       // 每轮重新提取骨架
       const skeleton = this.skeletonManager.getSkeleton()
 
       log.info(`[Phase 2] ─── 第 ${completed.length + 1} 步 ───`, {
         skeletonElements: skeleton.elements.length,
         completedCount: completed.length,
-        totalSteps,
         consecutiveErrors,
       })
 
       // AI 生成 1 条指令（根据进入模式选择提示词）
       const isFirstEntry = completed.length === 0 && !lastError
       const coreRule = isFirstEntry ? MODE_FIRST : (lastError ? MODE_RETRY : MODE_STREAMING)
-      const stepsInstruction = isFirstEntry ? STEPS_INSTRUCTION : ''
-      const phase2Result = await this.callStreamingAI(text, skeleton, completed, lastError, lastFailedCommand, lastHtmlFragments, coreRule, stepsInstruction)
+      const phase2Result = await this.callStreamingAI(text, skeleton, completed, lastError, lastFailedCommand, lastHtmlFragments, coreRule)
 
-      // ★ 首次解析 [steps]，记录总步骤数
-      if (phase2Result.steps?.length) {
-        totalSteps = phase2Result.steps.length
-        log.info(`[Phase 2] [steps] ${totalSteps} 步: ${phase2Result.steps.join(' → ')}`)
-      }
-
-      // ── 无标签 → 所有步骤完成或 AI 无输出 ──
+      // ── 无标签 → AI 无输出，任务完成 ──
       if (!phase2Result.commands?.length && !phase2Result.skill && !phase2Result.needHtml) {
         log.info('[Phase 2] ═══ AI 无更多指令，任务完成 ═══')
         break
@@ -183,7 +164,19 @@ export class InputPipeline {
           done: cmd.done,
         })
 
-        callbacks.onCommandsParsed([cmd], completed.length + 1, totalSteps > 0 ? totalSteps : undefined)
+        // ★ 指令去重：和已完成的指令比较，重复则跳过执行
+        const cmdKey = `${cmd.action}:${cmd.url || cmd.elementId || cmd.description || ''}`
+        if (completedKeys.has(cmdKey)) {
+          log.info('[Phase 2] ═══ 指令重复，跳过执行 ═══', { action: cmd.action, url: cmd.url })
+          if (cmd.done === 1) {
+            log.info('[Phase 2] ═══ 重复指令 done=1，停止 ═══')
+            break
+          }
+          continue
+        }
+
+        callbacks.onCommandsParsed([cmd], completed.length + 1)
+
         const result = await this.executor.execute(cmd)
 
         log.info('[Phase 2] 指令结果', {
@@ -196,11 +189,13 @@ export class InputPipeline {
 
         if (result.success) {
           completed.push({ action: cmd.action, elementId: cmd.elementId, description: cmd.description })
+          completedKeys.add(cmdKey)
           consecutiveErrors = 0
           lastError = ''
           lastFailedCommand = null
           lastHtmlFragments = null
 
+          // navigate 后等待页面加载
           if (cmd.action === 'navigate') {
             this.skeletonManager.invalidate()
           }
@@ -291,7 +286,6 @@ export class InputPipeline {
     lastFailedCommand?: { action: string; elementId?: string; description?: string; text?: string; url?: string } | null,
     lastHtmlFragments?: string | null,
     coreRule = MODE_STREAMING,
-    stepsInstruction = '',
   ): Promise<import('./intent-detector').Phase2Result> {
     const settings = this.options.getSettings()
     const modelId = this.options.getModelId?.() || settings.defaultModelId
@@ -307,7 +301,6 @@ export class InputPipeline {
     const skillList = this.options.getSkillList?.() || '（暂无可用技能）'
     const systemPrompt = PHASE2_SYSTEM_PROMPT
       .replace('{coreRule}', coreRule)
-      .replace('{stepsInstruction}', stepsInstruction)
       .replace('{skillList}', skillList)
     const userContent = buildStreamingUserMessage(text, skeleton, completed, lastError || undefined, lastFailedCommand || undefined, lastHtmlFragments || undefined)
 
@@ -355,14 +348,12 @@ export class InputPipeline {
       done: firstCommand?.[0]?.done,
       hasSkill: !!tags.skill,
       hasNeedHtml: !!tags.needHtml,
-      steps: tags.steps,
     })
 
     return {
       commands: firstCommand,
       skill: tags.skill,
       needHtml: tags.needHtml,
-      steps: tags.steps,
       rawAiOutput: fullResponse,
     }
   }

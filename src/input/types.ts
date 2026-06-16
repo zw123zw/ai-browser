@@ -34,7 +34,7 @@ export interface PipelineCallbacks {
   onChatMessage: (text: string) => void
 
   /** 即将执行的指令列表（解析完成后、执行前展示） */
-  onCommandsParsed: (commands: Command[], currentStep?: number, totalSteps?: number) => void
+  onCommandsParsed: (commands: Command[], currentStep?: number) => void
 
   /** 即将执行的技能（解析完成后、执行前展示） */
   onSkillParsed: (name: string, userText: string) => void

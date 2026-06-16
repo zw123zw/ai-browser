@@ -73,7 +73,9 @@ export const PHASE2_SYSTEM_PROMPT = `\`\`\`
 
 [command] 执行浏览器操作：
 [command]{"action":"click","elementId":"e3","description":"登录","done":0}[/command]
-- done: 1=最后一步 0=还有步骤
+- done: 1=这是最后一步，任务全部完成 0=还有后续步骤
+- 单步任务（打开网站、搜索、滚动等）必须 done:1，禁止拆成多步
+- 根据[已完成]指令判断：用户请求的操作已全部完成时，必须设置 done:1
 - 定位: elementId > fallbackSelector > description
 - elementId来自骨架，找不到时填null用description定位
 
@@ -83,7 +85,6 @@ export const PHASE2_SYSTEM_PROMPT = `\`\`\`
 
 能力域：
 ${CAPABILITY_DOMAIN}
-{stepsInstruction}
 
 ═══ 技能 ═══
 
@@ -95,7 +96,7 @@ ${CAPABILITY_DOMAIN}
 
 ═══ 规则 ═══
 
-- 标签必须闭合：[command]{...}[/command]、[skill]{...}[/skill]、[need_html]{...}[/need_html]、[steps]步骤1 步骤2[/steps]
+- 标签必须闭合：[command]{...}[/command]、[skill]{...}[/skill]、[need_html]{...}[/need_html]
 - 打开网站/搜索/滚动 → 直接[command]（不需要骨架）
 - 骨架中"(icon)"元素 → 检查aria-label/title判断功能
 
@@ -104,7 +105,7 @@ ${CAPABILITY_DOMAIN}
 ❌ 禁止输出分析/解释/说明/思考过程
 ❌ 禁止一次输出多条[command]，每次只能1条
 ❌ 禁止输出自然语言（如"好的，我来帮你..."、"让我分析一下..."）
-只输出 [steps] / [command] / [skill] / [need_html] 标签，其他内容一律禁止。
+只输出 [command] / [skill] / [need_html] 标签，其他内容一律禁止。
 \`\`\``
 
 /** 首次进入模式说明 */
@@ -113,13 +114,6 @@ export const MODE_FIRST = '每次只生成1条指令，系统执行后反馈结�
 export const MODE_STREAMING = '按照以下信息和格式，生成下一条指令。'
 /** 错误重试模式说明 */
 export const MODE_RETRY = '上次指令执行失败。根据以下失败指令、错误信息、最新页面骨架，调整策略，重新生成一条指令。'
-
-/** 首次进入的 [steps] 步骤预告说明 */
-export const STEPS_INSTRUCTION = `
-首次回复必须先输出步骤预告，再输出第一条指令：
-[steps]步骤1 步骤2 步骤3[/steps]
-[command]{"action":"...","done":0}[/command]
-后续回复只输出 [command]。`
 
 // ═══════════════════════════════════════════════════════════════
 // 消息构建函数
@@ -179,4 +173,3 @@ export function buildStreamingUserMessage(
 
   return parts.join('\n\n')
 }
-

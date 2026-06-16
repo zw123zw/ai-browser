@@ -26,8 +26,6 @@ export interface ExtractedTags {
   isAction: boolean
   /** 提取到的 [need_html] */
   needHtml?: NeedHtmlRequest
-  /** 提取到的 [steps] 步骤预告 */
-  steps?: string[]
   /** 是否提取到了任何标签 */
   hasAnyTag: boolean
   /** 原始文本 */
@@ -119,17 +117,6 @@ export function extractTags(rawText: string): ExtractedTags {
           log.warn('need_html 容错提取也失败了')
         }
       }
-    }
-  }
-
-  // [steps] 提取 — 步骤预告，步骤名用空格隔开；先匹配闭合标签，匹配不到则取 [steps] 后到行尾
-  const stepsMatch = rawText.match(/\[steps\]([\s\S]*?)\[\/steps\]/)
-    || rawText.match(/\[steps\](.+?)(?:\n|$)/)
-  if (stepsMatch) {
-    const steps = stepsMatch[1].trim().split(/\s+/).filter(Boolean)
-    if (steps.length > 0) {
-      result.steps = steps
-      result.hasAnyTag = true
     }
   }
 

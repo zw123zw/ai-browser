@@ -161,11 +161,10 @@ export function usePipeline() {
         },
 
         // 解析到指令列表 → 替换"执行中"消息为具体指令列表
-        onCommandsParsed: (commands, currentStep, totalSteps) => {
+        onCommandsParsed: (commands, currentStep) => {
           log.info('[回调] onCommandsParsed', {
             count: commands.length,
             currentStep,
-            totalSteps,
             commands: commands.map(c => ({ action: c.action, elementId: c.elementId, description: c.description, url: c.url })),
           })
           // 移除"正在执行操作..."占位消息
@@ -176,8 +175,7 @@ export function usePipeline() {
           }
           const step = currentStep || 1
           const cmdDetail = formatCommandDetail(commands[0])
-          const totalInfo = totalSteps ? `（共 ${totalSteps} 条）` : ''
-          addSystemMessage(`🔧 **正在执行第 ${step} 条指令${totalInfo}：**\n${step}. ${cmdDetail}`)
+          addSystemMessage(`🔧 **正在执行第 ${step} 条指令：**\n${step}. ${cmdDetail}`)
         },
 
         // 解析到技能 → 替换"执行中"消息为技能信息
