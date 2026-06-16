@@ -47,6 +47,7 @@ export function usePipeline() {
     if (!pipeline) {
       pipeline = new InputPipeline({
         getSettings: () => settingsStore.settings,
+        getModelId: () => convStore.conversation?.modelId || settingsStore.settings.defaultModelId,
         getSkillList: () => '（暂无可用技能）',
         getRecentMessages,
         getSignal: () => currentAborter?.signal,

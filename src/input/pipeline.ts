@@ -33,6 +33,8 @@ function getCommandKey(cmd: Command): string {
 
 export interface PipelineOptions {
   getSettings: () => AppSettings
+  /** 获取当前使用的模型 ID（优先会话级，回退全局默认） */
+  getModelId?: () => string
   getSkillList?: () => string
   getRecentMessages?: () => Array<{ role: 'user' | 'assistant'; content: string }>
   getSignal?: () => AbortSignal | undefined
@@ -52,6 +54,7 @@ export class InputPipeline {
     this.router = new InputRouter()
     this.detector = new IntentDetector({
       getSettings: options.getSettings,
+      getModelId: options.getModelId,
       getSkillList: options.getSkillList,
       getRecentMessages: options.getRecentMessages,
       getSignal: options.getSignal,
@@ -291,7 +294,8 @@ export class InputPipeline {
     stepsInstruction = '',
   ): Promise<import('./intent-detector').Phase2Result> {
     const settings = this.options.getSettings()
-    const model = settings.models.find(m => m.id === settings.defaultModelId) || settings.models[0]
+    const modelId = this.options.getModelId?.() || settings.defaultModelId
+    const model = settings.models.find(m => m.id === modelId) || settings.models[0]
     if (!model) {
       log.error('[流式] 未找到可用模型')
       return { rawAiOutput: '' }

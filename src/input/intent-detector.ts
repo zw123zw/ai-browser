@@ -20,6 +20,8 @@ const log = new Logger('IntentDetector')
 
 export interface IntentDetectorOptions {
   getSettings: () => AppSettings
+  /** 获取当前使用的模型 ID（优先会话级，回退全局默认） */
+  getModelId?: () => string
   getSkillList?: () => string
   getRecentMessages?: () => Array<{ role: 'user' | 'assistant'; content: string }>
   getSignal?: () => AbortSignal | undefined
@@ -146,7 +148,8 @@ export class IntentDetector {
     onChunk?: (delta: string, reasoningDelta?: string) => void,
   ): Promise<string> {
     const settings = this.options.getSettings()
-    const model = settings.models.find(m => m.id === settings.defaultModelId) || settings.models[0]
+    const modelId = this.options.getModelId?.() || settings.defaultModelId
+    const model = settings.models.find(m => m.id === modelId) || settings.models[0]
     if (!model) {
       log.error(`[${scene}] 未找到可用模型`, { defaultModelId: settings.defaultModelId })
       return ''

@@ -307,13 +307,15 @@ function pickModel(id: string) {
 
 function onDocClick(e: MouseEvent) {
   if (!modelMenuOpen.value) return;
-  if (modelMenuRef.value && !modelMenuRef.value.contains(e.target as Node)) {
+  // 用 composedPath 判断点击是否在菜单外部（兼容 Shadow DOM）
+  const path = e.composedPath();
+  if (modelMenuRef.value && !path.includes(modelMenuRef.value)) {
     modelMenuOpen.value = false;
   }
 }
 
-onMounted(() => document.addEventListener('click', onDocClick));
-onUnmounted(() => document.removeEventListener('click', onDocClick));
+onMounted(() => document.addEventListener('click', onDocClick, true));
+onUnmounted(() => document.removeEventListener('click', onDocClick, true));
 </script>
 
 <template>
