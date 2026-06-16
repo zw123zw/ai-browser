@@ -7,22 +7,12 @@
 /** 原生可交互元素标签（骨架提取 + 模糊匹配共用） */
 export const INTERACTIVE_TAGS = ['a', 'button', 'input', 'select', 'textarea', 'label', 'summary', 'details']
 
-/** 骨架中的单个元素 */
+/** 骨架中的单个元素（精简版：只保留 AI 定位和识别所需的核心字段） */
 export interface SkeletonElement {
   id: string                // 唯一标识 e1, e2, ...
   tag: string               // 标签名
-  text?: string             // 可见文字（截断 100 字符）
-  href?: string             // a 标签的 href
-  src?: string              // img/video/audio 的 src
-  type?: string             // input 的 type
-  name?: string             // input 的 name
-  placeholder?: string      // input 的 placeholder
-  value?: string            // input/textarea 的当前值
-  role?: string             // ARIA role
-  ariaLabel?: string        // aria-label
-  title?: string            // title 属性（按钮/链接的提示文字）
+  text?: string             // 可见文字（截断 100 字符，已含 ariaLabel/title/placeholder 的 fallback）
   parent?: string           // 父级地标标签（nav/header/main 等）
-  class?: string            // 仅保留 data-testid 等定位属性
 }
 
 /** 页面语义骨架 */

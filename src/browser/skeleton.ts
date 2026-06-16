@@ -155,11 +155,15 @@ export function extractSkeleton(doc: Document): SemanticSkeleton {
     if (!sId) continue
     const el = elMap.get(sId)
     if (!el || !el.text) continue
+    // 交互元素（<a>/<button>等）不参与父子去重 — 它们是真正的可操作元素
+    if (INTERACTIVE_TAGS.includes(el.tag)) continue
     for (const child of htmlEl.children) {
       const cId = (child as HTMLElement).dataset?.skeletonId
       if (!cId) continue
       const childEl = elMap.get(cId)
-      if (childEl && childEl.text === el.text) {
+      if (!childEl || !childEl.text) continue
+      // 精确匹配 或 子串匹配（父含价格等额外内容）→ 去掉父级
+      if (childEl.text === el.text || el.text.includes(childEl.text)) {
         parentsToRemove.add(sId)
         break
       }
@@ -169,7 +173,7 @@ export function extractSkeleton(doc: Document): SemanticSkeleton {
   const seenByParent = new Map<string, Set<string>>()
   const filtered = elements.filter(el => {
     if (parentsToRemove.has(el.id)) return false
-    if (!el.text && !['a', 'button', 'input', 'select', 'textarea'].includes(el.tag) && !el.role) return false
+    if (!el.text && !['a', 'button', 'input', 'select', 'textarea'].includes(el.tag)) return false
     if (el.text && el.text !== '(icon)') {
       const parentKey = el.parent || '_root'
       if (!seenByParent.has(parentKey)) seenByParent.set(parentKey, new Set())
@@ -257,28 +261,6 @@ function extractElement(el: HTMLElement, id: string): SkeletonElement | null {
     base.text = text
   } else if (hasIcon) {
     base.text = '(icon)'
-  }
-  if (el instanceof HTMLAnchorElement && el.href) base.href = el.href
-  if (el instanceof HTMLImageElement && el.src) base.src = el.src
-  if (el instanceof HTMLInputElement) {
-    base.type = el.type
-    if (el.name) base.name = el.name
-    if (el.placeholder) base.placeholder = el.placeholder
-    if (el.value) base.value = el.value
-  }
-  if (el instanceof HTMLTextAreaElement) {
-    if (el.placeholder) base.placeholder = el.placeholder
-    if (el.value) base.value = el.value
-  }
-  if (el.getAttribute('role')) base.role = el.getAttribute('role')!
-  if (el.getAttribute('aria-label')) base.ariaLabel = el.getAttribute('aria-label')!
-  if (el.getAttribute('title')) base.title = el.getAttribute('title')!
-  if (el.dataset.testid) base.class = `[data-testid="${el.dataset.testid}"]`
-
-  // 交互元素补充属性：button 的 type，带 onclick/tabindex 的元素的 role
-  if (tag === 'button' && el.getAttribute('type')) base.type = el.getAttribute('type')!
-  if (!base.role && (el.getAttribute('onclick') || el.getAttribute('tabindex'))) {
-    base.role = el.getAttribute('role') || 'button'
   }
 
   return base
