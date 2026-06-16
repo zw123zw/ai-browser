@@ -144,21 +144,39 @@ async function onPaste(e: ClipboardEvent) {
     return;
   }
 
-  // 没有文件 → 检查是否为图片链接
+  // 没有文件 → 检查是否为可获取的链接（网络链接或本地文件路径）
   const pastedText = e.clipboardData?.getData('text/plain')?.trim();
-  if (pastedText && isImageUrl(pastedText)) {
+  const fetchUrl = toFetchableUrl(pastedText);
+  if (fetchUrl) {
     e.preventDefault();
     try {
-      // 获取图片并转为 File，走统一的 addFiles 流程
-      const res = await fetch(pastedText, { mode: 'cors' });
-      const blob = await res.blob();
-      const ext = blob.type.split('/')[1] || 'png';
-      const fileName = pastedText.split('/').pop()?.split('?')[0] || `image.${ext}`;
-      const file = new File([blob], fileName, { type: blob.type });
-      await addFiles([file]);
-    } catch {
-      // 获取失败 → 写入输入框
-      insertTextAtCursor(pastedText);
+      let blob: Blob;
+      if (fetchUrl.startsWith('file:///')) {
+        // 本地文件 → 通过 Background 代理读取
+        blob = await fetchLocalFile(fetchUrl);
+      } else {
+        // 网络链接 → 直接 fetch
+        const res = await fetch(fetchUrl, { mode: 'cors' });
+        blob = await res.blob();
+      }
+      // 只有返回的是图片 → 拦截，不粘贴链接文本
+      if (blob.type.startsWith('image/')) {
+        const ext = blob.type.split('/')[1] || 'png';
+        const fileName = pastedText!.split(/[\\/]/).pop()?.split('?')[0] || `image.${ext}`;
+        const file = new File([blob], fileName, { type: blob.type });
+        await addFiles([file]);
+      } else {
+        // 非图片 → 上传内容 + 粘贴链接文本（同时做两件事）
+        insertTextAtCursor(pastedText!);
+        const ext = blob.type.split('/')[1] || 'txt';
+        const fileName = pastedText!.split(/[\\/]/).pop()?.split('?')[0] || `file.${ext}`;
+        const file = new File([blob], fileName, { type: blob.type });
+        await addFiles([file]);
+      }
+    } catch (err) {
+      // fetch 失败 → 粘贴链接文本
+      log.warn('fetch 链接内容失败，仅粘贴文本', { fetchUrl, error: (err as Error)?.message });
+      insertTextAtCursor(pastedText!);
     }
     return;
   }
@@ -182,14 +200,63 @@ function insertTextAtCursor(insertText: string) {
   });
 }
 
-/** 判断是否为可获取的 URL */
-function isImageUrl(url: string): boolean {
-  try {
-    const u = new URL(url);
-    return u.protocol === 'http:' || u.protocol === 'https:';
-  } catch {
-    return false;
+/** 通过 Background 代理读取本地文件（Content Script 无法直接 fetch file://） */
+function fetchLocalFile(fileUrl: string): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    chrome.runtime.sendMessage({ type: 'read-local-file', url: fileUrl }, (response) => {
+      if (chrome.runtime.lastError) {
+        reject(new Error(chrome.runtime.lastError.message));
+        return;
+      }
+      if (!response?.success) {
+        reject(new Error(response?.error || '读取本地文件失败'));
+        return;
+      }
+      // base64 → Blob
+      const binary = atob(response.data);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      resolve(new Blob([bytes], { type: response.mimeType }));
+    });
+  });
+}
+
+/**
+ * 将粘贴文本转为可 fetch 的 URL
+ * - data: URL → 直接返回
+ * - blob: URL → 直接返回
+ * - http/https → 直接返回
+ * - // 开头 → 补全 https: 返回
+ * - file:/// → 直接返回
+ * - Windows 本地路径（E:\xxx 或 E:/xxx）→ 转为 file:/// 返回
+ * - 其余（普通文本）→ 返回 null
+ */
+function toFetchableUrl(text: string | undefined | null): string | null {
+  if (!text) return null;
+  const trimmed = text.trim();
+  if (!trimmed) return null;
+
+  // data: / blob: 直接可用
+  if (trimmed.startsWith('data:') || trimmed.startsWith('blob:')) return trimmed;
+
+  // 协议相对URL → 补全 https:
+  if (trimmed.startsWith('//')) return 'https:' + trimmed;
+
+  // file:/// 直接可用
+  if (trimmed.startsWith('file:///')) return trimmed;
+
+  // Windows 本地路径（E:\xxx 或 E:/xxx）→ 转为 file:///
+  if (/^[A-Za-z]:[\\\/]/.test(trimmed)) {
+    return 'file:///' + trimmed.replace(/\\/g, '/');
   }
+
+  // http/https 网络链接
+  try {
+    const u = new URL(trimmed);
+    if (u.protocol === 'http:' || u.protocol === 'https:') return trimmed;
+  } catch { /* 不是合法 URL */ }
+
+  return null;
 }
 
 function removeAttachment(i: number) {

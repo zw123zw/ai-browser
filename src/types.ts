@@ -73,6 +73,8 @@ export interface ModelConfig {
   apiFormat?: string;
   /** 认证字段：bearer / api-key / access-token / authorization */
   authField?: string;
+  /** 供应商官网地址 */
+  website?: string;
 }
 
 /** 单个会话 */

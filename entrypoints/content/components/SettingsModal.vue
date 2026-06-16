@@ -179,6 +179,7 @@ function getEmptyModel(): ModelConfig {
     apiKey: '',
     apiFormat: 'open-chat',
     authField: 'bearer',
+    website: '',
   };
 }
 
@@ -212,6 +213,7 @@ function applyPreset(presetKey: string) {
   form.apiFormat = preset.apiFormat;
   form.authField = preset.authField;
   form.label = preset.name;
+  form.website = preset.website;
   if (preset.models.length > 0) {
     form.modelName = preset.models[0].modelName;
   }
@@ -228,6 +230,7 @@ async function saveModel() {
     apiKey: form.apiKey,
     apiFormat: form.apiFormat,
     authField: form.authField,
+    website: form.website,
   };
 
   if (isNewMode.value) {
@@ -361,6 +364,7 @@ function exportConfig() {
     apiKey: m.apiKey || '',
     apiFormat: m.apiFormat || 'open-chat',
     authField: m.authField || 'bearer',
+    website: m.website || '',
   }));
   const code = `export const DEFAULT_MODEL_ID = '${selectedModelId.value}';\n\nexport const LOCAL_MODELS = ${JSON.stringify(config, null, 2)};`;
   navigator.clipboard.writeText(code).then(() => {
@@ -522,6 +526,16 @@ function exportConfig() {
                 v-model="form.modelName"
                 class="zwf-input"
                 placeholder="如：gpt-4o、deepseek-chat、qwen-turbo"
+              />
+            </div>
+
+            <!-- 官网地址 -->
+            <div class="zwf-form-row">
+              <label>官网地址</label>
+              <input
+                v-model="form.website"
+                class="zwf-input"
+                placeholder="如：https://platform.openai.com/"
               />
             </div>
 

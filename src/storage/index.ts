@@ -20,6 +20,7 @@ function parseLocalModels(list: any[]): ModelConfig[] {
       baseUrl,
       apiKey: m.apiKey || '',
       apiFormat: m.apiFormat || 'openai',
+      website: m.website || '',
     };
   });
 }

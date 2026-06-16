@@ -69,9 +69,15 @@ function onMouseup(e: MouseEvent) {
   const mode = settingsStore.settings.autoSendSelection;
   if (mode === 'off' || (mode as unknown) === false) return;
 
-  // 过滤：选区在扩展自身 Shadow DOM 内的不处理（避免聊天面板内选择文字被发送）
-  const host = rootEl.value?.getRootNode();
-  if (host instanceof ShadowRoot && e.composedPath().includes(host.host)) return;
+  // 过滤：事件来自扩展自身 Shadow DOM 内的不处理（避免聊天面板内操作被干扰）
+  const rootNode = rootEl.value?.getRootNode();
+  if (rootNode instanceof ShadowRoot) {
+    const hostEl = rootNode.host as HTMLElement;
+    // composedPath 包含 shadow host → 事件源自扩展内部
+    if (e.composedPath().includes(hostEl)) return;
+    // 额外检查：eventTarget 在 shadow DOM 内也不处理
+    if (hostEl.contains(e.target as Node)) return;
+  }
 
   const selection = document.getSelection();
   const text = selection?.toString().trim();

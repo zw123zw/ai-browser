@@ -25,6 +25,31 @@ export default defineBackground(() => {
 
   // 监听来自 content script 的消息
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    // 读取本地文件（Content Script 无法直接 fetch file://）
+    if (message.type === 'read-local-file') {
+      const { url } = message;
+      fetch(url)
+        .then(async (res) => {
+          if (!res.ok) {
+            sendResponse({ success: false, error: `HTTP ${res.status}` });
+            return;
+          }
+          const buffer = await res.arrayBuffer();
+          const base64 = btoa(
+            new Uint8Array(buffer).reduce((data, byte) => data + String.fromCharCode(byte), '')
+          );
+          sendResponse({
+            success: true,
+            data: base64,
+            mimeType: res.headers.get('content-type') || 'application/octet-stream',
+          });
+        })
+        .catch((err) => {
+          sendResponse({ success: false, error: String(err) });
+        });
+      return true; // 异步响应
+    }
+
     // 代理 fetch 请求（避免 CORS）
     if (message.type === 'proxy-fetch') {
       const { url, method, headers, body } = message;
