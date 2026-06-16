@@ -236,11 +236,39 @@ export default defineBackground(() => {
           sendResponse({ success: false, error: '未指定目标标签页关键词' });
           return true;
         }
+
+        // 常见站点别名映射（用户说法 → 实际标题/URL 关键词）
+        const SITE_ALIASES: Record<string, string[]> = {
+          'b站': ['bilibili', '哔哩哔哩'],
+          'bilibili': ['bilibili', '哔哩哔哩'],
+          '哔哩哔哩': ['bilibili', '哔哩哔哩'],
+          '淘宝': ['taobao', '淘宝'],
+          '京东': ['jd.com', '京东'],
+          '百度': ['baidu', '百度'],
+          '谷歌': ['google', '谷歌'],
+          'github': ['github'],
+          '掘金': ['juejin', '掘金'],
+          '知乎': ['zhihu', '知乎'],
+          '微博': ['weibo', '微博'],
+          '抖音': ['douyin', '抖音', 'tiktok'],
+          'youtube': ['youtube', 'youtube'],
+          '油管': ['youtube', 'youtube'],
+          'twitter': ['twitter', 'x.com'],
+          '推特': ['twitter', 'x.com'],
+          '网易': ['163.com', '网易'],
+          '腾讯': ['qq.com', '腾讯'],
+          '必应': ['bing', '必应'],
+        }
+
+        // 获取扩展后的匹配关键词列表
+        const queryLower = query.toLowerCase()
+        const matchTerms = [queryLower, ...(SITE_ALIASES[queryLower] || [])]
+
         chrome.tabs.query({}).then((tabs) => {
           const target = tabs.find((tab) => {
             const title = (tab.title || '').toLowerCase();
             const url = (tab.url || '').toLowerCase();
-            return title.includes(query.toLowerCase()) || url.includes(query.toLowerCase());
+            return matchTerms.some(term => title.includes(term) || url.includes(term));
           });
           if (target?.id) {
             chrome.tabs.update(target.id, { active: true }).then(() => {

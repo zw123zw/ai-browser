@@ -9,6 +9,7 @@
  */
 
 import { Logger } from '@/src/utils/logger'
+import { INTERACTIVE_TAGS } from './types'
 import type { SkeletonElement, SemanticSkeleton } from './types'
 
 const log = new Logger('Skeleton')
@@ -204,6 +205,7 @@ export function extractSkeleton(doc: Document): SemanticSkeleton {
  * - a[href] — 链接
  * - button — 按钮
  * - input/select/textarea — 表单元素
+ * - video/audio — 媒体元素（可播放/暂停/全屏）
  * - [onclick] — 有点击事件属性
  * - [role="button"] — 语义按钮
  * - [tabindex] — 可聚焦
@@ -212,8 +214,8 @@ export function extractSkeleton(doc: Document): SemanticSkeleton {
 function isClickable(el: HTMLElement): boolean {
   const tag = el.tagName.toLowerCase()
 
-  // 原生交互元素
-  if (['a', 'button', 'input', 'select', 'textarea', 'label', 'summary', 'details'].includes(tag)) return true
+  // 原生交互元素（含媒体元素）
+  if (INTERACTIVE_TAGS.includes(tag)) return true
 
   // contenteditable
   if (el.getAttribute('contenteditable') === 'true' || el.getAttribute('contenteditable') === '') return true

@@ -4,6 +4,9 @@
  * 定义语义骨架、指令结构、执行结果等核心类型
  */
 
+/** 原生可交互元素标签（骨架提取 + 模糊匹配共用） */
+export const INTERACTIVE_TAGS = ['a', 'button', 'input', 'select', 'textarea', 'label', 'summary', 'details']
+
 /** 骨架中的单个元素 */
 export interface SkeletonElement {
   id: string                // 唯一标识 e1, e2, ...

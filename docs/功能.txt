@@ -5,3 +5,6 @@
 语音功能实现
 
 .trellis\tasks\06-15-test-suite\prd.md 实现测试方案
+
+根据整个代码的实际设计实现逻辑，重写下.trellis\tasks\06-14-browser-command-arch\prd.md这个prd  对着现在内容格式
+  要内容格式非常详细 详细写出整个功能的架构设计流程和实现细节 参照现在内容和最新代码逻辑实现来写 写好不提交

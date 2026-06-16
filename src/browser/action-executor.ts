@@ -6,6 +6,7 @@
  */
 
 import { Logger } from '@/src/utils/logger'
+import { INTERACTIVE_TAGS } from './types'
 import type { Command, ActionResult } from './types'
 
 const log = new Logger('ActionExecutor')
@@ -97,8 +98,9 @@ export class ActionExecutor {
 
   /** 文本模糊匹配查找元素 */
   private findByText(text: string): HTMLElement | null {
-    // 优先搜索交互元素
-    const interactive = document.querySelectorAll('a, button, input, select, textarea, [role="button"], [onclick], [tabindex]')
+    // 优先搜索交互元素（使用统一的 INTERACTIVE_TAGS + 属性选择器）
+    const interactiveSelector = INTERACTIVE_TAGS.join(', ') + ', [role="button"], [onclick], [tabindex]'
+    const interactive = document.querySelectorAll(interactiveSelector)
     for (const el of interactive) {
       const elText = el.textContent?.trim() || ''
       const ariaLabel = el.getAttribute('aria-label') || ''
@@ -380,20 +382,10 @@ export class ActionExecutor {
 
     try {
       switch (subAction) {
-        case 'fullscreen': {
-          // 找播放器容器（比 video 更适合全屏，保留播放器 UI）
-          const player = video.closest('[class*="player"], [id*="player"], [class*="Player"]') || video.parentElement || video
-          const el = player as any
-          if (el.requestFullscreen) {
-            await el.requestFullscreen()
-            return { success: true, message: '全屏成功' }
-          }
-          if (el.webkitRequestFullscreen) {
-            await el.webkitRequestFullscreen()
-            return { success: true, message: '全屏成功（webkit）' }
-          }
-          return { success: false, message: '当前页面不支持全屏' }
-        }
+        case 'fullscreen':
+          // 全屏需要用户手势，浏览器安全限制不允许程序化调用
+          // 请用 click action 点击全屏按钮
+          return { success: false, message: '全屏需要用户手势，请用 click 点击全屏按钮' }
 
         case 'play':
           await video.play()
