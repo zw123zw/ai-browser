@@ -183,7 +183,7 @@ export class InputPipeline {
           done: cmd.done,
         })
 
-        callbacks.onCommandsParsed([cmd])
+        callbacks.onCommandsParsed([cmd], completed.length + 1, totalSteps > 0 ? totalSteps : undefined)
         const result = await this.executor.execute(cmd)
 
         log.info('[Phase 2] 指令结果', {
@@ -224,7 +224,7 @@ export class InputPipeline {
           lastFailedCommand = { action: cmd.action, elementId: cmd.elementId, description: cmd.description, text: cmd.text, url: cmd.url }
           consecutiveErrors++
           log.warn('[Phase 2] 指令执行失败', { action: cmd.action, error: lastError })
-          callbacks.onRetryMessage(`🔄 正在重试... (${consecutiveErrors}/${MAX_RETRY})`)
+          callbacks.onRetryMessage(`🔄 正在重试... (${consecutiveErrors}/${MAX_RETRY})`, completed.length + 1, lastFailedCommand)
           // command 失败 → 继续检查 need_html/skill
         }
       }
@@ -241,7 +241,7 @@ export class InputPipeline {
         lastFailedCommand = { action: 'click', description: phase2Result.needHtml.description }
         lastHtmlFragments = htmlFragments
         consecutiveErrors++
-        callbacks.onRetryMessage(`🔄 正在重试... (${consecutiveErrors}/${MAX_RETRY})`)
+        callbacks.onRetryMessage(`🔄 正在重试... (${consecutiveErrors}/${MAX_RETRY})`, completed.length + 1, lastFailedCommand)
         continue
       }
 
@@ -265,7 +265,7 @@ export class InputPipeline {
           log.error('[Phase 2] 技能执行异常', error)
         }
         consecutiveErrors++
-        callbacks.onRetryMessage(`🔄 正在重试... (${consecutiveErrors}/${MAX_RETRY})`)
+        callbacks.onRetryMessage(`🔄 正在重试... (${consecutiveErrors}/${MAX_RETRY})`, completed.length + 1, lastFailedCommand)
         continue
       }
     }

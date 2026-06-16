@@ -34,7 +34,7 @@ export interface PipelineCallbacks {
   onChatMessage: (text: string) => void
 
   /** 即将执行的指令列表（解析完成后、执行前展示） */
-  onCommandsParsed: (commands: Command[]) => void
+  onCommandsParsed: (commands: Command[], currentStep?: number, totalSteps?: number) => void
 
   /** 即将执行的技能（解析完成后、执行前展示） */
   onSkillParsed: (name: string, userText: string) => void
@@ -46,7 +46,7 @@ export interface PipelineCallbacks {
   onAllCommandsDone?: (userText: string, commands: Command[]) => void
 
   /** 重试消息（展示给用户看重试过程） */
-  onRetryMessage: (message: string) => void
+  onRetryMessage: (message: string, currentStep?: number, failedCommand?: { action: string; elementId?: string; description?: string; text?: string; url?: string } | null) => void
 
   /** 错误（超过重试上限后） */
   onError: (message: string) => void

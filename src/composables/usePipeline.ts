@@ -83,6 +83,11 @@ export function usePipeline() {
     })
   }
 
+  /** 格式化指令详情（用于执行中和重试消息） */
+  function formatCommandDetail(c: { action: string; elementId?: string; description?: string; text?: string; url?: string }): string {
+    return `${c.action}${c.description ? ` — ${c.description}` : ''}${c.url ? ` → ${c.url}` : ''}${c.text ? ` "${c.text}"` : ''}`
+  }
+
   /**
    * 处理用户输入
    */
@@ -156,9 +161,11 @@ export function usePipeline() {
         },
 
         // 解析到指令列表 → 替换"执行中"消息为具体指令列表
-        onCommandsParsed: (commands) => {
+        onCommandsParsed: (commands, currentStep, totalSteps) => {
           log.info('[回调] onCommandsParsed', {
             count: commands.length,
+            currentStep,
+            totalSteps,
             commands: commands.map(c => ({ action: c.action, elementId: c.elementId, description: c.description, url: c.url })),
           })
           // 移除"正在执行操作..."占位消息
@@ -167,10 +174,10 @@ export function usePipeline() {
             if (idx !== -1) convStore.conversation.messages.splice(idx, 1)
             currentStreamingMsg = null
           }
-          const cmdList = commands
-            .map((c, i) => `${i + 1}. **${c.action}**${c.description ? ` — ${c.description}` : ''}${c.url ? ` → ${c.url}` : ''}${c.text ? ` "${c.text}"` : ''}`)
-            .join('\n')
-          addSystemMessage(`🔧 **正在执行 ${commands.length} 条指令：**\n${cmdList}`)
+          const step = currentStep || 1
+          const cmdDetail = formatCommandDetail(commands[0])
+          const totalInfo = totalSteps ? `（共 ${totalSteps} 条）` : ''
+          addSystemMessage(`🔧 **正在执行第 ${step} 条指令${totalInfo}：**\n${step}. ${cmdDetail}`)
         },
 
         // 解析到技能 → 替换"执行中"消息为技能信息
@@ -208,14 +215,19 @@ export function usePipeline() {
         },
 
         // 重试消息（清理占位消息）
-        onRetryMessage: (message) => {
-          log.info('[回调] onRetryMessage', { message })
+        onRetryMessage: (message, currentStep, failedCommand) => {
+          log.info('[回调] onRetryMessage', { message, currentStep, failedCommand })
           if (currentStreamingMsg && convStore.conversation) {
             const idx = convStore.conversation.messages.findIndex(m => m.id === currentStreamingMsg!.id)
             if (idx !== -1) convStore.conversation.messages.splice(idx, 1)
             currentStreamingMsg = null
           }
-          addSystemMessage(message)
+          const step = currentStep || 1
+          const cmdDetail = failedCommand ? formatCommandDetail(failedCommand) : ''
+          const retryMsg = cmdDetail
+            ? `🔄 **正在重试第 ${step} 条指令：**\n${step}. ${cmdDetail}`
+            : `🔄 **正在重试第 ${step} 条指令**`
+          addSystemMessage(retryMsg)
         },
 
         // 最终错误
