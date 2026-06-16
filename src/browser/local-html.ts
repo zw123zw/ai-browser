@@ -37,24 +37,18 @@ export function searchByKeywords(keywords: string[]): string | null {
 
   log.info('关键词 HTML 搜索', { keywords })
 
-  const allElements = document.body.querySelectorAll('*')
   const matched: string[] = []
 
-  for (const el of allElements) {
-    const htmlEl = el as HTMLElement
+  // 主文档搜索
+  searchInDoc(document, keywords, matched)
 
-    // 1. 只保留可交互元素
-    if (!isClickable(htmlEl)) continue
-
-    // 2. 可见性检查
-    if (!isElementVisible(htmlEl)) continue
-
-    // 3. 关键词 AND 匹配
-    if (!matchesKeywords(htmlEl, keywords)) continue
-
-    // 4. 清洗：只保留元素本身，清洗属性
-    const cleaned = cleanElement(htmlEl)
-    if (cleaned) matched.push(cleaned)
+  // iframe 搜索（同源 iframe）
+  const iframes = document.querySelectorAll('iframe')
+  for (const iframe of iframes) {
+    let iframeDoc: Document | null = null
+    try { iframeDoc = (iframe as HTMLIFrameElement).contentDocument } catch { continue }
+    if (!iframeDoc?.body) continue
+    searchInDoc(iframeDoc, keywords, matched)
   }
 
   if (matched.length === 0) {
@@ -65,6 +59,19 @@ export function searchByKeywords(keywords: string[]): string | null {
   const result = matched.join('\n')
   log.info('关键词搜索完成', { keywords, matchCount: matched.length, htmlLength: result.length })
   return result
+}
+
+/** 在单个文档内搜索匹配关键词的可交互元素 */
+function searchInDoc(doc: Document, keywords: string[], matched: string[]): void {
+  const allElements = doc.body.querySelectorAll('*')
+  for (const el of allElements) {
+    const htmlEl = el as HTMLElement
+    if (!isClickable(htmlEl)) continue
+    if (!isElementVisible(htmlEl)) continue
+    if (!matchesKeywords(htmlEl, keywords)) continue
+    const cleaned = cleanElement(htmlEl)
+    if (cleaned) matched.push(cleaned)
+  }
 }
 
 /**

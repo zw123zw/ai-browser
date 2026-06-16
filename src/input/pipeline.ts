@@ -17,7 +17,7 @@ import { ActionExecutor } from '@/src/browser/action-executor'
 import { SkeletonManager } from '@/src/browser/skeleton'
 import { searchByKeywords } from '@/src/browser/local-html'
 import { extractTags } from './tag-parser'
-import { PHASE2_SYSTEM_PROMPT, buildStreamingUserMessage } from './prompts'
+import { PHASE2_SYSTEM_PROMPT, buildStreamingUserMessage, MODE_FIRST, MODE_STREAMING, MODE_RETRY, STEPS_INSTRUCTION } from './prompts'
 import type { InputContext, PipelineCallbacks } from './types'
 import type { AppSettings } from '@/src/types'
 import type { Command, SemanticSkeleton } from '@/src/browser/types'
@@ -129,6 +129,8 @@ export class InputPipeline {
     let totalSteps = -1          // -1 = AI 未返回 [steps]，未知总数
     let consecutiveErrors = 0
     let lastError = ''
+    let lastFailedCommand: { action: string; elementId?: string; description?: string; text?: string; url?: string } | null = null
+    let lastHtmlFragments: string | null = null
 
     while (consecutiveErrors < MAX_RETRY) {
       // ★ 双重停止条件 1：[steps] 步数已到
@@ -147,8 +149,11 @@ export class InputPipeline {
         consecutiveErrors,
       })
 
-      // AI 生成 1 条指令
-      const phase2Result = await this.callStreamingAI(text, skeleton, completed, lastError)
+      // AI 生成 1 条指令（根据进入模式选择提示词）
+      const isFirstEntry = completed.length === 0 && !lastError
+      const coreRule = isFirstEntry ? MODE_FIRST : (lastError ? MODE_RETRY : MODE_STREAMING)
+      const stepsInstruction = isFirstEntry ? STEPS_INSTRUCTION : ''
+      const phase2Result = await this.callStreamingAI(text, skeleton, completed, lastError, lastFailedCommand, lastHtmlFragments, coreRule, stepsInstruction)
 
       // ★ 首次解析 [steps]，记录总步骤数
       if (phase2Result.steps?.length) {
@@ -171,6 +176,8 @@ export class InputPipeline {
         const htmlFragments = searchByKeywords(phase2Result.needHtml.keywords)
         log.info('[Phase 2] 关键词搜索结果', { found: !!htmlFragments })
         lastError = `未找到 "${phase2Result.needHtml.description}" 对应元素`
+        lastFailedCommand = { action: 'click', description: phase2Result.needHtml.description }
+        lastHtmlFragments = htmlFragments
         consecutiveErrors++
         continue
       }
@@ -222,6 +229,8 @@ export class InputPipeline {
         completed.push({ action: cmd.action, elementId: cmd.elementId, description: cmd.description })
         consecutiveErrors = 0
         lastError = ''
+        lastFailedCommand = null
+        lastHtmlFragments = null
 
         if (cmd.action === 'navigate') {
           this.skeletonManager.invalidate()
@@ -237,9 +246,15 @@ export class InputPipeline {
         await new Promise(resolve => setTimeout(resolve, 500))
       } else {
         lastError = `[${cmd.action}] ${result.message}`
+        lastFailedCommand = { action: cmd.action, elementId: cmd.elementId, description: cmd.description, text: cmd.text, url: cmd.url }
         consecutiveErrors++
         log.warn('[Phase 2] 指令执行失败', { action: cmd.action, error: lastError })
       }
+    }
+
+    // 显示重试消息
+    if (lastError && consecutiveErrors < MAX_RETRY) {
+      callbacks.onRetryMessage(`🔄 正在重试... (${consecutiveErrors}/${MAX_RETRY})`)
     }
 
     if (consecutiveErrors >= MAX_RETRY) {
@@ -260,6 +275,10 @@ export class InputPipeline {
     skeleton: SemanticSkeleton,
     completed: Array<{ action: string; elementId?: string; description?: string }>,
     lastError: string,
+    lastFailedCommand?: { action: string; elementId?: string; description?: string; text?: string; url?: string } | null,
+    lastHtmlFragments?: string | null,
+    coreRule = MODE_STREAMING,
+    stepsInstruction = '',
   ): Promise<import('./intent-detector').Phase2Result> {
     const settings = this.options.getSettings()
     const model = settings.models.find(m => m.id === settings.defaultModelId) || settings.models[0]
@@ -272,8 +291,11 @@ export class InputPipeline {
     const adapter = createAdapter(model.provider || settings.provider)
 
     const skillList = this.options.getSkillList?.() || '（暂无可用技能）'
-    const systemPrompt = PHASE2_SYSTEM_PROMPT.replace('{skillList}', skillList)
-    const userContent = buildStreamingUserMessage(text, skeleton, completed, lastError || undefined)
+    const systemPrompt = PHASE2_SYSTEM_PROMPT
+      .replace('{coreRule}', coreRule)
+      .replace('{stepsInstruction}', stepsInstruction)
+      .replace('{skillList}', skillList)
+    const userContent = buildStreamingUserMessage(text, skeleton, completed, lastError || undefined, lastFailedCommand || undefined, lastHtmlFragments || undefined)
 
     log.info('[流式] ═══ AI 请求 ═══', {
       skeletonElements: skeleton.elements.length,

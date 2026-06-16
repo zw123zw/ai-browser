@@ -66,103 +66,60 @@ export const PHASE1_SYSTEM_PROMPT = `\`\`\`
 // ═══════════════════════════════════════════════════════════════
 
 export const PHASE2_SYSTEM_PROMPT = `\`\`\`
-你是浏览器操作助手。
+你是浏览器操作助手。只输出指令标签，禁止分析/解释/说明。
+{coreRule}
 
-⚠️ 输出格式（严格遵守）：
-你只能输出指令标签，严禁输出任何分析、解释、说明、思考过程。
-每次只输出1条指令，系统会立即执行并反馈结果，然后你再生成下一条。
+═══ 指令 ═══
 
-首次回复时，必须先输出步骤预告，再输出第一条指令：
-[steps]步骤名1 步骤名2 步骤名3[/steps]
+[command] 执行浏览器操作：
 [command]{"action":"click","elementId":"e3","description":"登录","done":0}[/command]
+- done: 1=最后一步 0=还有步骤
+- 定位: elementId > fallbackSelector > description
+- elementId来自骨架，找不到时填null用description定位
 
-后续回复只需输出指令：
-[command]{"action":"type","elementId":"e5","text":"123","done":0}[/command]
-
-最后一步 done 设为 1：
-[command]{"action":"click","elementId":"e8","description":"提交","done":1}[/command]
-
-错误重试时，也要先输出[steps]列出剩余步骤，再输出第一条指令。
-
-done 含义：1=这是最后一步，0=后面还有步骤。必须正确设置，系统根据 done=1 判断任务是否完成。
-
-步骤预告格式：[steps]步骤名1 步骤名2 步骤名3[/steps]，步骤名用空格隔开，每个步骤名是一个简短描述词。
-
-错误输出（禁止）：
-❌ 不输出 [steps] 步骤预告（首次必须输出）
-❌ 一次输出多条 [command]
-❌ "好的，我来帮你点击登录按钮..."
-❌ "让我分析一下页面结构..."
-
-指令格式：
-[command]{"action":"click","elementId":"e3","description":"登录","done":0}[/command]
-[command]{"action":"navigate","url":"https://...","done":0}[/command]
-[skill]{"name":"翻译","userText":"这个页面"}[/skill]
+[need_html] 骨架找不到目标时，关键词搜索页面HTML重新定位：
 [need_html]{"keywords":["收藏","按钮"],"reason":"骨架未找到","description":"点击收藏"}[/need_html]
-keywords: 对用户意图分词，尽量保留原始语句中的关键词，用于在页面HTML中搜索目标元素。
+- keywords从用户原始语句提取
 
 能力域：
 ${CAPABILITY_DOMAIN}
+{stepsInstruction}
 
-定位优先级：elementId > fallbackSelector > description
+═══ 技能 ═══
+
+[skill] 调用匹配的用户技能：
+[skill]{"name":"技能名","userText":"文本"}[/skill]
 
 可用技能：
 {skillList}
 
-规则：
-1. 每次只生成1条指令，系统会执行后反馈结果，你根据最新页面状态决定下一步
-2. 首次回复必须先输出[steps]步骤预告，再输出第一条[command]指令。后续回复不需要再输出[steps]
-3. 最后一条指令的done必须设为1，中间步骤done设为0
-4. 最后一条用户消息是[当前请求]，前面的消息是对话历史和执行结果。只处理[当前请求]，不要重复已执行过的操作
-5. "然后/接着/再" 意味着对同一个元素执行不同的操作（如先点赞再收藏），不是重复上一次操作
-6. 打开网站/搜索/滚动 → 直接返回[command]（不需要骨架）
-7. 操作页面元素 → 用骨架elementId定位
-8. 有匹配技能 → 返回[skill]
-9. 找不到目标 → 返回[need_html]，keywords从用户原始语句中提取
-10. 所有步骤已完成 → 不输出任何指令
-11. 输入手机号/密码等文本 → 找input[type=text/password]，不要找select（select是下拉选择，如国家代码）
-12. elementId必须来自骨架，骨架中找不到对应元素时elementId填null，description填写目标描述
+═══ 规则 ═══
 
-图标按钮识别：
-- 骨架中text为"(icon)"的元素，优先检查aria-label/title属性来判断功能
+- 标签必须闭合：[command]{...}[/command]、[skill]{...}[/skill]、[need_html]{...}[/need_html]、[steps]步骤1 步骤2[/steps]
+- 打开网站/搜索/滚动 → 直接[command]（不需要骨架）
+- 骨架中"(icon)"元素 → 检查aria-label/title判断功能
+
+═══ 禁止输出 ═══
+
+❌ 禁止输出分析/解释/说明/思考过程
+❌ 禁止一次输出多条[command]，每次只能1条
+❌ 禁止输出自然语言（如"好的，我来帮你..."、"让我分析一下..."）
+只输出 [steps] / [command] / [skill] / [need_html] 标签，其他内容一律禁止。
 \`\`\``
 
-// ═══════════════════════════════════════════════════════════════
-// Phase 2 错误重试
-// ═══════════════════════════════════════════════════════════════
+/** 首次进入模式说明 */
+export const MODE_FIRST = '每次只生成1条指令，系统执行后反馈结果再生成下一条。'
+/** 流式执行模式说明 */
+export const MODE_STREAMING = '按照以下信息和格式，生成下一条指令。'
+/** 错误重试模式说明 */
+export const MODE_RETRY = '上次指令执行失败。根据以下失败指令、错误信息、最新页面骨架，调整策略，重新生成一条指令。'
 
-export const PHASE2_RETRY_SYSTEM_PROMPT = `\`\`\`
-上次操作失败，根据错误信息和最新骨架重新生成完整指令序列。
-跳过已完成的步骤，只生成剩余步骤。
-
-⚠️ 输出格式（严格遵守）：
-你只能输出指令标签，严禁输出任何分析、解释、说明、思考过程。
-
-必须先输出剩余步骤预告，再输出第一条指令：
-[steps]步骤名1 步骤名2[/steps]
-[command]{"action":"click","elementId":"e3","description":"登录","done":0}[/command]
-
-最后一步 done 设为 1：
-[command]{"action":"click","elementId":"e8","description":"提交","done":1}[/command]
-
-错误输出（禁止）：
-❌ 不输出 [steps] 剩余步骤预告
-❌ "好的，让我重新分析一下页面结构..."
-❌ "根据错误信息，我需要调整策略..."
-❌ "让我检查一下哪些步骤已完成..."
-
-指令格式：
-[command]{"action":"click","elementId":"e3","description":"登录","done":0}[/command]
-[skill]{"name":"翻译","userText":"这个页面"}[/skill]
-[need_html]{"keywords":["收藏","按钮"],"reason":"骨架未找到","description":"点击收藏"}[/need_html]
-
-规则：
-- 必须先输出[steps]剩余步骤预告，再输出第一条[command]
-- 跳过已完成的步骤
-- 最后一步的done必须设为1
-- elementId必须来自当前骨架，骨架中找不到对应元素时elementId填null，description填写目标描述（系统会用description重新定位）
-- 输入手机号/密码等文本 → 找input[type=text/password]，不要找select
-\`\`\``
+/** 首次进入的 [steps] 步骤预告说明 */
+export const STEPS_INSTRUCTION = `
+首次回复必须先输出步骤预告，再输出第一条指令：
+[steps]步骤1 步骤2 步骤3[/steps]
+[command]{"action":"...","done":0}[/command]
+后续回复只输出 [command]。`
 
 // ═══════════════════════════════════════════════════════════════
 // 消息构建函数
@@ -191,6 +148,8 @@ export function buildStreamingUserMessage(
   skeleton: SemanticSkeleton,
   completed: Array<{ action: string; elementId?: string; description?: string }>,
   lastError?: string,
+  lastFailedCommand?: { action: string; elementId?: string; description?: string; text?: string; url?: string } | null,
+  htmlFragments?: string,
 ): string {
   const parts: string[] = []
 
@@ -204,7 +163,16 @@ export function buildStreamingUserMessage(
   }
 
   if (lastError) {
-    parts.push(`[上次错误] ${lastError}`)
+    const errorParts = [`[上次错误] ${lastError}`]
+    if (lastFailedCommand) {
+      const cmdSummary = JSON.stringify(lastFailedCommand)
+      errorParts.push(`[失败指令] ${cmdSummary}`)
+    }
+    parts.push(errorParts.join('\n'))
+  }
+
+  if (htmlFragments) {
+    parts.push(`[相关HTML片段]\n${htmlFragments}`)
   }
 
   parts.push(`[当前页面骨架]\n${JSON.stringify(skeleton)}`)
@@ -212,35 +180,3 @@ export function buildStreamingUserMessage(
   return parts.join('\n\n')
 }
 
-/**
- * 构建重试用户消息
- *
- * 错误消息 = 新骨架 + 已完成列表 + 错误 + HTML 片段（如有）
- */
-export function buildRetryUserMessage(
-  text: string,
-  skeleton: SemanticSkeleton,
-  lastError: string,
-  htmlFragments: string | null,
-  completed: Array<{ action: string; elementId?: string }>,
-): string {
-  const parts: string[] = []
-
-  parts.push(`用户: "${text}"`)
-  parts.push(`页面骨架:\n${JSON.stringify(skeleton)}`)
-
-  if (completed.length > 0) {
-    const completedStr = completed.map(c => `${c.action} ${c.elementId || ''}`).join(', ')
-    parts.push(`已完成: ${completedStr}`)
-  }
-
-  parts.push(`错误: ${lastError}`)
-
-  if (htmlFragments) {
-    parts.push(`相关HTML:\n${htmlFragments}`)
-  }
-
-  parts.push('请根据新骨架重新生成剩余指令。')
-
-  return parts.join('\n\n')
-}

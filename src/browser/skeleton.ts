@@ -66,17 +66,13 @@ export class SkeletonManager {
  */
 export function extractSkeleton(doc: Document): SemanticSkeleton {
   const elements: SkeletonElement[] = []
-  const domParentIdMap = new Map<string, string>() // element id → DOM parent skeleton id
+  const domParentIdMap = new Map<string, string>()
+  const existingIds = new Map<string, boolean>()
   let idCounter = 0
   let scannedCount = 0
-  let clickableCount = 0
 
-  // 从 body 获取所有元素，先打唯一 ID
-  const viewportHeight = window.innerHeight
-  const viewportWidth = window.innerWidth
+  // 统计已有最大 ID 编号，避免新旧 ID 冲突
   const allElements = doc.body.querySelectorAll('*')
-
-  // 统计已有的最大 ID 编号，避免新旧 ID 冲突
   for (const el of allElements) {
     const existingId = (el as HTMLElement).dataset.skeletonId
     if (existingId) {
@@ -85,41 +81,70 @@ export function extractSkeleton(doc: Document): SemanticSkeleton {
     }
   }
 
-  for (const el of allElements) {
-    const htmlEl = el as HTMLElement
-    // 保留已有的 ID，只给新元素分配
-    const id = htmlEl.dataset.skeletonId || `e${++idCounter}`
-    htmlEl.dataset.skeletonId = id
+  // 嵌套函数：闭包访问 idCounter
+  function extractFromDoc(
+    doc: Document, vpOffsetX: number, vpOffsetY: number,
+    forceParent?: string,
+  ): void {
+    const viewportHeight = window.innerHeight
+    const viewportWidth = window.innerWidth
+    const allEls = doc.body.querySelectorAll('*')
 
-    // 1. 只保留可交互标签
-    if (!isClickable(htmlEl)) continue
+    for (const el of allEls) {
+      const htmlEl = el as HTMLElement
+      const id = htmlEl.dataset.skeletonId || `e${++idCounter}`
+      htmlEl.dataset.skeletonId = id
+      existingIds.set(id, true)
 
-    // 2. 可见性检查（offsetParent 或 fixed 定位）
-    if (!isElementVisible(htmlEl)) continue
+      if (!isClickable(htmlEl)) continue
+      if (!isElementVisible(htmlEl)) continue
 
-    // 3. 可视区域检查（垂直+水平）
-    const rect = htmlEl.getBoundingClientRect()
-    if (rect.top >= viewportHeight || rect.bottom <= 0) continue
-    if (rect.left >= viewportWidth || rect.right <= 0) continue
+      const rect = htmlEl.getBoundingClientRect()
+      const top = rect.top + vpOffsetY, bottom = rect.bottom + vpOffsetY
+      const left = rect.left + vpOffsetX, right = rect.right + vpOffsetX
+      if (top >= viewportHeight || bottom <= 0) continue
+      if (left >= viewportWidth || right <= 0) continue
+      if (rect.width < 1 || rect.height < 1) continue
 
-    // 4. 最小尺寸过滤
-    if (rect.width < 1 || rect.height < 1) continue
+      if (forceParent && existingIds.has(id)) continue
 
-    const element = extractElement(htmlEl, id)
-    if (element) {
-      element.parent = findLandmarkParent(htmlEl)
-      // 追踪 DOM 父级的 skeleton ID（用于父子同文本去重）
-      const parentEl = htmlEl.parentElement as HTMLElement
-      if (parentEl?.dataset?.skeletonId) {
-        domParentIdMap.set(id, parentEl.dataset.skeletonId)
+      const element = extractElement(htmlEl, id)
+      if (element) {
+        element.parent = forceParent || findLandmarkParent(htmlEl)
+        const parentEl = htmlEl.parentElement as HTMLElement
+        if (parentEl?.dataset?.skeletonId) {
+          domParentIdMap.set(id, parentEl.dataset.skeletonId)
+        }
+        elements.push(element)
       }
-      elements.push(element)
     }
   }
+
+  // 主文档提取
+  extractFromDoc(doc, 0, 0)
   scannedCount = allElements.length
 
+  // iframe 提取（同源 iframe 内元素，parent 标记为 iframe 标识）
+  const iframes = doc.querySelectorAll('iframe')
+  for (const iframe of iframes) {
+    const iframeEl = iframe as HTMLIFrameElement
+    let iframeDoc: Document | null = null
+    try { iframeDoc = iframeEl.contentDocument } catch { continue }
+    if (!iframeDoc?.body) continue
+
+    const iframeRect = iframeEl.getBoundingClientRect()
+    if (iframeRect.width < 1 || iframeRect.height < 1) continue
+
+    const iframeLabel = iframeEl.id
+      || (iframeEl.className ? iframeEl.className.split(/\s+/)[0] : '')
+      || iframeEl.getAttribute('name')
+      || 'iframe'
+
+    scannedCount += iframeDoc.body.querySelectorAll('*').length
+    extractFromDoc(iframeDoc, iframeRect.left, iframeRect.top, `iframe.${iframeLabel}`)
+  }
+
   // 过滤空文本元素 + 父子同文本去重（保留子级）+ 同级去重
-  // Step 1: 标记与子级同文本的父级
   const elMap = new Map<string, SkeletonElement>()
   for (const el of elements) elMap.set(el.id, el)
 
@@ -140,7 +165,6 @@ export function extractSkeleton(doc: Document): SemanticSkeleton {
     }
   }
 
-  // Step 2: 过滤 + 同级去重（父级被移除时子级跳过去重，自动提升到祖父级）
   const seenByParent = new Map<string, Set<string>>()
   const filtered = elements.filter(el => {
     if (parentsToRemove.has(el.id)) return false
@@ -169,11 +193,7 @@ export function extractSkeleton(doc: Document): SemanticSkeleton {
     scrollY: window.scrollY,
   })
 
-  return {
-    url: doc.location.href,
-    title: doc.title,
-    elements: final,
-  }
+  return { url: doc.location.href, title: doc.title, elements: final }
 }
 
 
