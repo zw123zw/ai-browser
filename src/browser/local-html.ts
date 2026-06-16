@@ -61,13 +61,12 @@ export function searchByKeywords(keywords: string[]): string | null {
   return result
 }
 
-/** 在单个文档内搜索匹配关键词的可交互元素 */
+/** 在单个文档内搜索匹配关键词的可交互元素（兜底：整个页面，不要可见性判断） */
 function searchInDoc(doc: Document, keywords: string[], matched: string[]): void {
   const allElements = doc.body.querySelectorAll('*')
   for (const el of allElements) {
     const htmlEl = el as HTMLElement
     if (!isClickable(htmlEl)) continue
-    if (!isElementVisible(htmlEl)) continue
     if (!matchesKeywords(htmlEl, keywords)) continue
     const cleaned = cleanElement(htmlEl)
     if (cleaned) matched.push(cleaned)
@@ -99,15 +98,6 @@ function isClickable(el: HTMLElement): boolean {
 }
 
 /**
- * 检查元素是否可见
- */
-function isElementVisible(el: HTMLElement): boolean {
-  const style = window.getComputedStyle(el)
-  if (style.display === 'none' || style.visibility === 'hidden') return false
-  return el.offsetParent !== null || style.position === 'fixed'
-}
-
-/**
  * 关键词 OR 模糊匹配
  *
  * 任一关键词在 textContent/aria-label/placeholder/title/value 中出现即命中
@@ -128,39 +118,51 @@ function matchesKeywords(el: HTMLElement, keywords: string[]): boolean {
 }
 
 /**
- * 清洗元素：只保留关键属性，移除 script/style/noscript，压缩空白
+ * 清洗元素：只保留关键属性，移除 script/style/noscript，递归清洗子元素，压缩空白
  */
 function cleanElement(el: HTMLElement): string | null {
   try {
-    const clone = el.cloneNode(false) as HTMLElement
-
-    // 只保留关键属性
-    const attrs = Array.from(clone.attributes)
-    for (const attr of attrs) {
-      if (!KEEP_ATTRS.has(attr.name)) {
-        clone.removeAttribute(attr.name)
-      }
-    }
-
-    // 保留子节点（递归清洗）
-    for (const child of el.childNodes) {
-      if (child.nodeType === Node.ELEMENT_NODE) {
-        const childEl = child as HTMLElement
-        const childTag = childEl.tagName.toLowerCase()
-        if (['script', 'style', 'noscript'].includes(childTag)) continue
-        clone.appendChild(childEl.cloneNode(true))
-      } else if (child.nodeType === Node.TEXT_NODE) {
-        const text = child.textContent?.trim()
-        if (text) clone.appendChild(document.createTextNode(text))
-      }
-    }
+    const clone = cleanNode(el)
+    if (!clone) return null
 
     let html = clone.outerHTML
-    // 压缩空白
-    html = html.replace(/\s+/g, ' ').replace(/> </g, '><')
+    // 压缩空白：合并空格、去掉标签间空格、去掉等号两侧空格
+    html = html.replace(/\s+/g, ' ')
+    html = html.replace(/>\s+</g, '><')
+    html = html.replace(/\s*=\s*/g, '=')
+    html = html.replace(/\s+>/g, '>')
+    html = html.trim()
     return html
   } catch {
     log.warn('cleanElement 失败')
     return null
   }
+}
+
+/** 递归清洗单个元素节点 */
+function cleanNode(el: HTMLElement): HTMLElement | null {
+  const tag = el.tagName.toLowerCase()
+  if (['script', 'style', 'noscript'].includes(tag)) return null
+
+  const clone = document.createElement(tag)
+
+  // 只保留关键属性
+  for (const attr of Array.from(el.attributes)) {
+    if (KEEP_ATTRS.has(attr.name)) {
+      clone.setAttribute(attr.name, attr.value)
+    }
+  }
+
+  // 递归清洗子节点
+  for (const child of el.childNodes) {
+    if (child.nodeType === Node.ELEMENT_NODE) {
+      const cleaned = cleanNode(child as HTMLElement)
+      if (cleaned) clone.appendChild(cleaned)
+    } else if (child.nodeType === Node.TEXT_NODE) {
+      const text = child.textContent?.trim()
+      if (text) clone.appendChild(document.createTextNode(text))
+    }
+  }
+
+  return clone
 }

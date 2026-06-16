@@ -167,6 +167,65 @@ export class InputPipeline {
         break
       }
 
+      // ── command → 执行单条指令（优先于 need_html） ──
+      // command + need_html 同时返回时：先执行 command（如输入手机号），
+      // 成功后骨架会刷新，下一轮 AI 就能从新骨架找到目标（如"获取验证码"），
+      // 不需要走 need_html 兜底。
+      if (phase2Result.commands?.length) {
+        const cmd = phase2Result.commands[0]
+        log.info('[Phase 2] ── 执行指令 ──', {
+          action: cmd.action,
+          elementId: cmd.elementId,
+          description: cmd.description,
+          done: cmd.done,
+        })
+
+        callbacks.onCommandsParsed([cmd])
+        const result = await this.executor.execute(cmd)
+
+        log.info('[Phase 2] 指令结果', {
+          action: cmd.action,
+          success: result.success,
+          message: result.message,
+        })
+
+        callbacks.onCommandResult(cmd.action, result.success, result.message)
+
+        if (result.success) {
+          completed.push({ action: cmd.action, elementId: cmd.elementId, description: cmd.description })
+          consecutiveErrors = 0
+          lastError = ''
+          lastFailedCommand = null
+          lastHtmlFragments = null
+
+          if (cmd.action === 'navigate') {
+            this.skeletonManager.invalidate()
+          }
+
+          // ★ 双重停止条件 2：AI 标记 done=1，最后一步
+          if (cmd.done === 1) {
+            log.info('[Phase 2] ═══ done=1，最后一步完成，停止 ═══')
+            break
+          }
+
+          // command 成功 → 跳过同响应的 need_html/skill，等骨架刷新后下一轮处理
+          if (phase2Result.needHtml) {
+            log.info('[Phase 2] → 跳过 need_html（指令执行成功，等待骨架刷新）')
+          }
+
+          // 等待页面更新（弹窗/新内容渲染），再进入下一轮提取骨架
+          await new Promise(resolve => setTimeout(resolve, 500))
+          continue
+        } else {
+          lastError = `[${cmd.action}] ${result.message}`
+          lastFailedCommand = { action: cmd.action, elementId: cmd.elementId, description: cmd.description, text: cmd.text, url: cmd.url }
+          consecutiveErrors++
+          log.warn('[Phase 2] 指令执行失败', { action: cmd.action, error: lastError })
+          callbacks.onRetryMessage(`🔄 正在重试... (${consecutiveErrors}/${MAX_RETRY})`)
+          // command 失败 → 继续检查 need_html/skill
+        }
+      }
+
       // ── need_html → 搜索 HTML 片段后重试 ──
       if (phase2Result.needHtml) {
         log.info('[Phase 2] → need_html', {
@@ -179,6 +238,7 @@ export class InputPipeline {
         lastFailedCommand = { action: 'click', description: phase2Result.needHtml.description }
         lastHtmlFragments = htmlFragments
         consecutiveErrors++
+        callbacks.onRetryMessage(`🔄 正在重试... (${consecutiveErrors}/${MAX_RETRY})`)
         continue
       }
 
@@ -202,59 +262,9 @@ export class InputPipeline {
           log.error('[Phase 2] 技能执行异常', error)
         }
         consecutiveErrors++
+        callbacks.onRetryMessage(`🔄 正在重试... (${consecutiveErrors}/${MAX_RETRY})`)
         continue
       }
-
-      // ── command → 执行单条指令 ──
-      const cmd = phase2Result.commands![0]
-      log.info('[Phase 2] ── 执行指令 ──', {
-        action: cmd.action,
-        elementId: cmd.elementId,
-        description: cmd.description,
-        done: cmd.done,
-      })
-
-      callbacks.onCommandsParsed([cmd])
-      const result = await this.executor.execute(cmd)
-
-      log.info('[Phase 2] 指令结果', {
-        action: cmd.action,
-        success: result.success,
-        message: result.message,
-      })
-
-      callbacks.onCommandResult(cmd.action, result.success, result.message)
-
-      if (result.success) {
-        completed.push({ action: cmd.action, elementId: cmd.elementId, description: cmd.description })
-        consecutiveErrors = 0
-        lastError = ''
-        lastFailedCommand = null
-        lastHtmlFragments = null
-
-        if (cmd.action === 'navigate') {
-          this.skeletonManager.invalidate()
-        }
-
-        // ★ 双重停止条件 2：AI 标记 done=1，最后一步
-        if (cmd.done === 1) {
-          log.info('[Phase 2] ═══ done=1，最后一步完成，停止 ═══')
-          break
-        }
-
-        // 等待页面更新（弹窗/新内容渲染），再进入下一轮提取骨架
-        await new Promise(resolve => setTimeout(resolve, 500))
-      } else {
-        lastError = `[${cmd.action}] ${result.message}`
-        lastFailedCommand = { action: cmd.action, elementId: cmd.elementId, description: cmd.description, text: cmd.text, url: cmd.url }
-        consecutiveErrors++
-        log.warn('[Phase 2] 指令执行失败', { action: cmd.action, error: lastError })
-      }
-    }
-
-    // 显示重试消息
-    if (lastError && consecutiveErrors < MAX_RETRY) {
-      callbacks.onRetryMessage(`🔄 正在重试... (${consecutiveErrors}/${MAX_RETRY})`)
     }
 
     if (consecutiveErrors >= MAX_RETRY) {
