@@ -54,13 +54,6 @@ const showApiKey = ref(false);
 // 是否是新建模式
 const isNewMode = ref(false);
 
-// API 格式选项
-const apiFormats = [
-  { value: 'open-chat', label: 'OpenAI 兼容' },
-  { value: 'anthropic', label: 'Anthropic' },
-  { value: 'message', label: '通用消息格式' },
-];
-
 // 认证字段选项
 const authFields = [
   { value: 'bearer', label: 'Bearer Token' },
@@ -73,7 +66,6 @@ const authFields = [
 interface ProviderPreset {
   name: string;
   baseUrl: string;
-  apiFormat: string;
   authField: string;
   website: string;
   models: { label: string; modelName: string }[];
@@ -83,7 +75,6 @@ const providerPresets: Record<string, ProviderPreset> = {
   openai: {
     name: 'OpenAI',
     baseUrl: 'https://api.openai.com/v1',
-    apiFormat: 'open-chat',
     authField: 'bearer',
     website: 'https://platform.openai.com/',
     models: [
@@ -94,7 +85,6 @@ const providerPresets: Record<string, ProviderPreset> = {
   anthropic: {
     name: 'Anthropic',
     baseUrl: 'https://api.anthropic.com/v1',
-    apiFormat: 'anthropic',
     authField: 'api-key',
     website: 'https://console.anthropic.com/',
     models: [
@@ -105,7 +95,6 @@ const providerPresets: Record<string, ProviderPreset> = {
   deepseek: {
     name: 'DeepSeek',
     baseUrl: 'https://api.deepseek.com/v1',
-    apiFormat: 'open-chat',
     authField: 'bearer',
     website: 'https://platform.deepseek.com/',
     models: [
@@ -116,7 +105,6 @@ const providerPresets: Record<string, ProviderPreset> = {
   mimo: {
     name: 'MiMo',
     baseUrl: 'https://api.xiaomi.com/v1',
-    apiFormat: 'open-chat',
     authField: 'bearer',
     website: 'https://dev.mi.com/',
     models: [
@@ -126,7 +114,6 @@ const providerPresets: Record<string, ProviderPreset> = {
   qwen: {
     name: '通义千问',
     baseUrl: 'https://dashscope.aliyuncs.com/api/v1',
-    apiFormat: 'open-chat',
     authField: 'bearer',
     website: 'https://dashscope.console.aliyun.com/',
     models: [
@@ -138,7 +125,6 @@ const providerPresets: Record<string, ProviderPreset> = {
   moonshot: {
     name: 'Kimi',
     baseUrl: 'https://api.moonshot.cn/v1',
-    apiFormat: 'open-chat',
     authField: 'bearer',
     website: 'https://platform.moonshot.cn/',
     models: [
@@ -149,7 +135,6 @@ const providerPresets: Record<string, ProviderPreset> = {
   zhipu: {
     name: '智谱清言',
     baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
-    apiFormat: 'open-chat',
     authField: 'bearer',
     website: 'https://open.bigmodel.cn/',
     models: [
@@ -160,7 +145,6 @@ const providerPresets: Record<string, ProviderPreset> = {
   baidu: {
     name: '文心一言',
     baseUrl: 'https://aip.baidubce.com/rpc/2.0/ai_custom/v1/wenxinworkshop',
-    apiFormat: 'message',
     authField: 'access-token',
     website: 'https://cloud.baidu.com/product/wenxinworkshop',
     models: [
@@ -171,7 +155,6 @@ const providerPresets: Record<string, ProviderPreset> = {
   minimax: {
     name: 'MiniMax',
     baseUrl: 'https://api.minimax.chat/v1',
-    apiFormat: 'open-chat',
     authField: 'bearer',
     website: 'https://platform.minimaxi.com/',
     models: [
@@ -181,7 +164,6 @@ const providerPresets: Record<string, ProviderPreset> = {
   siliconflow: {
     name: '硅基流动',
     baseUrl: 'https://api.siliconflow.cn/v1',
-    apiFormat: 'open-chat',
     authField: 'bearer',
     website: 'https://siliconflow.cn/',
     models: [
@@ -199,7 +181,6 @@ function getEmptyModel(): ModelConfig {
     modelName: '',
     baseUrl: '',
     apiKey: '',
-    apiFormat: 'open-chat',
     authField: 'bearer',
     website: '',
   };
@@ -232,7 +213,6 @@ function applyPreset(presetKey: string) {
   if (!preset) return;
   form.provider = presetKey as Provider;
   form.baseUrl = preset.baseUrl;
-  form.apiFormat = preset.apiFormat;
   form.authField = preset.authField;
   form.label = preset.name;
   form.website = preset.website;
@@ -250,7 +230,6 @@ async function saveModel() {
     modelName: form.modelName,
     baseUrl: form.baseUrl,
     apiKey: form.apiKey,
-    apiFormat: form.apiFormat,
     authField: form.authField,
     website: form.website,
   };
@@ -384,7 +363,6 @@ function exportConfig() {
     modelName: m.modelName,
     baseUrl: m.baseUrl || '',
     apiKey: m.apiKey || '',
-    apiFormat: m.apiFormat || 'open-chat',
     authField: m.authField || 'bearer',
     website: m.website || '',
   }));
@@ -485,6 +463,24 @@ function exportConfig() {
               </div>
             </div>
 
+            <!-- 供应商 -->
+            <div class="zwf-form-row">
+              <label>供应商</label>
+              <select v-model="form.provider" class="zwf-select">
+                <option value="openai">OpenAI 兼容</option>
+                <option value="anthropic">Anthropic</option>
+                <option value="gemini">Google Gemini</option>
+                <option value="qwen">通义千问</option>
+                <option value="wenxin">文心一言</option>
+                <option value="doubao">豆包</option>
+                <option value="zhipu">智谱清言</option>
+                <option value="deepseek">DeepSeek</option>
+                <option value="moonshot">Moonshot (Kimi)</option>
+                <option value="grok">Grok (xAI)</option>
+                <option value="custom">自定义</option>
+              </select>
+            </div>
+
             <!-- 显示名称 -->
             <div class="zwf-form-row">
               <label>显示名称</label>
@@ -530,16 +526,6 @@ function exportConfig() {
                   </svg>
                 </button>
               </div>
-            </div>
-
-            <!-- API 格式 -->
-            <div class="zwf-form-row">
-              <label>API 格式</label>
-              <select v-model="form.apiFormat" class="zwf-select">
-                <option v-for="f in apiFormats" :key="f.value" :value="f.value">
-                  {{ f.label }}
-                </option>
-              </select>
             </div>
 
             <!-- 认证字段 -->

@@ -61,11 +61,11 @@ export class OpenAIAdapter extends BaseAdapter {
     opts: ChatRequestOptions,
     onChunk: (chunk: StreamChunk) => void
   ): Promise<void> {
-    // 根据 apiFormat 和 baseUrl 智能判断协议类型
+    // 根据 provider 和 baseUrl 智能判断协议类型
     const base = opts.baseUrl.replace(/\/$/, '');
 
-    // 判断是否为 Anthropic 协议（apiFormat 优先级高于 URL 推断）
-    const isAnthropic = opts.apiFormat === 'anthropic'
+    // 判断是否为 Anthropic 协议（provider 优先级高于 URL 推断）
+    const isAnthropic = opts.provider === 'anthropic'
       || base.includes('/anthropic');
 
     // 智能拼接 URL
@@ -272,7 +272,7 @@ export class OpenAIAdapter extends BaseAdapter {
           msg = j.message;
         }
       } catch {}
-      log.error('请求失败', { status: res.status, message: msg, apiFormat: opts.apiFormat, isAnthropic });
+      log.error('请求失败', { status: res.status, message: msg, provider: opts.provider, isAnthropic });
       throw new Error(`HTTP ${res.status}：${msg}`);
     }
 

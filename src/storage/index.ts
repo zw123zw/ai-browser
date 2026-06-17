@@ -11,7 +11,7 @@ function parseLocalModels(list: any[]): ModelConfig[] {
     const id = m.id || m.modelName || m.model || `model-${Date.now()}`;
     const modelName = m.modelName || m.model || id;
     const label = m.label || modelName;
-    const provider = (m.provider || (m.apiFormat === 'anthropic' ? 'anthropic' : 'openai')) as Provider;
+    const provider = (m.provider || 'openai') as Provider;
     return {
       id,
       label,
@@ -19,7 +19,6 @@ function parseLocalModels(list: any[]): ModelConfig[] {
       modelName,
       baseUrl,
       apiKey: m.apiKey || '',
-      apiFormat: m.apiFormat || 'openai',
       website: m.website || '',
     };
   });
@@ -32,7 +31,6 @@ export const DEFAULT_SETTINGS: AppSettings = {
   provider: 'openai',
   baseUrl: localModels[0]?.baseUrl || 'https://api.openai.com/v1',
   apiKey: localModels[0]?.apiKey || '',
-  apiFormat: localModels[0]?.apiFormat || 'open-chat',
   authField: localModels[0]?.authField || 'bearer',
   defaultModelId: localModels[0]?.id || '',
   drawerWidth: 480,
