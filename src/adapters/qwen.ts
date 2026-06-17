@@ -92,7 +92,7 @@ export class QwenAdapter extends BaseAdapter {
     // 尝试通过代理请求
     try {
       let buffer = '';
-      await proxyFetchStream({ url, method: 'POST', headers, body }, (chunk) => {
+      await proxyFetchStream({ url, method: 'POST', headers, body, signal: opts.signal }, (chunk) => {
         buffer += chunk;
         const lines = buffer.split('\n');
         buffer = lines.pop() || '';

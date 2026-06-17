@@ -6,6 +6,7 @@
  */
 
 import { Logger } from '@/src/utils/logger'
+import { ensureAllSkeletonIds, ensureSkeletonId } from './skeleton-id'
 
 const log = new Logger('LocalHtml')
 
@@ -36,6 +37,9 @@ export function searchByKeywords(keywords: string[]): string | null {
   }
 
   log.info('关键词 HTML 搜索', { keywords })
+
+  // 全量打标：确保所有元素有 data-skeleton-id（含懒加载元素）
+  ensureAllSkeletonIds()
 
   const matched: string[] = []
 
@@ -68,6 +72,8 @@ function searchInDoc(doc: Document, keywords: string[], matched: string[]): void
     const htmlEl = el as HTMLElement
     if (!isClickable(htmlEl)) continue
     if (!matchesKeywords(htmlEl, keywords)) continue
+    // iframe 元素未被 ensureAllSkeletonIds 覆盖，需要单独打标
+    ensureSkeletonId(htmlEl)
     const cleaned = cleanElement(htmlEl)
     if (cleaned) matched.push(cleaned)
   }

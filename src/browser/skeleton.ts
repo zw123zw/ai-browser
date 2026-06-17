@@ -10,6 +10,7 @@
 
 import { Logger } from '@/src/utils/logger'
 import { INTERACTIVE_TAGS } from './types'
+import { ensureAllSkeletonIds } from './skeleton-id'
 import type { SkeletonElement, SemanticSkeleton } from './types'
 
 const log = new Logger('Skeleton')
@@ -69,32 +70,26 @@ export function extractSkeleton(doc: Document): SemanticSkeleton {
   const elements: SkeletonElement[] = []
   const domParentIdMap = new Map<string, string>()
   const existingIds = new Map<string, boolean>()
-  let idCounter = 0
   let scannedCount = 0
 
-  // 统计已有最大 ID 编号，避免新旧 ID 冲突
-  const allElements = doc.body.querySelectorAll('*')
-  for (const el of allElements) {
-    const existingId = (el as HTMLElement).dataset.skeletonId
-    if (existingId) {
-      const num = parseInt(existingId.slice(1), 10)
-      if (!isNaN(num) && num > idCounter) idCounter = num
-    }
-  }
+  // 全量打标：同步计数器 + 给所有元素打 data-skeleton-id（含懒加载元素）
+  ensureAllSkeletonIds()
 
-  // 嵌套函数：闭包访问 idCounter
+  const allElements = doc.body.querySelectorAll('*')
+
   function extractFromDoc(
-    doc: Document, vpOffsetX: number, vpOffsetY: number,
+    targetDoc: Document, vpOffsetX: number, vpOffsetY: number,
     forceParent?: string,
   ): void {
     const viewportHeight = window.innerHeight
     const viewportWidth = window.innerWidth
-    const allEls = doc.body.querySelectorAll('*')
+    // 主文档复用外层 allElements，iframe 传入自己的 document
+    const allEls = targetDoc === doc ? allElements : targetDoc.body.querySelectorAll('*')
 
     for (const el of allEls) {
       const htmlEl = el as HTMLElement
-      const id = htmlEl.dataset.skeletonId || `e${++idCounter}`
-      htmlEl.dataset.skeletonId = id
+      const id = htmlEl.dataset.skeletonId || ''
+      if (!id) continue  // ensureAllSkeletonIds 已打标，无 id 的跳过
       existingIds.set(id, true)
 
       if (!isClickable(htmlEl)) continue

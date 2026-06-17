@@ -26,6 +26,21 @@ const log = new Logger('Pipeline')
 
 const MAX_RETRY = 5
 
+/** abort-aware sleep：等待期间可被 AbortSignal 中断 */
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(new DOMException('The operation was aborted.', 'AbortError'))
+      return
+    }
+    const timer = setTimeout(resolve, ms)
+    signal?.addEventListener('abort', () => {
+      clearTimeout(timer)
+      reject(new DOMException('The operation was aborted.', 'AbortError'))
+    }, { once: true })
+  })
+}
+
 export interface PipelineOptions {
   getSettings: () => AppSettings
   /** 获取当前使用的模型 ID（优先会话级，回退全局默认） */
@@ -219,7 +234,7 @@ export class InputPipeline {
           }
 
           // 等待页面更新（弹窗/新内容渲染），再进入下一轮提取骨架
-          await new Promise(resolve => setTimeout(resolve, 500))
+          await sleep(500, this.options.getSignal?.())
           continue
         } else {
           lastError = `[${cmd.action}] ${result.message}`
@@ -336,6 +351,10 @@ export class InputPipeline {
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') throw error
       log.error('[流式] AI 请求失败', error)
+      // 请求失败时检查是否已被 abort，避免继续循环浪费请求
+      if (this.options.getSignal?.()?.aborted) {
+        throw new DOMException('The operation was aborted.', 'AbortError')
+      }
       return { rawAiOutput: '' }
     }
 

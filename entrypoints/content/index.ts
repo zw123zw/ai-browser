@@ -2,11 +2,21 @@ import { createApp } from 'vue';
 import { createPinia } from 'pinia';
 import App from './App.vue';
 import globalCss from '@/src/styles/global.css?inline';
+import { initAllSkeletonIds } from '@/src/browser/skeleton-id';
 
 export default defineContentScript({
   matches: ['<all_urls>'],
   cssInjectionMode: 'ui',
   async main(ctx) {
+    // 首次全量打标：骨架提取时已有 id 的元素直接跳过，减少 DOM 写入
+    // 等页面完全加载 + 延迟 2s，让 SPA 动态内容有时间渲染
+    const markAll = () => setTimeout(() => initAllSkeletonIds(), 2000)
+    if (document.readyState === 'complete') {
+      markAll()
+    } else {
+      window.addEventListener('load', markAll, { once: true })
+    }
+
     const ui = await createShadowRootUi(ctx, {
       name: 'browser-ai-chat',
       position: 'inline',
