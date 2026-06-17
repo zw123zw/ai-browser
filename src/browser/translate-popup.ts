@@ -220,12 +220,6 @@ export function updateTranslateResult(translated: string): void {
       })
     })
     toolbarEl.appendChild(copyBtn)
-
-    // 关闭按钮
-    const closeBtn = createToolButton('✕', () => {
-      hideTranslatePopup()
-    })
-    toolbarEl.appendChild(closeBtn)
   }
 
   // 重新定位（内容高度变化后可能溢出）
@@ -235,6 +229,62 @@ export function updateTranslateResult(translated: string): void {
   }
 
   log.debug('翻译结果已更新', { translated: translated.slice(0, 30) })
+}
+
+/**
+ * 显示翻译错误（AI 调用失败时调用）
+ *
+ * 替换 loading 为错误提示，显示刷新 + 关闭按钮。
+ *
+ * @param message - 错误提示
+ * @param onRetry - 点击刷新按钮的回调
+ */
+export function updateTranslateError(message: string, onRetry?: () => void): void {
+  if (!currentPopup) return
+
+  // 更新内容区为错误提示
+  if (contentEl) {
+    contentEl.textContent = message
+    contentEl.style.color = 'var(--zwf-text-soft, #888)'
+    contentEl.style.fontSize = '13px'
+  }
+
+  // 隐藏 loading
+  if (loadingEl) {
+    loadingEl.style.display = 'none'
+  }
+
+  // 显示工具栏：刷新 + 关闭
+  if (toolbarEl) {
+    toolbarEl.style.display = 'flex'
+    toolbarEl.innerHTML = ''
+
+    if (onRetry) {
+      const retryBtn = createToolButton('刷新', () => {
+        // 恢复 loading 状态
+        if (contentEl) {
+          contentEl.textContent = ''
+          contentEl.style.color = ''
+          contentEl.style.fontSize = ''
+          contentEl.style.display = 'none'
+        }
+        if (loadingEl) loadingEl.style.display = ''
+        toolbarEl.style.display = 'none'
+        onRetry()
+      })
+      toolbarEl.appendChild(retryBtn)
+    }
+
+    const closeBtn = createToolButton('关闭', () => hideTranslatePopup())
+    toolbarEl.appendChild(closeBtn)
+  }
+
+  // 重新定位
+  if (currentPopup) {
+    positionPopup(currentPopup, parseFloat(currentPopup.style.left), parseFloat(currentPopup.style.top) - OFFSET)
+  }
+
+  log.debug('翻译错误已显示', { message })
 }
 
 /**

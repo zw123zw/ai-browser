@@ -83,9 +83,6 @@ function onMouseup(e: MouseEvent) {
   const text = selection?.toString().trim();
   if (!text) return;
 
-  // 清除选区，避免重复触发
-  selection?.removeAllRanges();
-
   if (mode === 'manual') {
     // 手动模式：填入输入框，不自动发送
     if (convStore.conversation) {

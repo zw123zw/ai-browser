@@ -305,19 +305,36 @@ function resolveAutoSend(val: unknown): 'auto' | 'manual' | 'off' {
   return 'auto';
 }
 
+// 兼容旧版翻译布尔字段 → 新的 translateMode
+function resolveTranslateMode(settings: any): 'selection' | 'auto' | 'click' | 'off' {
+  if (settings.translateMode === 'selection' || settings.translateMode === 'auto' || settings.translateMode === 'click' || settings.translateMode === 'off') {
+    return settings.translateMode;
+  }
+  if (settings.selectionTranslate) return 'selection';
+  if (settings.autoTranslate) return 'auto';
+  if (settings.clickTranslate) return 'click';
+  return 'off';
+}
+
 const generalForm = reactive({
   theme: store.settings.theme || 'classic',
   shortcut: store.settings.shortcut || '',
   autoSendSelection: resolveAutoSend(store.settings.autoSendSelection),
   translateTargetLang: store.settings.translateTargetLang || '中文',
-  selectionTranslate: store.settings.selectionTranslate ?? false,
-  autoTranslate: store.settings.autoTranslate ?? false,
+  translateMode: resolveTranslateMode(store.settings),
 });
 
 const autoSendOptions = [
   { value: 'auto' as const, label: '自动发送', desc: '选中文字后直接发送给 AI 分析' },
   { value: 'manual' as const, label: '手动发送', desc: '选中文字后填入聊天输入框，手动确认发送' },
   { value: 'off' as const, label: '关闭', desc: '不处理页面选中文字' },
+];
+
+const translateModeOptions = [
+  { value: 'selection' as const, label: '划词翻译', desc: '选中文字后弹出翻译浮层' },
+  { value: 'auto' as const, label: '自动翻译', desc: '页面文本自动翻译为目标语言' },
+  { value: 'click' as const, label: '点击翻译', desc: '点击段落翻译整块内容' },
+  { value: 'off' as const, label: '关闭', desc: '不启用翻译功能' },
 ];
 
 const translateLangOptions = [
@@ -363,8 +380,7 @@ async function saveGeneral() {
     shortcut: generalForm.shortcut,
     autoSendSelection: generalForm.autoSendSelection,
     translateTargetLang: generalForm.translateTargetLang,
-    selectionTranslate: generalForm.selectionTranslate,
-    autoTranslate: generalForm.autoTranslate,
+    translateMode: generalForm.translateMode,
   });
   toast.success('通用配置已保存');
   emit('close');
@@ -776,25 +792,21 @@ function importModels(e: Event) {
                     </option>
                   </select>
                 </div>
-                <div class="zwf-translate-toggles">
-                  <label class="zwf-toggle-item" @click.prevent="generalForm.selectionTranslate = !generalForm.selectionTranslate">
-                    <div :class="['zwf-switch', { 'zwf-switch-on': generalForm.selectionTranslate }]">
-                      <div class="zwf-switch-thumb" />
+                <div class="zwf-radio-group">
+                  <div
+                    v-for="opt in translateModeOptions"
+                    :key="opt.value"
+                    :class="['zwf-radio-card', { 'zwf-radio-active': generalForm.translateMode === opt.value }]"
+                    @click="generalForm.translateMode = opt.value"
+                  >
+                    <div class="zwf-radio-dot">
+                      <span v-if="generalForm.translateMode === opt.value" class="zwf-radio-dot-fill" />
                     </div>
-                    <div class="zwf-toggle-text">
-                      <span class="zwf-toggle-title">划词翻译</span>
-                      <span class="zwf-toggle-desc">选中文字后弹出翻译浮层</span>
+                    <div class="zwf-radio-body">
+                      <span class="zwf-radio-label">{{ opt.label }}</span>
+                      <span class="zwf-radio-desc">{{ opt.desc }}</span>
                     </div>
-                  </label>
-                  <label class="zwf-toggle-item" @click.prevent="generalForm.autoTranslate = !generalForm.autoTranslate">
-                    <div :class="['zwf-switch', { 'zwf-switch-on': generalForm.autoTranslate }]">
-                      <div class="zwf-switch-thumb" />
-                    </div>
-                    <div class="zwf-toggle-text">
-                      <span class="zwf-toggle-title">自动翻译</span>
-                      <span class="zwf-toggle-desc">页面文本自动翻译为目标语言</span>
-                    </div>
-                  </label>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1199,20 +1211,19 @@ function importModels(e: Event) {
 
 .zwf-switch {
   position: relative;
-  width: 44px;
-  height: 24px;
-  border-radius: 12px;
-  border: 1px solid var(--zwf-border-strong);
-  background: var(--zwf-bg-card);
+  width: 40px;
+  height: 22px;
+  border-radius: 11px;
+  border: none;
+  background: var(--zwf-border-strong, #3a3a4a);
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: background 0.25s ease;
   flex-shrink: 0;
   padding: 0;
 }
 
 .zwf-switch-on {
   background: var(--zwf-primary);
-  border-color: var(--zwf-primary);
 }
 
 .zwf-switch-thumb {
@@ -1223,12 +1234,12 @@ function importModels(e: Event) {
   height: 18px;
   border-radius: 50%;
   background: #fff;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
-  transition: transform 0.2s ease;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .zwf-switch-on .zwf-switch-thumb {
-  transform: translateX(20px);
+  transform: translateX(18px);
 }
 
 /* 卡片式 Radio - 水平小卡片 */
@@ -1392,41 +1403,5 @@ function importModels(e: Event) {
 .zwf-select-sm:focus {
   border-color: var(--zwf-primary);
   outline: none;
-}
-
-.zwf-translate-toggles {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.zwf-toggle-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  cursor: pointer;
-  padding: 6px 0;
-}
-
-.zwf-toggle-item:hover .zwf-toggle-title {
-  color: var(--zwf-primary);
-}
-
-.zwf-toggle-text {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.zwf-toggle-title {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--zwf-text);
-  transition: color 0.15s;
-}
-
-.zwf-toggle-desc {
-  font-size: 11px;
-  color: var(--zwf-text-soft);
 }
 </style>

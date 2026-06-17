@@ -3,9 +3,10 @@ import { createPinia } from 'pinia';
 import App from './App.vue';
 import globalCss from '@/src/styles/global.css?inline';
 import { initAllSkeletonIds } from '@/src/browser/skeleton-id';
-import { settingsStorage } from '@/src/storage';
+import { settingsStorage, conversationStorage } from '@/src/storage';
 import { TranslateService } from '@/src/browser/translate-service';
-import { showTranslateLoading, updateTranslateResult, hideTranslatePopup } from '@/src/browser/translate-popup';
+import { showTranslateLoading, updateTranslateResult, updateTranslateError, hideTranslatePopup } from '@/src/browser/translate-popup';
+import { initClickTranslate } from '@/src/browser/translate-click';
 import { Logger } from '@/src/utils/logger';
 
 const log = new Logger('ContentScript');
@@ -29,6 +30,23 @@ export default defineContentScript({
 
     const translateService = new TranslateService()
 
+    /** 检测元素是否在扩展 Shadow DOM 内（穿透 shadow 边界） */
+    function isInExtensionUI(el: Node | null): boolean {
+      if (!el) return false
+      const node = el instanceof HTMLElement ? el : el.parentElement
+      if (!node) return false
+      if (node.closest('.zwf-translate-popup')) return true
+      // getRootNode() 穿透 shadow 边界
+      const root = node.getRootNode()
+      if (root instanceof ShadowRoot) {
+        const host = root.host as HTMLElement
+        // 扩展 UI 的 host 是 body 的直接子元素 + 固定定位 + 零尺寸
+        if (host.parentElement === document.body && host.style.position === 'fixed' && host.style.width === '0') return true
+        if (host.getAttribute('data-shadow-root') !== null) return true
+      }
+      return false
+    }
+
     /** 从 storage 读取最新设置 */
     async function getTranslateSettings() {
       try {
@@ -39,57 +57,78 @@ export default defineContentScript({
       }
     }
 
+    /** 读取当前会话的模型 ID（跟随用户在聊天区域的选择） */
+    async function getCurrentModelId(): Promise<string | undefined> {
+      try {
+        const conv = await conversationStorage.getValue()
+        return conv?.modelId
+      } catch {
+        return undefined
+      }
+    }
+
+    // --- 点击翻译：click 监听 ---
+    initClickTranslate(translateService, getTranslateSettings, getCurrentModelId)
+
     // --- 划词翻译：mouseup 监听 ---
     document.addEventListener('mouseup', async (e) => {
       // 忽略在扩展 UI 内的点击
       const target = e.target as HTMLElement
-      if (target.closest('.zwf-translate-popup') || target.closest('[data-shadow-root]')) return
+      if (isInExtensionUI(target)) return
 
       const settings = await getTranslateSettings()
-      if (!settings?.selectionTranslate) return
+      if (settings?.translateMode !== 'selection') return
 
-      // 延迟获取选区，确保 mouseup 后 Selection 已更新
-      setTimeout(async () => {
-        const selection = window.getSelection()
-        if (!selection || selection.rangeCount === 0) return
-        const text = selection.toString().trim()
-        if (!text || text.length < 2) return
+      // 同步捕获选中文本（在 App.vue 清除选区之前已通过 capture 阶段保护）
+      const selection = window.getSelection()
+      if (!selection || selection.rangeCount === 0) return
+      // 排除扩展抽屉内的选区
+      if (isInExtensionUI(selection.anchorNode)) return
+      const text = selection.toString().trim()
+      if (!text || text.length < 2) return
 
+      const mouseX = e.clientX
+      const mouseY = e.clientY
+
+      const targetLang = settings.translateTargetLang || '中文'
+
+      async function doTranslate() {
         try {
-          const targetLang = settings.translateTargetLang || '中文'
           log.info('[划词翻译] 触发', { text: text.slice(0, 50), targetLang })
-
-          // 立即弹出浮层 + loading
-          showTranslateLoading(e.clientX, e.clientY, text)
-
-          const translated = await translateService.translateSelection(text, targetLang, settings)
+          const modelId = await getCurrentModelId()
+          const translated = await translateService.translateSelection(text, targetLang, settings, modelId)
 
           if (translated) {
             log.info('[划词翻译] 完成', { translated: translated.slice(0, 50) })
             updateTranslateResult(translated)
           } else {
             log.warn('[划词翻译] AI 返回空结果')
-            hideTranslatePopup()
+            updateTranslateError('翻译失败：AI 返回空结果', doTranslate)
           }
         } catch (err) {
           log.error('[划词翻译] 失败', err)
-          hideTranslatePopup()
+          const msg = err instanceof Error ? err.message : '翻译失败，请重试'
+          updateTranslateError(msg, doTranslate)
         }
-      }, 10)
+      }
+
+      showTranslateLoading(mouseX, mouseY, text)
+      doTranslate()
     })
 
     // --- 自动翻译：执行翻译 ---
     async function runAutoTranslate() {
       const settings = await getTranslateSettings()
-      if (!settings?.autoTranslate) {
+      if (settings?.translateMode !== 'auto') {
         log.debug('[自动翻译] 未开启，跳过')
         return
       }
 
       try {
         const targetLang = settings.translateTargetLang || '中文'
-        log.info('[自动翻译] 开始提取可视区域文本', { targetLang })
-        const count = await translateService.translateVisible(targetLang, settings)
+        const modelId = await getCurrentModelId()
+        log.info('[自动翻译] 开始提取可视区域文本', { targetLang, modelId })
+        const count = await translateService.translateVisible(targetLang, settings, modelId)
         log.info('[自动翻译] 首次翻译完成', { translatedCount: count })
       } catch (err) {
         log.error('[自动翻译] 翻译失败', err)
@@ -110,22 +149,23 @@ export default defineContentScript({
       window.addEventListener('load', () => initAutoTranslate(), { once: true })
     }
 
-    // --- 自动翻译：监听设置变化，开启后立即触发，关闭后还原 ---
+    // --- 自动翻译：监听设置变化，切换到 auto 立即触发，切走时还原 ---
     settingsStorage.watch((newValue, oldValue) => {
       if (!newValue || !oldValue) return
-      const wasAuto = (oldValue as any).autoTranslate
-      const isAuto = (newValue as any).autoTranslate
-      log.info('[自动翻译] 设置变化', { wasAuto, isAuto })
+      const oldMode = (oldValue as any).translateMode
+      const newMode = (newValue as any).translateMode
+      if (oldMode === newMode) return
+      log.info('[翻译] 模式变化', { from: oldMode, to: newMode })
 
-      // 从关 → 开：立即触发翻译
-      if (!wasAuto && isAuto) {
-        log.info('[自动翻译] 用户开启自动翻译，立即触发')
+      // 切换到 auto → 立即触发翻译
+      if (newMode === 'auto') {
+        log.info('[自动翻译] 用户开启，立即触发')
         runAutoTranslate()
       }
 
-      // 从开 → 关：还原所有翻译
-      if (wasAuto && !isAuto) {
-        log.info('[自动翻译] 用户关闭自动翻译，还原文字')
+      // 从 auto 切走 → 还原所有翻译
+      if (oldMode === 'auto' && newMode !== 'auto') {
+        log.info('[自动翻译] 用户关闭，还原文字')
         translateService.restoreAll()
       }
     })
@@ -178,7 +218,7 @@ export default defineContentScript({
       if (domTranslateTimer) clearTimeout(domTranslateTimer)
       domTranslateTimer = setTimeout(async () => {
         const settings = await getTranslateSettings()
-        if (!settings?.autoTranslate) return
+        if (settings?.translateMode !== 'auto') return
         log.info('[自动翻译] DOM 变化，扫描新文本')
         await runAutoTranslate()
       }, 200)

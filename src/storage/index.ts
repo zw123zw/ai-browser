@@ -41,8 +41,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   maxContext: 50,
   autoSendSelection: 'auto',
   translateTargetLang: '中文',
-  selectionTranslate: false,
-  autoTranslate: false,
+  translateMode: 'off',
   models: localModels,
 };
 

@@ -63,6 +63,7 @@ export class TranslateService {
   /** 当前翻译设置（用于 observer 回调） */
   private currentTargetLang = ''
   private currentSettings: AppSettings | null = null
+  private currentModelId: string | undefined = undefined
 
   /**
    * 划词翻译：翻译单条文本
@@ -73,6 +74,7 @@ export class TranslateService {
     text: string,
     targetLang: string,
     settings: AppSettings,
+    modelId?: string,
   ): Promise<string> {
     const { text: filtered, placeholders } = filterCodeText(text)
     log.info('划词翻译', { original: text.slice(0, 50), filtered: filtered.slice(0, 50), placeholders: placeholders.size })
@@ -82,6 +84,7 @@ export class TranslateService {
       targetLang,
       settings,
       false,
+      modelId,
     )
 
     const result = restorePlaceholders(translated, placeholders)
@@ -98,9 +101,11 @@ export class TranslateService {
   async translateVisible(
     targetLang: string,
     settings: AppSettings,
+    modelId?: string,
   ): Promise<number> {
     this.currentTargetLang = targetLang
     this.currentSettings = settings
+    this.currentModelId = modelId
 
     log.info('[自动翻译] 开始全量打标 skeletonId')
     ensureAllSkeletonIds()
@@ -250,6 +255,7 @@ export class TranslateService {
         this.currentTargetLang,
         this.currentSettings,
         signal,
+        this.currentModelId,
       )
 
       log.info('[自动翻译] AI 返回', { requested: translateItems.length, received: results.length })
@@ -625,23 +631,24 @@ export class TranslateService {
     targetLang: string,
     settings: AppSettings,
     isBatch: boolean,
+    modelId?: string,
   ): Promise<string> {
-    const adapter = this.getAdapter(settings)
-    const modelName = this.getModelName(settings)
+    const model = this.getModel(settings, modelId)
+    const adapter = createAdapter(model.provider)
     const messages = this.buildMessages(
       buildSelectionTranslateMessage(text, targetLang),
       settings,
     )
 
-    log.info('[划词翻译] 调用 AI', { model: modelName, textLength: text.length, targetLang })
+    log.info('[划词翻译] 调用 AI', { model: model.modelName, provider: model.provider, textLength: text.length, targetLang })
 
     let result = ''
     await adapter.chat(
       {
-        baseUrl: this.getBaseUrl(settings),
-        apiKey: settings.apiKey,
-        modelName,
-        provider: settings.provider,
+        baseUrl: model.baseUrl || settings.baseUrl || '',
+        apiKey: model.apiKey || settings.apiKey || '',
+        modelName: model.modelName,
+        provider: model.provider,
         messages,
       },
       (chunk: StreamChunk) => {
@@ -661,15 +668,16 @@ export class TranslateService {
     targetLang: string,
     settings: AppSettings,
     signal: AbortSignal,
+    modelId?: string,
   ): Promise<TranslateResult[]> {
-    const adapter = this.getAdapter(settings)
-    const modelName = this.getModelName(settings)
+    const model = this.getModel(settings, modelId)
+    const adapter = createAdapter(model.provider)
     const messages = this.buildMessages(
       buildAutoTranslateMessage(items, targetLang),
       settings,
     )
 
-    log.info('[自动翻译] 调用 AI 批量翻译', { model: modelName, itemCount: items.length, targetLang })
+    log.info('[自动翻译] 调用 AI 批量翻译', { model: model.modelName, provider: model.provider, itemCount: items.length, targetLang })
     for (const item of items) {
       log.debug('[自动翻译] 待翻译项', { id: item.id, text: item.text.slice(0, 60) })
     }
@@ -677,10 +685,10 @@ export class TranslateService {
     let result = ''
     await adapter.chat(
       {
-        baseUrl: this.getBaseUrl(settings),
-        apiKey: settings.apiKey,
-        modelName,
-        provider: settings.provider,
+        baseUrl: model.baseUrl || settings.baseUrl || '',
+        apiKey: model.apiKey || settings.apiKey || '',
+        modelName: model.modelName,
+        provider: model.provider,
         messages,
         signal,
       },
@@ -695,21 +703,10 @@ export class TranslateService {
     return parsed
   }
 
-  /** 获取适配器 */
-  private getAdapter(settings: AppSettings) {
-    return createAdapter(settings.provider)
-  }
-
-  /** 获取 baseUrl（模型独立配置优先） */
-  private getBaseUrl(settings: AppSettings): string {
-    const model = settings.models.find(m => m.id === settings.defaultModelId)
-    return model?.baseUrl || settings.baseUrl || ''
-  }
-
-  /** 获取模型名 */
-  private getModelName(settings: AppSettings): string {
-    const model = settings.models.find(m => m.id === settings.defaultModelId)
-    return model?.modelName || ''
+  /** 获取模型配置（modelId 优先，否则用默认模型） */
+  private getModel(settings: AppSettings, modelId?: string) {
+    const id = modelId || settings.defaultModelId
+    return settings.models.find(m => m.id === id) || settings.models[0]
   }
 
   /** 构建消息数组（翻译指令 + 用户内容合并到 user 消息） */

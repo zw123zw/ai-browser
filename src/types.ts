@@ -125,10 +125,14 @@ export interface AppSettings {
   autoSendSelection?: 'auto' | 'manual' | 'off';
   /** 翻译目标语言（如 '中文'、'English'、'日本語'） */
   translateTargetLang?: string;
-  /** 划词翻译开关 */
+  /** 翻译模式：selection=划词翻译, auto=自动翻译, click=点击翻译, off=关闭 */
+  translateMode?: 'selection' | 'auto' | 'click' | 'off';
+  /** @deprecated 已废弃，改用 translateMode */
   selectionTranslate?: boolean;
-  /** 自动翻译开关 */
+  /** @deprecated 已废弃，改用 translateMode */
   autoTranslate?: boolean;
+  /** @deprecated 已废弃，改用 translateMode */
+  clickTranslate?: boolean;
 }
 
 /** Adapter 流式回调每一段 */
