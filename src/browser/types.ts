@@ -12,6 +12,7 @@ export interface SkeletonElement {
   id: string                // 唯一标识 e1, e2, ...
   tag: string               // 标签名
   text?: string             // 可见文字（截断 100 字符，已含 ariaLabel/title/placeholder 的 fallback）
+  label?: string            // 表单元素关联的 label 文本（如 input 关联 "活动名称"）
   parent?: string           // 父级地标标签（nav/header/main 等）
 }
 

@@ -243,17 +243,24 @@ function extractElement(el: HTMLElement, id: string): SkeletonElement | null {
 
   // 无文字 + 无 role + 无图标子元素 → 跳过
   // 但 input/textarea 有 placeholder 或 value 时保留（如手机号输入框只有 placeholder）
+  // 以及有关联 label 的表单元素也保留（如 <label for="name">活动名称</label> + <input id="name">）
   const isFormElement = ['input', 'textarea', 'select'].includes(tag)
   const hasFormContent = isFormElement && (
     el.getAttribute('placeholder') || (el as HTMLInputElement).value
   )
-  if (!text && !el.getAttribute('role') && !hasIcon && !hasFormContent) return null
+  const labelText = isFormElement && !text && !hasFormContent
+    ? findAssociatedLabelText(el)
+    : null
+  if (!text && !el.getAttribute('role') && !hasIcon && !hasFormContent && !labelText) return null
 
   const base: SkeletonElement = { id, tag }
 
   // 有文字用文字，无文字但有图标子元素标记为图标按钮
   if (text) {
     base.text = text
+  } else if (labelText) {
+    // 表单元素有关联 label 时，用 label 字段标识（不占 text，避免与 label 元素去重）
+    base.label = labelText
   } else if (hasIcon) {
     // 优先使用 aria-label 或 title 作为语义描述（如"头像"、"搜索"等）
     const semanticText = el.getAttribute('aria-label') || el.getAttribute('title')
@@ -292,6 +299,66 @@ function getDirectText(el: HTMLElement): string {
     text = el.getAttribute('aria-label') || el.getAttribute('title') || ''
   }
   return text.trim().slice(0, 100)
+}
+
+/**
+ * 查找表单元素关联的 label 文本
+ *
+ * 按优先级尝试四种关联方式：
+ * 1. <label for="elementId"> — 通过 for 属性关联
+ * 2. 父级 <label> — input 嵌套在 label 内
+ * 3. aria-labelledby — 指向任意元素的 id
+ * 4. 同级 <label> — 同一父容器下的 label（Element UI 等组件库模式）
+ */
+function findAssociatedLabelText(el: HTMLElement): string | null {
+  // 方式 1：label[for="id"]
+  const elId = el.id
+  if (elId) {
+    const label = document.querySelector(`label[for="${CSS.escape(elId)}"]`)
+    if (label) {
+      const text = label.textContent?.trim()
+      if (text) return text.slice(0, 100)
+    }
+  }
+
+  // 方式 2：父级 <label>
+  const parentLabel = el.closest('label')
+  if (parentLabel) {
+    // 取 label 的直接文本节点（排除 input 自身的文本）
+    let text = ''
+    for (const node of parentLabel.childNodes) {
+      if (node.nodeType === Node.TEXT_NODE) {
+        text += node.textContent?.trim() || ''
+      }
+    }
+    if (text) return text.slice(0, 100)
+  }
+
+  // 方式 3：aria-labelledby
+  const labelledBy = el.getAttribute('aria-labelledby')
+  if (labelledBy) {
+    const refEl = document.getElementById(labelledBy)
+    if (refEl) {
+      const text = refEl.textContent?.trim()
+      if (text) return text.slice(0, 100)
+    }
+  }
+
+  // 方式 4：同级 <label>（Element UI 等组件库模式）
+  // 如 <div class="el-form-item"><label>活动名称</label><div>...<input>...</div></div>
+  // 从 input 向上查找包含 <label> 子元素的最近容器
+  let container: HTMLElement | null = el
+  for (let i = 0; i < 5 && container; i++) {
+    container = container.parentElement
+    if (!container) break
+    const label = container.querySelector(':scope > label')
+    if (label) {
+      const text = label.textContent?.trim()
+      if (text) return text.slice(0, 100)
+    }
+  }
+
+  return null
 }
 
 function findLandmarkParent(el: HTMLElement): string | undefined {

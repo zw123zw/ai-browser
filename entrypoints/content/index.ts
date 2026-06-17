@@ -9,8 +9,8 @@ export default defineContentScript({
   cssInjectionMode: 'ui',
   async main(ctx) {
     // 首次全量打标：骨架提取时已有 id 的元素直接跳过，减少 DOM 写入
-    // 等页面完全加载 + 延迟 2s，让 SPA 动态内容有时间渲染
-    const markAll = () => setTimeout(() => initAllSkeletonIds(), 2000)
+    // 等页面完全加载 + 延迟 1s，让 SPA 动态内容有时间渲染
+    const markAll = () => setTimeout(() => initAllSkeletonIds(), 1000)
     if (document.readyState === 'complete') {
       markAll()
     } else {

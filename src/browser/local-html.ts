@@ -22,6 +22,8 @@ const KEEP_ATTRS = new Set([
   'role',
   'aria-label',
   'title',
+  'for',
+  'id',
 ])
 
 /**
@@ -68,6 +70,8 @@ export function searchByKeywords(keywords: string[]): string | null {
 /** 在单个文档内搜索匹配关键词的可交互元素（兜底：整个页面，不要可见性判断） */
 function searchInDoc(doc: Document, keywords: string[], matched: string[]): void {
   const allElements = doc.body.querySelectorAll('*')
+  const addedIds = new Set<string>() // 避免重复添加同一元素
+
   for (const el of allElements) {
     const htmlEl = el as HTMLElement
     if (!isClickable(htmlEl)) continue
@@ -75,7 +79,31 @@ function searchInDoc(doc: Document, keywords: string[], matched: string[]): void
     // iframe 元素未被 ensureAllSkeletonIds 覆盖，需要单独打标
     ensureSkeletonId(htmlEl)
     const cleaned = cleanElement(htmlEl)
-    if (cleaned) matched.push(cleaned)
+    if (cleaned) {
+      const sid = htmlEl.dataset.skeletonId
+      if (sid && !addedIds.has(sid)) {
+        matched.push(cleaned)
+        addedIds.add(sid)
+      }
+    }
+
+    // 当 label 匹配时，同时返回它关联的表单元素（input/select/textarea）
+    // 让 AI 能看到正确的 elementId 来执行 type/click 等操作
+    const tag = htmlEl.tagName.toLowerCase()
+    if (tag === 'label') {
+      const formEl = findAssociatedFormControl(htmlEl, doc)
+      if (formEl) {
+        ensureSkeletonId(formEl)
+        const formCleaned = cleanElement(formEl)
+        if (formCleaned) {
+          const formSid = formEl.dataset.skeletonId
+          if (formSid && !addedIds.has(formSid)) {
+            matched.push(formCleaned)
+            addedIds.add(formSid)
+          }
+        }
+      }
+    }
   }
 }
 
@@ -123,6 +151,41 @@ function matchesKeywords(el: HTMLElement, keywords: string[]): boolean {
     const normalizedKw = kw.replace(/\s+/g, ' ').trim().toLowerCase()
     return sources.some(s => s.toLowerCase().includes(normalizedKw))
   })
+}
+
+/**
+ * 查找 label 关联的表单元素（input/select/textarea）
+ *
+ * 按优先级尝试：
+ * 1. label[for="id"] → document.getElementById(id)
+ * 2. label 内嵌的 input/select/textarea
+ * 3. 同级容器内的 input/select/textarea（Element UI 等组件库模式）
+ */
+function findAssociatedFormControl(label: HTMLLabelElement, doc: Document): HTMLElement | null {
+  const formTags = 'input, select, textarea'
+
+  // 方式 1：for 属性关联
+  const forId = label.getAttribute('for')
+  if (forId) {
+    const target = doc.getElementById(forId)
+    if (target && formTags.includes(target.tagName.toLowerCase())) {
+      return target as HTMLElement
+    }
+  }
+
+  // 方式 2：label 内嵌的表单元素
+  const inner = label.querySelector(formTags)
+  if (inner) return inner as HTMLElement
+
+  // 方式 3：同级容器内的表单元素（Element UI 等组件库模式）
+  // label 和 input 在同一个 form-item 容器内
+  const parent = label.parentElement
+  if (parent) {
+    const sibling = parent.querySelector(formTags)
+    if (sibling) return sibling as HTMLElement
+  }
+
+  return null
 }
 
 /**

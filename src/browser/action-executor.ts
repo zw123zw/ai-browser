@@ -144,34 +144,40 @@ export class ActionExecutor {
 
   // ========== 操作执行 ==========
 
-  /** 触发点击事件：优先 el.click()，失败时用 dispatchEvent 兜底 */
+  /** 触发点击事件：完整的鼠标事件序列（mousedown → focus → mouseup → click） */
   private triggerClick(el: HTMLElement): void {
     log.info('triggerClick 开始', { tag: el.tagName, className: el.className, id: el.id })
-    try {
-      log.info('triggerClick 调用 el.click()')
-      el.click()
-      log.info('triggerClick el.click() 执行完成')
-    } catch (error) {
-      log.warn('triggerClick el.click() 失败，使用 dispatchEvent', { error })
-      // click() 失败，用 dispatchEvent 兜底
-      const rect = el.getBoundingClientRect()
-      const eventInit: MouseEventInit = {
-        bubbles: true,
-        cancelable: true,
-        clientX: rect.left + rect.width / 2,
-        clientY: rect.top + rect.height / 2,
-        button: 0,
-      }
-      el.dispatchEvent(new MouseEvent('mousedown', eventInit))
-      el.dispatchEvent(new MouseEvent('mouseup', eventInit))
-      el.dispatchEvent(new MouseEvent('click', eventInit))
-      log.info('triggerClick dispatchEvent 执行完成')
+    const rect = el.getBoundingClientRect()
+    const eventInit: MouseEventInit = {
+      bubbles: true,
+      cancelable: true,
+      clientX: rect.left + rect.width / 2,
+      clientY: rect.top + rect.height / 2,
+      button: 0,
     }
+
+    // 完整事件序列：模拟真实用户点击
+    // Element UI 的 Select/DatePicker 等组件监听 mousedown/focus，仅 el.click() 无法触发
+    el.dispatchEvent(new MouseEvent('mousedown', eventInit))
+    el.dispatchEvent(new FocusEvent('focus', { bubbles: true }))
+    el.dispatchEvent(new MouseEvent('mouseup', eventInit))
+    el.dispatchEvent(new MouseEvent('click', eventInit))
+    log.info('triggerClick 完整事件序列执行完成')
   }
 
   /** 点击：区分真实链接 vs JS 交互型链接 */
   private async executeClick(el: HTMLElement): Promise<ActionResult> {
     log.info('executeClick 开始', { tag: el.tagName, className: el.className, id: el.id })
+
+    // label 点击：自动转发到关联的表单元素（input/select/textarea）
+    // 用户说"点击活动区域"时 AI 可能选中 label，但实际需要操作的是关联的 select/input
+    if (el.tagName === 'LABEL') {
+      const formEl = this.findLabelTarget(el)
+      if (formEl) {
+        log.info('executeClick label 转发到关联元素', { targetTag: formEl.tagName, targetId: formEl.dataset.skeletonId })
+        el = formEl
+      }
+    }
 
     // <a> 标签：区分真实链接 vs JS 交互型链接
     if (el instanceof HTMLAnchorElement) {
@@ -391,6 +397,35 @@ export class ActionExecutor {
       log.error(msg, error)
       return { success: false, message: msg }
     }
+  }
+
+  // ========== Label 辅助 ==========
+
+  /** 查找 label 关联的表单元素 */
+  private findLabelTarget(label: HTMLLabelElement): HTMLElement | null {
+    const formTags = 'input, select, textarea'
+
+    // 方式 1：for 属性
+    const forId = label.getAttribute('for')
+    if (forId) {
+      const target = document.getElementById(forId)
+      if (target && formTags.includes(target.tagName.toLowerCase())) {
+        return target as HTMLElement
+      }
+    }
+
+    // 方式 2：label 内嵌的表单元素
+    const inner = label.querySelector(formTags)
+    if (inner) return inner as HTMLElement
+
+    // 方式 3：同级容器内的表单元素（Element UI 等组件库模式）
+    const parent = label.parentElement
+    if (parent) {
+      const sibling = parent.querySelector(formTags)
+      if (sibling) return sibling as HTMLElement
+    }
+
+    return null
   }
 
   // ========== Video 操作 ==========
