@@ -33,6 +33,8 @@ export type Provider =
   | 'zhipu'         // 智谱清言
   | 'deepseek'      // DeepSeek
   | 'moonshot'      // Moonshot (Kimi)
+  | 'doubao'        // 豆包（字节火山引擎）
+  | 'grok'          // Grok (xAI)
 
 /** 单条聊天消息（标准化结构） */
 export interface ChatMessage {

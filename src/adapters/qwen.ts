@@ -16,24 +16,32 @@ const log = new Logger('Adapter:Qwen');
 export class QwenAdapter extends BaseAdapter {
   readonly name = 'qwen';
 
+  /** 提取 system 消息（Qwen 原生 API 用独立的 system 字段） */
+  private extractSystem(messages: ChatMessage[]): string | undefined {
+    const systemMsgs = messages.filter(m => m.role === 'system');
+    if (!systemMsgs.length) return undefined;
+    return systemMsgs.map(m => m.content).join('\n');
+  }
+
   private toRequestMessages(messages: ChatMessage[]) {
-    return messages.map((m) => {
-      // 将文件附件内容合并到文本（含图片 OCR 文字）
-      let content = m.content;
-      if (m.attachments?.some(a => a.content && !a.content.startsWith('['))) {
-        const fileTexts = m.attachments
-          .filter(a => a.content && !a.content.startsWith('['))
-          .map(a => {
-            if (a.type === 'image') {
-              return `[图片文字识别: ${a.name}]\n${a.content}`;
-            }
-            return `[文件: ${a.name}]\n\`\`\`${a.lang || ''}\n${a.content}\n\`\`\``;
-          })
-          .join('\n\n');
-        if (fileTexts) content = content ? `${content}\n\n${fileTexts}` : fileTexts;
-      }
-      return { role: m.role, content };
-    });
+    return messages
+      .filter(m => m.role !== 'system')
+      .map((m) => {
+        let content = m.content;
+        if (m.attachments?.some(a => a.content && !a.content.startsWith('['))) {
+          const fileTexts = m.attachments
+            .filter(a => a.content && !a.content.startsWith('['))
+            .map(a => {
+              if (a.type === 'image') {
+                return `[图片文字识别: ${a.name}]\n${a.content}`;
+              }
+              return `[文件: ${a.name}]\n\`\`\`${a.lang || ''}\n${a.content}\n\`\`\``;
+            })
+            .join('\n\n');
+          if (fileTexts) content = content ? `${content}\n\n${fileTexts}` : fileTexts;
+        }
+        return { role: m.role, content };
+      });
   }
 
   async chat(
@@ -48,7 +56,7 @@ export class QwenAdapter extends BaseAdapter {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${opts.apiKey}`,
     };
-    const body = JSON.stringify({
+    const bodyObj: Record<string, unknown> = {
       model: opts.modelName,
       input: {
         messages: this.toRequestMessages(opts.messages),
@@ -57,7 +65,15 @@ export class QwenAdapter extends BaseAdapter {
         result_format: 'message',
         incremental_output: true,
       },
-    });
+    };
+
+    // system 消息作为独立字段（Qwen 原生 API 要求）
+    const systemPrompt = this.extractSystem(opts.messages);
+    if (systemPrompt) {
+      (bodyObj.input as Record<string, unknown>).system = systemPrompt;
+    }
+
+    const body = JSON.stringify(bodyObj);
 
     let fullResponse = '';
     let doneFired = false;
