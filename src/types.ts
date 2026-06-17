@@ -123,6 +123,12 @@ export interface AppSettings {
   maxContext?: number;
   /** 划词操作：auto=自动发送, manual=填入输入框, off=关闭 */
   autoSendSelection?: 'auto' | 'manual' | 'off';
+  /** 翻译目标语言（如 '中文'、'English'、'日本語'） */
+  translateTargetLang?: string;
+  /** 划词翻译开关 */
+  selectionTranslate?: boolean;
+  /** 自动翻译开关 */
+  autoTranslate?: boolean;
 }
 
 /** Adapter 流式回调每一段 */

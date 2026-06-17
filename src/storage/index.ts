@@ -40,6 +40,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
   maxConversations: 100,
   maxContext: 50,
   autoSendSelection: 'auto',
+  translateTargetLang: '中文',
+  selectionTranslate: false,
+  autoTranslate: false,
   models: localModels,
 };
 

@@ -309,12 +309,26 @@ const generalForm = reactive({
   theme: store.settings.theme || 'classic',
   shortcut: store.settings.shortcut || '',
   autoSendSelection: resolveAutoSend(store.settings.autoSendSelection),
+  translateTargetLang: store.settings.translateTargetLang || '中文',
+  selectionTranslate: store.settings.selectionTranslate ?? false,
+  autoTranslate: store.settings.autoTranslate ?? false,
 });
 
 const autoSendOptions = [
   { value: 'auto' as const, label: '自动发送', desc: '选中文字后直接发送给 AI 分析' },
   { value: 'manual' as const, label: '手动发送', desc: '选中文字后填入聊天输入框，手动确认发送' },
   { value: 'off' as const, label: '关闭', desc: '不处理页面选中文字' },
+];
+
+const translateLangOptions = [
+  { value: '中文', label: '中文' },
+  { value: 'English', label: 'English' },
+  { value: '日本語', label: '日本語' },
+  { value: '한국어', label: '한국어' },
+  { value: 'Français', label: 'Français' },
+  { value: 'Deutsch', label: 'Deutsch' },
+  { value: 'Español', label: 'Español' },
+  { value: 'Русский', label: 'Русский' },
 ];
 
 // 快捷键录制
@@ -348,6 +362,9 @@ async function saveGeneral() {
     theme: generalForm.theme,
     shortcut: generalForm.shortcut,
     autoSendSelection: generalForm.autoSendSelection,
+    translateTargetLang: generalForm.translateTargetLang,
+    selectionTranslate: generalForm.selectionTranslate,
+    autoTranslate: generalForm.autoTranslate,
   });
   toast.success('通用配置已保存');
   emit('close');
@@ -743,6 +760,41 @@ function importModels(e: Event) {
                     <span class="zwf-radio-label">{{ opt.label }}</span>
                     <span class="zwf-radio-desc">{{ opt.desc }}</span>
                   </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 翻译配置 -->
+            <div class="zwf-form-row">
+              <label>翻译配置</label>
+              <div class="zwf-translate-section">
+                <div class="zwf-form-row-inner">
+                  <span class="zwf-translate-label">目标语言</span>
+                  <select v-model="generalForm.translateTargetLang" class="zwf-select zwf-select-sm">
+                    <option v-for="lang in translateLangOptions" :key="lang.value" :value="lang.value">
+                      {{ lang.label }}
+                    </option>
+                  </select>
+                </div>
+                <div class="zwf-translate-toggles">
+                  <label class="zwf-toggle-item" @click.prevent="generalForm.selectionTranslate = !generalForm.selectionTranslate">
+                    <div :class="['zwf-switch', { 'zwf-switch-on': generalForm.selectionTranslate }]">
+                      <div class="zwf-switch-thumb" />
+                    </div>
+                    <div class="zwf-toggle-text">
+                      <span class="zwf-toggle-title">划词翻译</span>
+                      <span class="zwf-toggle-desc">选中文字后弹出翻译浮层</span>
+                    </div>
+                  </label>
+                  <label class="zwf-toggle-item" @click.prevent="generalForm.autoTranslate = !generalForm.autoTranslate">
+                    <div :class="['zwf-switch', { 'zwf-switch-on': generalForm.autoTranslate }]">
+                      <div class="zwf-switch-thumb" />
+                    </div>
+                    <div class="zwf-toggle-text">
+                      <span class="zwf-toggle-title">自动翻译</span>
+                      <span class="zwf-toggle-desc">页面文本自动翻译为目标语言</span>
+                    </div>
+                  </label>
                 </div>
               </div>
             </div>
@@ -1303,5 +1355,78 @@ function importModels(e: Event) {
   .zwf-radio-label {
     font-size: 12px;
   }
+}
+
+/* 翻译配置 */
+.zwf-translate-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 4px;
+}
+
+.zwf-form-row-inner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.zwf-translate-label {
+  font-size: 13px;
+  color: var(--zwf-text);
+  white-space: nowrap;
+  min-width: 64px;
+}
+
+.zwf-select-sm {
+  padding: 6px 10px;
+  font-size: 13px;
+  border-radius: 8px;
+  border: 1px solid var(--zwf-border);
+  background: var(--zwf-bg-card);
+  color: var(--zwf-text);
+  cursor: pointer;
+  min-width: 120px;
+}
+
+.zwf-select-sm:focus {
+  border-color: var(--zwf-primary);
+  outline: none;
+}
+
+.zwf-translate-toggles {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.zwf-toggle-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  padding: 6px 0;
+}
+
+.zwf-toggle-item:hover .zwf-toggle-title {
+  color: var(--zwf-primary);
+}
+
+.zwf-toggle-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.zwf-toggle-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--zwf-text);
+  transition: color 0.15s;
+}
+
+.zwf-toggle-desc {
+  font-size: 11px;
+  color: var(--zwf-text-soft);
 }
 </style>
