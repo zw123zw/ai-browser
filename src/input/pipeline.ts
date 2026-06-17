@@ -119,7 +119,8 @@ export class InputPipeline {
 
     if (p1.isChat && p1.responseText) {
       log.info('[流程] Phase 1 → 聊天回复 → 结束')
-      // 确认是聊天 → 用回复内容替换"思考中"，标记完成
+      // 用清理后的最终文本替换流式内容（可能去掉了 [chat] 标签）
+      callbacks.onChatDelta('', undefined, true)
       callbacks.onChatDelta(p1.responseText)
       callbacks.onChatEnd()
       return

@@ -6,6 +6,7 @@ import {
   conversationStorage,
   conversationsStorageOld,
 } from '@/src/storage';
+import { pushInputHistory } from '@/src/storage/input-history';
 import { useSettingsStore } from './settings';
 import { createAdapter } from '@/src/adapters';
 import { defineStorageSync } from '@/src/utils/storage-sync';
@@ -173,6 +174,10 @@ export const useConversationsStore = defineStore('zwf-conversations', () => {
       status: 'done',
       reasoningEnabled,
     });
+    // 有文本内容时记录输入历史（跳过纯文件消息）
+    if (text.trim()) {
+      pushInputHistory(text.trim());
+    }
     if (conv.title === '新对话' && text) {
       conv.title = text.slice(0, 20);
     }

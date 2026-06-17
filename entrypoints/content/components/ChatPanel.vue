@@ -4,6 +4,7 @@ import { useConversationsStore } from '@/src/stores/conversations';
 import { useSettingsStore } from '@/src/stores/settings';
 import { useToast } from '@/src/composables/useToast';
 import { usePipeline } from '@/src/composables/usePipeline';
+import { pushInputHistory } from '@/src/storage/input-history';
 import { Logger } from '@/src/utils/logger';
 import type { Attachment } from '@/src/types';
 import MessageList from './MessageList.vue';
@@ -62,6 +63,10 @@ async function onSend(payload: { text: string; attachments: import('@/src/types'
     if (convStore.conversation.title === '新对话') {
       convStore.conversation.title = payload.text.slice(0, 20);
     }
+    // 记录输入历史（跳过纯文件消息）
+    if (payload.text.trim()) {
+      pushInputHistory(payload.text.trim());
+    }
 
     try {
       await pipeline.processInput(payload.text);
@@ -99,6 +104,9 @@ async function onPick(text: string) {
     status: 'done',
   });
   convStore.conversation.updatedAt = Date.now();
+  if (text.trim()) {
+    pushInputHistory(text.trim());
+  }
   try {
     await pipeline.processInput(text);
   } catch (e: any) {

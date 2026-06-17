@@ -82,3 +82,8 @@ export const fabPosStorage = storage.defineItem<FabPos>(KEY_FAB_POS, {
 export const drawerOpenStorage = storage.defineItem<boolean>('local:zwf-drawer-open', {
   fallback: false,
 });
+
+/** 输入历史记录（跨标签页 + 跨浏览器重启持久化，上限 100 条） */
+export const inputHistoryStorage = storage.defineItem<string[]>('local:zwf-input-history', {
+  fallback: [],
+});

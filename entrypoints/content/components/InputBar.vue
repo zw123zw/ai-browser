@@ -5,6 +5,7 @@ import { parseFile, ocrAttachment } from '@/src/utils/file-parsers';
 import { getFileTypeIcon, formatFileSize } from '@/src/utils/file-type';
 import { useToast } from '@/src/composables/useToast';
 import { Logger } from '@/src/utils/logger';
+import { inputHistoryStorage } from '@/src/storage';
 import type { Conversation, ModelConfig, Attachment } from '@/src/types';
 
 /** 图片 OCR 进度追踪（key = attachment id） */
@@ -31,6 +32,27 @@ const fileInput = ref<HTMLInputElement | null>(null);
 const textarea = ref<HTMLTextAreaElement | null>(null);
 const modelMenuOpen = ref(false);
 const modelMenuRef = ref<HTMLDivElement | null>(null);
+
+// ---- 输入历史导航 ----
+/** 历史记录缓存（从 storage 加载） */
+let historyCache: string[] | null = null;
+/** 当前历史索引，-1 表示未进入历史模式 */
+const historyIndex = ref(-1);
+/** 进入历史模式前保存的草稿 */
+let savedDraft = '';
+
+/** 确保历史缓存已加载 */
+async function ensureHistoryLoaded() {
+  if (historyCache === null) {
+    historyCache = await inputHistoryStorage.getValue();
+  }
+}
+
+/** 退出历史模式，重置状态 */
+function exitHistoryMode() {
+  historyIndex.value = -1;
+  savedDraft = '';
+}
 
 /** 预览：emit 给父级渲染，避免 fixed 定位在滚动容器内失效 */
 function openFilePreview(att: Attachment) {
@@ -274,7 +296,13 @@ function autoResize() {
   el.style.height = Math.min(el.scrollHeight, 200) + 'px';
 }
 
-watch(() => text.value, () => nextTick(autoResize));
+watch(() => text.value, (newVal, oldVal) => {
+  nextTick(autoResize);
+  // 用户手动编辑时退出历史模式（非历史导航引起的变更）
+  if (historyIndex.value >= 0 && newVal !== historyCache?.[historyIndex.value]) {
+    exitHistoryMode();
+  }
+});
 watch(() => props.conversation?.id, () => nextTick(autoResize));
 
 function send() {
@@ -292,6 +320,9 @@ function send() {
     props.conversation.draftText = '';
     props.conversation.draftAttachments = [];
   }
+  // 重置历史导航状态，下次按 Up 时重新加载
+  exitHistoryMode();
+  historyCache = null;
   nextTick(autoResize);
 }
 
@@ -299,7 +330,60 @@ function onKeydown(e: KeyboardEvent) {
   if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
     e.preventDefault();
     send();
+    return;
   }
+
+  // 历史导航：空输入框 或 已在历史模式中 时触发
+  if (e.key === 'ArrowUp' && (!text.value || historyIndex.value >= 0)) {
+    log.info('[History] ArrowUp 触发历史导航', { textValue: JSON.stringify(text.value), historyIndex: historyIndex.value });
+    e.preventDefault();
+    navigateHistory(-1);
+    return;
+  }
+  if (e.key === 'ArrowDown' && historyIndex.value >= 0) {
+    log.info('[History] ArrowDown 触发历史导航', { historyIndex: historyIndex.value });
+    e.preventDefault();
+    navigateHistory(1);
+    return;
+  }
+}
+
+/**
+ * 历史导航
+ * @param direction -1=上一条, 1=下一条
+ */
+async function navigateHistory(direction: number) {
+  await ensureHistoryLoaded();
+  log.info('[History] navigateHistory', { direction, cacheLen: historyCache?.length ?? 0, historyIndex: historyIndex.value });
+  if (!historyCache || historyCache.length === 0) return;
+
+  if (direction === -1) {
+    // Up：回退
+    if (historyIndex.value === -1) {
+      // 首次进入历史模式，保存当前草稿
+      savedDraft = text.value;
+      historyIndex.value = historyCache.length - 1;
+    } else if (historyIndex.value > 0) {
+      historyIndex.value--;
+    } else {
+      // 已到最顶部，不再移动
+      return;
+    }
+  } else {
+    // Down：前进
+    if (historyIndex.value < 0) return;
+    if (historyIndex.value < historyCache.length - 1) {
+      historyIndex.value++;
+    } else {
+      // 到达末尾，恢复原始草稿并退出历史模式
+      text.value = savedDraft;
+      exitHistoryMode();
+      return;
+    }
+  }
+
+  text.value = historyCache[historyIndex.value];
+  log.info('[History] 回填文本', { index: historyIndex.value, text: text.value.slice(0, 50) });
 }
 
 function pickModel(id: string) {
