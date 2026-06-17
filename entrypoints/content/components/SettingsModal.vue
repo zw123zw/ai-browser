@@ -353,24 +353,105 @@ async function saveGeneral() {
   emit('close');
 }
 
-// 导出当前模型配置（可粘贴到 local-config.ts）
-const exportNotice = ref(false);
-function exportConfig() {
-  const config = localModels.value.map((m) => ({
-    id: m.id,
-    label: m.label,
-    provider: m.provider,
-    modelName: m.modelName,
-    baseUrl: m.baseUrl || '',
-    apiKey: m.apiKey || '',
-    authField: m.authField || 'bearer',
-    website: m.website || '',
+// 导出模型配置为 JSON 文件
+function exportModels() {
+  const config = localModels.value.map(({ id, ...rest }) => ({
+    label: rest.label,
+    provider: rest.provider,
+    modelName: rest.modelName,
+    baseUrl: rest.baseUrl || '',
+    apiKey: rest.apiKey || '',
+    authField: rest.authField || 'bearer',
+    website: rest.website || '',
+    reasoning: rest.reasoning,
+    vision: rest.vision,
   }));
-  const code = `export const DEFAULT_MODEL_ID = '${selectedModelId.value}';\n\nexport const LOCAL_MODELS = ${JSON.stringify(config, null, 2)};`;
-  navigator.clipboard.writeText(code).then(() => {
-    exportNotice.value = true;
-    setTimeout(() => (exportNotice.value = false), 2000);
-  });
+  const blob = new Blob([JSON.stringify(config, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `ai-browser-models-${Date.now()}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  toast.success(`已导出 ${config.length} 个模型配置`);
+}
+
+// 导入模型配置（隐藏 input 触发）
+const fileInputRef = ref<HTMLInputElement>();
+function triggerImport() {
+  fileInputRef.value?.click();
+}
+
+function importModels(e: Event) {
+  const file = (e.target as HTMLInputElement).files?.[0];
+  if (!file) return;
+  // 重置 input 以便重复选择同一文件
+  (e.target as HTMLInputElement).value = '';
+
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const data = JSON.parse(reader.result as string);
+      if (!Array.isArray(data)) {
+        toast.error('文件格式错误，期望 JSON 数组');
+        return;
+      }
+
+      const validProviders = new Set([
+        'openai', 'anthropic', 'gemini', 'custom',
+        'qwen', 'wenxin', 'zhipu', 'deepseek',
+        'moonshot', 'doubao', 'grok',
+      ]);
+
+      let imported = 0;
+      let skipped = 0;
+      const newModels: ModelConfig[] = [];
+
+      for (const item of data) {
+        if (!item || typeof item !== 'object') { skipped++; continue; }
+        if (!item.modelName || !validProviders.has(item.provider)) { skipped++; continue; }
+
+        newModels.push({
+          id: uuid(),
+          label: item.label || item.modelName,
+          provider: item.provider,
+          modelName: item.modelName,
+          baseUrl: item.baseUrl || '',
+          apiKey: item.apiKey || '',
+          authField: item.authField || 'bearer',
+          website: item.website || '',
+          reasoning: item.reasoning,
+          vision: item.vision,
+        });
+        imported++;
+      }
+
+      if (imported === 0) {
+        toast.error('未找到有效模型配置');
+        return;
+      }
+
+      localModels.value = [...localModels.value, ...newModels];
+      selectedModelId.value = newModels[0].id;
+      isNewMode.value = false;
+      selectModel(selectedModelId.value);
+
+      // 持久化
+      store.update({
+        models: JSON.parse(JSON.stringify(localModels.value)),
+        defaultModelId: selectedModelId.value,
+      });
+
+      if (skipped > 0) {
+        toast.warning(`已导入 ${imported} 个，跳过 ${skipped} 个无效项`);
+      } else {
+        toast.success(`已导入 ${imported} 个模型配置`);
+      }
+    } catch {
+      toast.error('文件格式错误，请确认是 JSON 数组');
+    }
+  };
+  reader.readAsText(file);
 }
 </script>
 
@@ -445,6 +526,29 @@ function exportConfig() {
                 <button class="zwf-chip zwf-chip-new" @click="createNewModel">
                   + 新建
                 </button>
+                <button class="zwf-chip zwf-chip-tool" @click="exportModels" title="导出配置">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="7 10 12 15 17 10"/>
+                    <line x1="12" y1="15" x2="12" y2="3"/>
+                  </svg>
+                  导出
+                </button>
+                <button class="zwf-chip zwf-chip-tool" @click="triggerImport" title="导入配置">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="17 8 12 3 7 8"/>
+                    <line x1="12" y1="3" x2="12" y2="15"/>
+                  </svg>
+                  导入
+                </button>
+                <input
+                  ref="fileInputRef"
+                  type="file"
+                  accept=".json"
+                  style="display:none"
+                  @change="importModels"
+                />
               </div>
             </div>
 
@@ -752,6 +856,20 @@ function exportConfig() {
 }
 
 .zwf-chip-new:hover {
+  border-color: var(--zwf-primary);
+  color: var(--zwf-primary);
+  background: var(--zwf-primary-soft);
+}
+
+.zwf-chip-tool {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border-style: dashed;
+  color: var(--zwf-text-soft);
+}
+
+.zwf-chip-tool:hover {
   border-color: var(--zwf-primary);
   color: var(--zwf-primary);
   background: var(--zwf-primary-soft);
