@@ -99,8 +99,8 @@ export default defineContentScript({
     // --- 自动翻译：页面加载后首次触发 ---
     async function initAutoTranslate() {
       log.info('[自动翻译] 页面加载，检查是否开启')
-      // 等待页面加载完成 + 延迟，确保 DOM 稳定
-      await new Promise(resolve => setTimeout(resolve, 2000))
+      // 等待 DOM 稳定
+      await new Promise(resolve => setTimeout(resolve, 500))
       await runAutoTranslate()
     }
 
@@ -129,6 +129,62 @@ export default defineContentScript({
         translateService.restoreAll()
       }
     })
+
+    // --- 自动翻译：URL 变化时重新翻译 ---
+    let currentUrl = location.href
+    let urlChangeTimer: ReturnType<typeof setTimeout> | null = null
+
+    function onUrlChange(source: string) {
+      const newUrl = location.href
+      if (newUrl === currentUrl) return
+      currentUrl = newUrl
+      log.info(`[自动翻译] URL 变化 (${source})`, { url: newUrl })
+
+      if (urlChangeTimer) clearTimeout(urlChangeTimer)
+      urlChangeTimer = setTimeout(async () => {
+        translateService.reset()
+        await runAutoTranslate()
+      }, 800)
+    }
+
+    // 监听 pushState / replaceState（SPA 路由跳转）
+    const origPushState = history.pushState
+    const origReplaceState = history.replaceState
+
+    history.pushState = function (...args) {
+      origPushState.apply(this, args)
+      onUrlChange('pushState')
+    }
+
+    history.replaceState = function (...args) {
+      origReplaceState.apply(this, args)
+      onUrlChange('replaceState')
+    }
+
+    window.addEventListener('popstate', () => onUrlChange('popstate'))
+    window.addEventListener('hashchange', () => onUrlChange('hashchange'))
+
+    // MutationObserver 兜底：监听 body 子节点大面积变化（SPA 内容切换）
+    let domChangeTimer: ReturnType<typeof setTimeout> | null = null
+    let lastChildCount = document.body.childElementCount
+
+    const domObserver = new MutationObserver(() => {
+      const newCount = document.body.childElementCount
+      // 子节点数量变化超过 30% 视为页面内容切换
+      if (Math.abs(newCount - lastChildCount) > lastChildCount * 0.3) {
+        lastChildCount = newCount
+        if (domChangeTimer) clearTimeout(domChangeTimer)
+        domChangeTimer = setTimeout(async () => {
+          const settings = await getTranslateSettings()
+          if (!settings?.autoTranslate) return
+          log.info('[自动翻译] DOM 大变化，重新翻译', { childCount: newCount })
+          translateService.reset()
+          await runAutoTranslate()
+        }, 1000)
+      }
+    })
+
+    domObserver.observe(document.body, { childList: true, subtree: false })
 
     // ═══════════════════════════════════════════════════════════════
     // Vue 应用挂载

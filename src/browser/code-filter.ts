@@ -84,14 +84,36 @@ export interface FilterResult {
 }
 
 /**
- * 判断元素是否是代码容器（Layer 1 + Layer 2）
+ * 判断元素是否是纯代码容器（Layer 1 + Layer 2）
  *
- * 用于自动翻译遍历 DOM 时跳过代码块元素。
+ * 只匹配 <pre>、<code>（块级）、class 含代码特征的元素。
+ * <p> 里有 <code> 子元素的情况不算代码容器。
  */
 export function isCodeElement(el: HTMLElement): boolean {
   const tag = el.tagName.toLowerCase()
-  if (CODE_TAGS.has(tag)) return true
 
+  // <pre> 是纯代码块，直接跳过
+  if (tag === 'pre') return true
+
+  // <code> 只有在作为块级容器时才跳过（有多个子节点或没有父级文本）
+  // 行内 <code>（如 <p>text <code>code</code> text</p>）不跳过
+  if (tag === 'code') {
+    const parent = el.parentElement
+    if (parent && parent.tagName.toLowerCase() === 'pre') return true
+    // 独立的 <code> 块（没有文本兄弟节点）也跳过
+    let hasTextSibling = false
+    for (const node of parent?.childNodes || []) {
+      if (node.nodeType === Node.TEXT_NODE && node.textContent?.trim()) {
+        hasTextSibling = true
+        break
+      }
+    }
+    if (!hasTextSibling) return true
+  }
+
+  if (tag === 'samp') return true
+
+  // class 特征匹配
   const className = el.className
   if (typeof className === 'string') {
     const lower = className.toLowerCase()

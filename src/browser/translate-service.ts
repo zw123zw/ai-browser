@@ -30,6 +30,8 @@ interface TranslateElement {
   id: string
   text: string
   el: HTMLElement
+  /** 内联代码占位符映射：{{ic_N}} → 原始代码 */
+  inlineCodes: Map<string, string>
 }
 
 /** 批量翻译结果 */
@@ -157,14 +159,14 @@ export class TranslateService {
         continue
       }
 
-      const text = this.getDirectText(el)
+      const { text, inlineCodes } = this.getDirectTextWithCodes(el)
       if (!text || text.length < 2) {
         this.observer?.unobserve(el)
         continue
       }
 
       // 加入待翻译队列
-      this.pendingElements.push({ id, text, el })
+      this.pendingElements.push({ id, text, el, inlineCodes })
       this.observer?.unobserve(el)
 
       // 防抖 200ms 后批量翻译
@@ -199,25 +201,28 @@ export class TranslateService {
     try {
       log.info('[自动翻译] 翻译队列出队', { count: batch.length })
 
-      // 按文本去重：text → { representativeId, placeholder, allElements[] }
+      // 按原始文本去重：text → { ids[], elements[], inlineCodes, placeholders }
       const textGroupMap = new Map<string, {
-        representativeId: string
+        ids: string[]
+        elements: TranslateElement[]
         filtered: string
         placeholders: Map<string, string>
-        elements: TranslateElement[]
       }>()
 
       for (const el of batch) {
-        const { text: filtered, placeholders } = filterCodeText(el.text)
-        const existing = textGroupMap.get(filtered)
+        const existing = textGroupMap.get(el.text)
         if (existing) {
+          // 相同文本，追加 id
+          existing.ids.push(el.id)
           existing.elements.push(el)
         } else {
-          textGroupMap.set(filtered, {
-            representativeId: el.id,
+          // 新文本，过滤代码（不合并 inlineCodes，由 replaceElementText 处理）
+          const { text: filtered, placeholders } = filterCodeText(el.text)
+          textGroupMap.set(el.text, {
+            ids: [el.id],
+            elements: [el],
             filtered,
             placeholders,
-            elements: [el],
           })
         }
       }
@@ -227,13 +232,14 @@ export class TranslateService {
         this.addLoadingMark(el.el)
       }
 
-      // 构建去重后的翻译列表（只发唯一文本）
+      // 构建去重后的翻译列表（只发唯一文本，用第一个 id 作为代表）
       const translateItems: Array<{ id: string; text: string }> = []
-      const groupById = new Map<string, typeof textGroupMap extends Map<string, infer V> ? V : never>()
+      const groupById = new Map<string, { ids: string[]; elements: TranslateElement[]; placeholders: Map<string, string> }>()
 
       for (const [, group] of textGroupMap) {
-        translateItems.push({ id: group.representativeId, text: group.filtered })
-        groupById.set(group.representativeId, group)
+        const representativeId = group.ids[0]
+        translateItems.push({ id: representativeId, text: group.filtered })
+        groupById.set(representativeId, { ids: group.ids, elements: group.elements, placeholders: group.placeholders })
       }
 
       log.info('[自动翻译] 文本去重', { before: batch.length, after: translateItems.length })
@@ -381,11 +387,11 @@ export class TranslateService {
       if (!this.isElementVisible(htmlEl)) { skippedInvisible++; continue }
 
       const id = htmlEl.dataset.skeletonId || ensureSkeletonId(htmlEl)
-      const text = this.getDirectText(htmlEl)
+      const { text, inlineCodes } = this.getDirectTextWithCodes(htmlEl)
       if (!text || text.length < 2) { skippedText++; continue }
       if (/^[\d\s.,%+\-*/=<>]+$/.test(text)) { skippedText++; continue }
 
-      candidates.push({ id, text, el: htmlEl })
+      candidates.push({ id, text, el: htmlEl, inlineCodes })
     }
 
     // 父子去重：只在父子文本完全相同时跳过子元素
@@ -425,24 +431,46 @@ export class TranslateService {
     }
   }
 
-  /** 提取元素直接文本（复用 skeleton.ts 逻辑） */
-  private getDirectText(el: HTMLElement): string {
+  /**
+   * 提取元素文本 + 内联代码占位符映射（只处理直接子节点，不递归）
+   *
+   * 只遍历直接子节点：
+   * - textNode → 直接拼接
+   * - <code>/<samp> → 替换为 {{ic_N}} 占位符，记录原始代码
+   * - 其他元素子节点 → 跳过（不递归，让子元素自己被提取翻译）
+   *
+   * 这样容器元素（如 <div>）不会被翻译，只有叶子元素（如 <p>）才会。
+   *
+   * 示例：<p>The <code>AudioTrackButton</code> controls</p>
+   * → text: "The {{ic_01}} controls", inlineCodes: {"{{ic_01}}": "AudioTrackButton"}
+   */
+  private getDirectTextWithCodes(el: HTMLElement): { text: string; inlineCodes: Map<string, string> } {
     let text = ''
+    let codeCounter = 0
+    const inlineCodes = new Map<string, string>()
+
     for (const node of el.childNodes) {
       if (node.nodeType === Node.TEXT_NODE) {
-        text += node.textContent?.trim() || ''
+        text += node.textContent || ''
+      } else if (node.nodeType === Node.ELEMENT_NODE) {
+        const child = node as HTMLElement
+        const tag = child.tagName.toLowerCase()
+
+        // 内联代码 → 占位符
+        if (tag === 'code' || tag === 'samp') {
+          codeCounter++
+          const key = `{{ic_${String(codeCounter).padStart(2, '0')}}}`
+          text += key
+          inlineCodes.set(key, child.textContent?.trim() || '')
+        }
+        // 其他元素子节点 → 跳过，不递归
       }
     }
-    if (!text) {
-      for (const child of el.children) {
-        const childText = (child as HTMLElement).innerText?.trim() || ''
-        if (childText) { text = childText; break }
-      }
-    }
+
     if (!text) {
       text = el.getAttribute('aria-label') || el.getAttribute('title') || ''
     }
-    return text.trim().slice(0, 500) // 翻译场景允许更长文本
+    return { text: text.trim().slice(0, 500), inlineCodes }
   }
 
   /** 给元素添加 loading 标记（旋转圈圈，紧跟文本） */
@@ -507,23 +535,74 @@ export class TranslateService {
   }
 
   /**
-   * 替换元素文本（只操作 textNode，不改变样式/结构）
+   * 替换元素文本（保留内联代码结构）
    *
-   * 策略：
-   * 1. 找到第一个非空 textNode → 直接替换
-   * 2. 没有 textNode → 找第一个有文本的子元素，递归替换其 textNode
-   * 3. 都没有 → 设置 textContent（兜底）
+   * 译文中可能包含 {{ic_N}} 占位符（内联代码未被 restorePlaceholders 处理）。
+   * 需要按占位符拆分译文，保留原始 <code> 元素，只替换文本节点。
+   *
+   * 示例：
+   * 原始 DOM: <p>The <code>AudioTrackButton</code> controls</p>
+   * 译文: "应该显示在 {{ic_01}} 控件上"
+   * 结果: <p>应该显示在 <code>AudioTrackButton</code> 控件上</p>
    */
   private replaceElementText(el: HTMLElement, translated: string): void {
-    // 策略 1：直接子 textNode
+    // 检查是否包含内联代码占位符
+    const icPattern = /\{\{ic_(\d{2})\}\}/
+    if (!icPattern.test(translated)) {
+      // 无内联代码，直接替换第一个 textNode
+      this.replaceFirstTextNode(el, translated)
+      return
+    }
+
+    // 有内联代码：按占位符拆分译文，重建子节点
+    const parts = translated.split(/\{\{ic_(\d{2})\}\}/)
+    // parts: ["应该显示在 ", "01", " 控件上"]  (奇数位是占位符编号)
+
+    // 收集原始 <code>/<samp> 元素（按顺序）
+    const codeElements: HTMLElement[] = []
+    const collectCodes = (node: Node) => {
+      if (node.nodeType === Node.ELEMENT_NODE) {
+        const child = node as HTMLElement
+        const tag = child.tagName.toLowerCase()
+        if (tag === 'code' || tag === 'samp') {
+          codeElements.push(child)
+        } else {
+          for (const c of child.childNodes) collectCodes(c)
+        }
+      }
+    }
+    for (const node of el.childNodes) collectCodes(node)
+
+    // 清空元素内容
+    while (el.firstChild) el.removeChild(el.firstChild)
+
+    // 重建：文本 + 占位符对应 <code>
+    let codeIndex = 0
+    for (let i = 0; i < parts.length; i++) {
+      if (i % 2 === 0) {
+        // 文本部分
+        if (parts[i]) {
+          el.appendChild(document.createTextNode(parts[i]))
+        }
+      } else {
+        // 占位符编号 → 插入原始 <code> 元素
+        const idx = parseInt(parts[i], 10) - 1
+        if (idx >= 0 && idx < codeElements.length) {
+          el.appendChild(codeElements[idx])
+          codeIndex++
+        }
+      }
+    }
+  }
+
+  /** 替换元素中第一个非空 textNode */
+  private replaceFirstTextNode(el: HTMLElement, translated: string): void {
     for (const node of el.childNodes) {
       if (node.nodeType === Node.TEXT_NODE && node.textContent?.trim()) {
         node.textContent = translated
         return
       }
     }
-
-    // 策略 2：子元素的 textNode（不改子元素本身）
     for (const child of el.children) {
       const childEl = child as HTMLElement
       for (const node of childEl.childNodes) {
@@ -533,8 +612,6 @@ export class TranslateService {
         }
       }
     }
-
-    // 策略 3：兜底 — 仅当没有任何子元素时才用 textContent
     if (el.children.length === 0) {
       el.textContent = translated
     }
