@@ -260,7 +260,11 @@ function extractElement(el: HTMLElement, id: string): SkeletonElement | null {
   if (text) {
     base.text = text
   } else if (hasIcon) {
-    base.text = '(icon)'
+    // 优先使用 aria-label 或 title 作为语义描述（如"头像"、"搜索"等）
+    const semanticText = el.getAttribute('aria-label') || el.getAttribute('title')
+    // 如果没有，尝试从子元素的 alt 属性获取（如 <img alt="头像">）
+    const altText = !semanticText ? el.querySelector('img')?.getAttribute('alt') : null
+    base.text = semanticText || altText || '(icon)'
   }
 
   return base

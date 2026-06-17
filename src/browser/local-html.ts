@@ -100,7 +100,7 @@ function isClickable(el: HTMLElement): boolean {
 /**
  * 关键词 OR 模糊匹配
  *
- * 任一关键词在 textContent/aria-label/placeholder/title/value 中出现即命中
+ * 任一关键词在 textContent/aria-label/placeholder/title/value/alt 中出现即命中
  */
 function matchesKeywords(el: HTMLElement, keywords: string[]): boolean {
   const text = (el.textContent || '').replace(/\s+/g, ' ').trim()
@@ -108,8 +108,10 @@ function matchesKeywords(el: HTMLElement, keywords: string[]): boolean {
   const placeholder = el.getAttribute('placeholder') || ''
   const titleAttr = el.getAttribute('title') || ''
   const value = (el as HTMLInputElement).value || ''
+  // 检查子元素的 alt 属性（如 <img alt="头像">）
+  const altText = el.querySelector('img')?.getAttribute('alt') || ''
 
-  const sources = [text, ariaLabel, placeholder, titleAttr, value]
+  const sources = [text, ariaLabel, placeholder, titleAttr, value, altText]
 
   return keywords.some(kw => {
     const normalizedKw = kw.replace(/\s+/g, ' ').trim().toLowerCase()

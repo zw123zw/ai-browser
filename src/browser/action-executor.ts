@@ -16,7 +16,7 @@ export class ActionExecutor {
    * 执行单条指令
    */
   async execute(cmd: Command): Promise<ActionResult> {
-    log.info('执行指令', { action: cmd.action, elementId: cmd.elementId, description: cmd.description })
+    log.info('═══ 执行指令开始 ═══', { action: cmd.action, elementId: cmd.elementId, description: cmd.description })
 
     // 不需要元素的操作（keyboard/press 作用于当前焦点元素，tab 操作走 background）
     const needsElement = !['navigate', 'wait', 'scroll', 'keyboard', 'press', 'newTab', 'closeTab', 'switchTab', 'nextTab', 'prevTab'].includes(cmd.action)
@@ -26,32 +26,35 @@ export class ActionExecutor {
       element = this.findElement(cmd)
       if (!element) {
         const msg = `未找到目标元素: ${cmd.description || cmd.elementId || cmd.action}`
-        log.warn(msg)
+        log.error(msg)
         return { success: false, message: msg }
       }
     }
 
     try {
+      let result: ActionResult
       switch (cmd.action) {
-        case 'click':     return await this.executeClick(element!)
-        case 'type':      return await this.executeType(element!, cmd.text || '')
-        case 'clear':     return await this.executeClear(element!)
-        case 'scroll':    return await this.executeScroll(cmd.direction || 'down', cmd.amount)
-        case 'navigate':  return await this.executeNavigate(cmd.url || '')
-        case 'select':    return await this.executeSelect(element!, cmd.text || '')
+        case 'click':     result = await this.executeClick(element!); break
+        case 'type':      result = await this.executeType(element!, cmd.text || ''); break
+        case 'clear':     result = await this.executeClear(element!); break
+        case 'scroll':    result = await this.executeScroll(cmd.direction || 'down', cmd.amount); break
+        case 'navigate':  result = await this.executeNavigate(cmd.url || ''); break
+        case 'select':    result = await this.executeSelect(element!, cmd.text || ''); break
         case 'keyboard':
-        case 'press':     return await this.executeKeyboard(cmd.key || '')
-        case 'focus':     return await this.executeFocus(element!)
-        case 'hover':     return await this.executeHover(element!)
-        case 'wait':      return await this.executeWait(cmd.ms || 1000)
-        case 'newTab':    return await this.executeTabAction('newTab')
-        case 'closeTab':  return await this.executeTabAction('closeTab')
-        case 'switchTab': return await this.executeTabAction('switchTab', cmd.tabQuery || cmd.description)
-        case 'nextTab':   return await this.executeTabAction('switchTab', 'next')
-        case 'prevTab':   return await this.executeTabAction('switchTab', 'prev')
-        case 'video':     return await this.executeVideo(element!, cmd.subAction || '', cmd.value)
-        default:          return { success: false, message: `未知操作类型: ${cmd.action}` }
+        case 'press':     result = await this.executeKeyboard(cmd.key || ''); break
+        case 'focus':     result = await this.executeFocus(element!); break
+        case 'hover':     result = await this.executeHover(element!); break
+        case 'wait':      result = await this.executeWait(cmd.ms || 1000); break
+        case 'newTab':    result = await this.executeTabAction('newTab'); break
+        case 'closeTab':  result = await this.executeTabAction('closeTab'); break
+        case 'switchTab': result = await this.executeTabAction('switchTab', cmd.tabQuery || cmd.description); break
+        case 'nextTab':   result = await this.executeTabAction('switchTab', 'next'); break
+        case 'prevTab':   result = await this.executeTabAction('switchTab', 'prev'); break
+        case 'video':     result = await this.executeVideo(element!, cmd.subAction || '', cmd.value); break
+        default:          result = { success: false, message: `未知操作类型: ${cmd.action}` }
       }
+      log.info('═══ 执行指令完成 ═══', { action: cmd.action, success: result.success, message: result.message })
+      return result
     } catch (error) {
       const msg = `执行异常: ${error instanceof Error ? error.message : String(error)}`
       log.error(msg, error)
@@ -62,12 +65,16 @@ export class ActionExecutor {
   // ========== 三重元素定位 ==========
 
   private findElement(cmd: Command): HTMLElement | null {
+    log.info('findElement 开始', { elementId: cmd.elementId, fallbackSelector: cmd.fallbackSelector, description: cmd.description })
+
     // 第一优先：elementId（骨架中的 id）
     if (cmd.elementId) {
       const el = document.querySelector(`[data-skeleton-id="${cmd.elementId}"]`)
       if (el) {
-        log.debug('通过 elementId 找到元素', { elementId: cmd.elementId })
+        log.info('findElement 通过 elementId 找到元素', { elementId: cmd.elementId, tag: el.tagName, className: (el as HTMLElement).className })
         return el as HTMLElement
+      } else {
+        log.warn('findElement elementId 未找到元素', { elementId: cmd.elementId })
       }
     }
 
@@ -76,11 +83,13 @@ export class ActionExecutor {
       try {
         const el = document.querySelector(cmd.fallbackSelector)
         if (el) {
-          log.debug('通过 fallbackSelector 找到元素', { selector: cmd.fallbackSelector })
+          log.info('findElement 通过 fallbackSelector 找到元素', { selector: cmd.fallbackSelector, tag: el.tagName, className: (el as HTMLElement).className })
           return el as HTMLElement
+        } else {
+          log.warn('findElement fallbackSelector 未找到元素', { selector: cmd.fallbackSelector })
         }
-      } catch {
-        // 无效选择器，跳过
+      } catch (error) {
+        log.warn('findElement fallbackSelector 查询失败', { selector: cmd.fallbackSelector, error })
       }
     }
 
@@ -88,11 +97,14 @@ export class ActionExecutor {
     if (cmd.description) {
       const el = this.findByText(cmd.description)
       if (el) {
-        log.debug('通过文本匹配找到元素', { text: cmd.description })
+        log.info('findElement 通过文本匹配找到元素', { text: cmd.description, tag: el.tagName, className: el.className })
         return el
+      } else {
+        log.warn('findElement 文本匹配未找到元素', { text: cmd.description })
       }
     }
 
+    log.warn('findElement 未找到任何元素')
     return null
   }
 
@@ -132,32 +144,47 @@ export class ActionExecutor {
 
   // ========== 操作执行 ==========
 
-  /** 点击：触发完整鼠标事件序列 */
-  private async executeClick(el: HTMLElement): Promise<ActionResult> {
-    const rect = el.getBoundingClientRect()
-    const x = rect.left + rect.width / 2
-    const y = rect.top + rect.height / 2
-
-    const mouseEventInit: MouseEventInit = {
-      bubbles: true,
-      cancelable: true,
-      clientX: x,
-      clientY: y,
-      button: 0,
+  /** 触发点击事件：优先 el.click()，失败时用 dispatchEvent 兜底 */
+  private triggerClick(el: HTMLElement): void {
+    log.info('triggerClick 开始', { tag: el.tagName, className: el.className, id: el.id })
+    try {
+      log.info('triggerClick 调用 el.click()')
+      el.click()
+      log.info('triggerClick el.click() 执行完成')
+    } catch (error) {
+      log.warn('triggerClick el.click() 失败，使用 dispatchEvent', { error })
+      // click() 失败，用 dispatchEvent 兜底
+      const rect = el.getBoundingClientRect()
+      const eventInit: MouseEventInit = {
+        bubbles: true,
+        cancelable: true,
+        clientX: rect.left + rect.width / 2,
+        clientY: rect.top + rect.height / 2,
+        button: 0,
+      }
+      el.dispatchEvent(new MouseEvent('mousedown', eventInit))
+      el.dispatchEvent(new MouseEvent('mouseup', eventInit))
+      el.dispatchEvent(new MouseEvent('click', eventInit))
+      log.info('triggerClick dispatchEvent 执行完成')
     }
+  }
 
-    el.dispatchEvent(new MouseEvent('mousedown', mouseEventInit))
-    el.dispatchEvent(new MouseEvent('mouseup', mouseEventInit))
+  /** 点击：区分真实链接 vs JS 交互型链接 */
+  private async executeClick(el: HTMLElement): Promise<ActionResult> {
+    log.info('executeClick 开始', { tag: el.tagName, className: el.className, id: el.id })
 
     // <a> 标签：区分真实链接 vs JS 交互型链接
     if (el instanceof HTMLAnchorElement) {
       const href = el.getAttribute('href') || ''
+      log.info('executeClick <a> 标签', { href })
       if (!href || href === '#' || href.startsWith('javascript:')) {
-        // javascript: / # / 空 href → 依赖 JS 事件处理器，触发 click 事件
-        el.dispatchEvent(new MouseEvent('click', mouseEventInit))
+        // javascript: / # / 空 href → 依赖 JS 事件处理器
+        log.info('executeClick 调用 triggerClick（交互型链接）')
+        this.triggerClick(el)
       } else if (el.href) {
         // 真实 URL → 根据 target 判断是否新开页面
         const target = el.target || '_self'  // 默认当前页面
+        log.info('executeClick 真实 URL 跳转', { href: el.href, target })
         if (target === '_self') {
           window.location.href = el.href  // 当前页面跳转
         } else {
@@ -166,9 +193,11 @@ export class ActionExecutor {
         }
       }
     } else {
-      el.dispatchEvent(new MouseEvent('click', mouseEventInit))
+      log.info('executeClick 非 <a> 标签，调用 triggerClick', { tag: el.tagName })
+      this.triggerClick(el)
     }
 
+    log.info('executeClick 完成')
     return { success: true, message: '点击成功' }
   }
 
