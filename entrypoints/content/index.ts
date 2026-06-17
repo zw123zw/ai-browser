@@ -164,27 +164,31 @@ export default defineContentScript({
     window.addEventListener('popstate', () => onUrlChange('popstate'))
     window.addEventListener('hashchange', () => onUrlChange('hashchange'))
 
-    // MutationObserver 兜底：监听 body 子节点大面积变化（SPA 内容切换）
-    let domChangeTimer: ReturnType<typeof setTimeout> | null = null
-    let lastChildCount = document.body.childElementCount
+    // MutationObserver 监听 DOM 变化：新增节点 / 文本修改 → 自动翻译
+    // 覆盖 hash 路由、Tab 切换、弹窗、接口返回新文本等所有动态场景
+    let domTranslateTimer: ReturnType<typeof setTimeout> | null = null
 
-    const domObserver = new MutationObserver(() => {
-      const newCount = document.body.childElementCount
-      // 子节点数量变化超过 30% 视为页面内容切换
-      if (Math.abs(newCount - lastChildCount) > lastChildCount * 0.3) {
-        lastChildCount = newCount
-        if (domChangeTimer) clearTimeout(domChangeTimer)
-        domChangeTimer = setTimeout(async () => {
-          const settings = await getTranslateSettings()
-          if (!settings?.autoTranslate) return
-          log.info('[自动翻译] DOM 大变化，重新翻译', { childCount: newCount })
-          translateService.reset()
-          await runAutoTranslate()
-        }, 1000)
-      }
+    const domObserver = new MutationObserver((mutations) => {
+      // 过滤：仅关注子节点新增或文本内容变化，忽略纯属性修改
+      const hasTextChange = mutations.some(m =>
+        m.addedNodes.length > 0 || m.type === 'characterData'
+      )
+      if (!hasTextChange) return
+
+      if (domTranslateTimer) clearTimeout(domTranslateTimer)
+      domTranslateTimer = setTimeout(async () => {
+        const settings = await getTranslateSettings()
+        if (!settings?.autoTranslate) return
+        log.info('[自动翻译] DOM 变化，扫描新文本')
+        await runAutoTranslate()
+      }, 200)
     })
 
-    domObserver.observe(document.body, { childList: true, subtree: false })
+    domObserver.observe(document.body, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+    })
 
     // ═══════════════════════════════════════════════════════════════
     // Vue 应用挂载
