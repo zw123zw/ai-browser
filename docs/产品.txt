@@ -1,0 +1,728 @@
+好的，以下是纯前端设计稿查看器的详细方案：
+
+完整技术方案
+一、整体架构
+┌─────────────────────────────────────────────┐
+│                   UI 层                      │
+│   工具栏 │ 侧边栏 │ 画布区 │ 属性面板      │
+├─────────────────────────────────────────────┤
+│                 状态管理层                    │
+│         Zustand / Pinia (Vue)               │
+├─────────────────────────────────────────────┤
+│                 渲染引擎层                    │
+│    Fabric.js / Konva.js / 自研Canvas        │
+├─────────────────────────────────────────────┤
+│                 文件解析层                    │
+│      sketch-parser │ psd.js │ Figma JSON    │
+└─────────────────────────────────────────────┘
+二、文件解析模块
+1. Sketch 文件解析（.sketch 是 zip 格式）
+// 使用 sketch.js 或 jszip 自行解析
+import JSZip from 'jszip'
+
+async function parseSketchFile(file: File) {
+  const zip = await JSZip.loadAsync(file)
+  
+  // Sketch 文件结构
+  const meta = JSON.parse(await zip.file('meta.json').async('text'))
+  const document = JSON.parse(await zip.file('document.json').async('text'))
+  const pages = []
+  
+  // 读取所有页面
+  for (const [name, data] of Object.entries(document.layers)) {
+    const pageContent = JSON.parse(await zip.file(`pages/${name}.json`).async('text'))
+    pages.push(pageContent)
+  }
+  
+  // 提取图片资源
+  const images = {}
+  const imagesFolder = zip.folder('images')
+  for (const [key, file] of Object.entries(imagesFolder.files)) {
+    images[key] = await file.async('blob')
+  }
+  
+  return { meta, pages, images }
+}
+2. Sketch 图层数据结构
+interface SketchLayer {
+  _class: string           // 'rectangle' | 'text' | 'group' | 'symbolInstance'...
+  name: string
+  rect: { x: number; y: number; width: number; height: number }
+  style?: {
+    fills: SketchFill[]
+    borders: SketchBorder[]
+    shadows: SketchShadow[]
+  }
+  layers?: SketchLayer[]   // 子图层（组/符号）
+}
+三、Canvas 渲染引擎
+使用 Fabric.js 实现
+import { fabric } from 'fabric'
+
+class DesignRenderer {
+  private canvas: fabric.Canvas
+  private layers: fabric.Object[] = []
+  
+  constructor(canvasElement: HTMLCanvasElement) {
+    this.canvas = new fabric.Canvas(canvasElement, {
+      selection: false,
+      renderOnAddRemove: false  // 批量渲染提升性能
+    })
+  }
+  
+  // 渲染整个设计稿
+  async renderDocument(doc: SketchDocument) {
+    this.canvas.clear()
+    
+    for (const page of doc.pages) {
+      await this.renderLayer(page)
+    }
+    
+    this.canvas.renderAll()
+  }
+  
+  // 递归渲染图层
+  async renderLayer(layer: SketchLayer) {
+    switch (layer._class) {
+      case 'rectangle':
+        return this.renderRect(layer)
+      case 'text':
+        return this.renderText(layer)
+      case 'group':
+      case 'symbolMaster':
+        return this.renderGroup(layer)
+      case 'bitmap':
+        return this.renderImage(layer)
+      default:
+        console.warn(`Unsupported layer type: ${layer._class}`)
+    }
+  }
+  
+  // 渲染矩形
+  private renderRect(layer: SketchLayer): fabric.Rect {
+    const rect = new fabric.Rect({
+      left: layer.rect.x,
+      top: layer.rect.y,
+      width: layer.rect.width,
+      height: layer.rect.height,
+      fill: layer.style?.fills?.[0]?.color || '#ccc',
+      selectable: false
+    })
+    this.canvas.add(rect)
+    return rect
+  }
+  
+  // 渲染文字
+  private renderText(layer: SketchLayer): fabric.Text {
+    const text = new fabric.Text(layer.attributedString?.string || '', {
+      left: layer.rect.x,
+      top: layer.rect.y,
+      fontSize: layer.style?.fontSize || 14,
+      fill: layer.style?.fontColor || '#000',
+      fontFamily: layer.style?.fontFamily || 'Arial'
+    })
+    this.canvas.add(text)
+    return text
+  }
+  
+  // 渲染图片
+  private async renderImage(layer: SketchLayer): Promise<fabric.Image> {
+    const imgData = this.getImageData(layer.imageRef)
+    const img = await fabric.util.loadImage(URL.createObjectURL(imgData))
+    
+    const fabricImg = new fabric.Image(img, {
+      left: layer.rect.x,
+      top: layer.rect.y,
+      scaleX: layer.rect.width / img.width,
+      scaleY: layer.rect.height / img.height
+    })
+    this.canvas.add(fabricImg)
+    return fabricImg
+  }
+}
+四、核心交互功能
+1. 缩放和平移
+class CanvasInteraction {
+  private canvas: fabric.Canvas
+  private scale: number = 1
+  private isDragging: boolean = false
+  private lastX: number = 0
+  private lastY: number = 0
+  
+  constructor(canvas: fabric.Canvas) {
+    this.canvas = canvas
+    this.initWheelZoom()
+    this.initDragPan()
+  }
+  
+  // 滚轮缩放
+  private initWheelZoom() {
+    this.canvas.on('mouse:wheel', (opt) => {
+      const delta = opt.e.deltaY
+      let zoom = this.canvas.getZoom()
+      zoom *= 0.999 ** delta
+      
+      // 限制缩放范围
+      zoom = Math.min(Math.max(0.1, zoom), 10)
+      
+      this.canvas.zoomToPoint({ x: opt.e.offsetX, y: opt.e.offsetY }, zoom)
+      this.scale = zoom
+      
+      opt.e.preventDefault()
+      opt.e.stopPropagation()
+    })
+  }
+  
+  // 拖拽平移
+  private initDragPan() {
+    this.canvas.on('mouse:down', (opt) => {
+      if (opt.e.button === 1 || opt.e.altKey) {  // 中键或Alt+左键
+        this.isDragging = true
+        this.lastX = opt.e.clientX
+        this.lastY = opt.e.clientY
+        this.canvas.selection = false
+      }
+    })
+    
+    this.canvas.on('mouse:move', (opt) => {
+      if (this.isDragging) {
+        const vpt = this.canvas.viewportTransform
+        vpt[4] += opt.e.clientX - this.lastX
+        vpt[5] += opt.e.clientY - this.lastY
+        this.canvas.requestRenderAll()
+        this.lastX = opt.e.clientX
+        this.lastY = opt.e.clientY
+      }
+    })
+    
+    this.canvas.on('mouse:up', () => {
+      this.isDragging = false
+      this.canvas.selection = true
+    })
+  }
+}
+2. 标注功能（点击元素显示尺寸）
+class AnnotationTool {
+  private canvas: fabric.Canvas
+  private annotationGroup: fabric.Group | null = null
+  
+  constructor(canvas: fabric.Canvas) {
+    this.canvas = canvas
+    this.initClickAnnotation()
+  }
+  
+  private initClickAnnotation() {
+    this.canvas.on('mouse:down', (opt) => {
+      if (opt.target) {
+        this.showAnnotation(opt.target)
+      } else {
+        this.hideAnnotation()
+      }
+    })
+  }
+  
+  private showAnnotation(target: fabric.Object) {
+    this.hideAnnotation()
+    
+    const bounds = target.getBoundingRect()
+    const lines: fabric.Line[] = []
+    const texts: fabric.Text[] = []
+    
+    // 宽度标注线
+    const widthLine = new fabric.Line(
+      [bounds.left, bounds.top + bounds.height + 20, 
+       bounds.left + bounds.width, bounds.top + bounds.height + 20],
+      { stroke: '#ff4757', strokeWidth: 1 }
+    )
+    const widthText = new fabric.Text(`${Math.round(bounds.width)}`, {
+      left: bounds.left + bounds.width / 2,
+      top: bounds.top + bounds.height + 25,
+      fontSize: 12,
+      fill: '#ff4757',
+      originX: 'center'
+    })
+    
+    // 高度标注线
+    const heightLine = new fabric.Line(
+      [bounds.left + bounds.width + 20, bounds.top,
+       bounds.left + bounds.width + 20, bounds.top + bounds.height],
+      { stroke: '#2ed573', strokeWidth: 1 }
+    )
+    const heightText = new fabric.Text(`${Math.round(bounds.height)}`, {
+      left: bounds.left + bounds.width + 25,
+      top: bounds.top + bounds.height / 2,
+      fontSize: 12,
+      fill: '#2ed573',
+      originY: 'center',
+      angle: 90
+    })
+    
+    this.annotationGroup = new fabric.Group(
+      [widthLine, widthText, heightLine, heightText],
+      { selectable: false, evented: false }
+    )
+    this.canvas.add(this.annotationGroup)
+    this.canvas.renderAll()
+  }
+  
+  private hideAnnotation() {
+    if (this.annotationGroup) {
+      this.canvas.remove(this.annotationGroup)
+      this.annotationGroup = null
+    }
+  }
+}
+五、UI 组件结构
+src/
+├── components/
+│   ├── Toolbar/           # 工具栏（缩放、适配、图层列表）
+│   ├── Sidebar/           # 侧边栏（图层树、页面列表）
+│   ├── Canvas/            # 画布区域
+│   ├── PropertyPanel/     # 属性面板（颜色、字体、间距）
+│   └── ExportDialog/      # 导出切图弹窗
+│
+├── core/
+│   ├── parser/            # 文件解析器
+│   ├── renderer/          # Canvas 渲染
+│   ├── interaction/       # 交互处理
+│   └── annotation/        # 标注系统
+│
+├── stores/                # 状态管理
+│   ├── useFileStore.ts
+│   ├── useCanvasStore.ts
+│   └── useToolStore.ts
+│
+└── utils/
+    ├── color.ts           # 颜色转换
+    ├── font.ts            # 字体处理
+    └── export.ts          # 切图导出
+六、导出切图功能
+async function exportSlice(layer: fabric.Object, format: 'png' | 'svg' = 'png') {
+  if (format === 'png') {
+    const dataURL = layer.toDataURL({
+      format: 'png',
+      multiplier: 2  // 2x 导出
+    })
+    
+    // 触发下载
+    const link = document.createElement('a')
+    link.download = `${layer.name || 'slice'}.png`
+    link.href = dataURL
+    link.click()
+  }
+  
+  if (format === 'svg') {
+    const svg = layer.toSVG()
+    const blob = new Blob([svg], { type: 'image/svg+xml' })
+    const url = URL.createObjectURL(blob)
+    
+    const link = document.createElement('a')
+    link.download = `${layer.name || 'slice'}.svg`
+    link.href = url
+    link.click()
+    URL.revokeObjectURL(url)
+  }
+}
+七、推荐技术栈
+模块	推荐方案
+框架	Vue 3 + TypeScript 或 React
+状态管理	Zustand (React) / Pinia (Vue)
+Canvas 库	Fabric.js（功能全）或 Konva.js（轻量）
+Sketch 解析	sketch-parser 或自研
+PSD 解析	psd.js
+UI 组件	Ant Design / Element Plus
+构建工具	Vite
+八、简化版 MVP 优先级
+Phase 1: 文件上传 + Sketch 解析 + Canvas 渲染
+Phase 2: 缩放平移 + 图层点击选中
+Phase 3: 尺寸标注 + 颜色/字体提取
+Phase 4: 切图导出 + 图层树
+需要我详细展开某个模块吗？比如完整的 Sketch 解析器实现，或者更复杂的渲染优化方案。好的，以下是纯前端设计稿查看器的详细方案：
+
+完整技术方案
+一、整体架构
+┌─────────────────────────────────────────────┐
+│                   UI 层                      │
+│   工具栏 │ 侧边栏 │ 画布区 │ 属性面板      │
+├─────────────────────────────────────────────┤
+│                 状态管理层                    │
+│         Zustand / Pinia (Vue)               │
+├─────────────────────────────────────────────┤
+│                 渲染引擎层                    │
+│    Fabric.js / Konva.js / 自研Canvas        │
+├─────────────────────────────────────────────┤
+│                 文件解析层                    │
+│      sketch-parser │ psd.js │ Figma JSON    │
+└─────────────────────────────────────────────┘
+二、文件解析模块
+1. Sketch 文件解析（.sketch 是 zip 格式）
+// 使用 sketch.js 或 jszip 自行解析
+import JSZip from 'jszip'
+
+async function parseSketchFile(file: File) {
+  const zip = await JSZip.loadAsync(file)
+  
+  // Sketch 文件结构
+  const meta = JSON.parse(await zip.file('meta.json').async('text'))
+  const document = JSON.parse(await zip.file('document.json').async('text'))
+  const pages = []
+  
+  // 读取所有页面
+  for (const [name, data] of Object.entries(document.layers)) {
+    const pageContent = JSON.parse(await zip.file(`pages/${name}.json`).async('text'))
+    pages.push(pageContent)
+  }
+  
+  // 提取图片资源
+  const images = {}
+  const imagesFolder = zip.folder('images')
+  for (const [key, file] of Object.entries(imagesFolder.files)) {
+    images[key] = await file.async('blob')
+  }
+  
+  return { meta, pages, images }
+}
+2. Sketch 图层数据结构
+interface SketchLayer {
+  _class: string           // 'rectangle' | 'text' | 'group' | 'symbolInstance'...
+  name: string
+  rect: { x: number; y: number; width: number; height: number }
+  style?: {
+    fills: SketchFill[]
+    borders: SketchBorder[]
+    shadows: SketchShadow[]
+  }
+  layers?: SketchLayer[]   // 子图层（组/符号）
+}
+三、Canvas 渲染引擎
+使用 Fabric.js 实现
+import { fabric } from 'fabric'
+
+class DesignRenderer {
+  private canvas: fabric.Canvas
+  private layers: fabric.Object[] = []
+  
+  constructor(canvasElement: HTMLCanvasElement) {
+    this.canvas = new fabric.Canvas(canvasElement, {
+      selection: false,
+      renderOnAddRemove: false  // 批量渲染提升性能
+    })
+  }
+  
+  // 渲染整个设计稿
+  async renderDocument(doc: SketchDocument) {
+    this.canvas.clear()
+    
+    for (const page of doc.pages) {
+      await this.renderLayer(page)
+    }
+    
+    this.canvas.renderAll()
+  }
+  
+  // 递归渲染图层
+  async renderLayer(layer: SketchLayer) {
+    switch (layer._class) {
+      case 'rectangle':
+        return this.renderRect(layer)
+      case 'text':
+        return this.renderText(layer)
+      case 'group':
+      case 'symbolMaster':
+        return this.renderGroup(layer)
+      case 'bitmap':
+        return this.renderImage(layer)
+      default:
+        console.warn(`Unsupported layer type: ${layer._class}`)
+    }
+  }
+  
+  // 渲染矩形
+  private renderRect(layer: SketchLayer): fabric.Rect {
+    const rect = new fabric.Rect({
+      left: layer.rect.x,
+      top: layer.rect.y,
+      width: layer.rect.width,
+      height: layer.rect.height,
+      fill: layer.style?.fills?.[0]?.color || '#ccc',
+      selectable: false
+    })
+    this.canvas.add(rect)
+    return rect
+  }
+  
+  // 渲染文字
+  private renderText(layer: SketchLayer): fabric.Text {
+    const text = new fabric.Text(layer.attributedString?.string || '', {
+      left: layer.rect.x,
+      top: layer.rect.y,
+      fontSize: layer.style?.fontSize || 14,
+      fill: layer.style?.fontColor || '#000',
+      fontFamily: layer.style?.fontFamily || 'Arial'
+    })
+    this.canvas.add(text)
+    return text
+  }
+  
+  // 渲染图片
+  private async renderImage(layer: SketchLayer): Promise<fabric.Image> {
+    const imgData = this.getImageData(layer.imageRef)
+    const img = await fabric.util.loadImage(URL.createObjectURL(imgData))
+    
+    const fabricImg = new fabric.Image(img, {
+      left: layer.rect.x,
+      top: layer.rect.y,
+      scaleX: layer.rect.width / img.width,
+      scaleY: layer.rect.height / img.height
+    })
+    this.canvas.add(fabricImg)
+    return fabricImg
+  }
+}
+四、核心交互功能
+1. 缩放和平移
+class CanvasInteraction {
+  private canvas: fabric.Canvas
+  private scale: number = 1
+  private isDragging: boolean = false
+  private lastX: number = 0
+  private lastY: number = 0
+  
+  constructor(canvas: fabric.Canvas) {
+    this.canvas = canvas
+    this.initWheelZoom()
+    this.initDragPan()
+  }
+  
+  // 滚轮缩放
+  private initWheelZoom() {
+    this.canvas.on('mouse:wheel', (opt) => {
+      const delta = opt.e.deltaY
+      let zoom = this.canvas.getZoom()
+      zoom *= 0.999 ** delta
+      
+      // 限制缩放范围
+      zoom = Math.min(Math.max(0.1, zoom), 10)
+      
+      this.canvas.zoomToPoint({ x: opt.e.offsetX, y: opt.e.offsetY }, zoom)
+      this.scale = zoom
+      
+      opt.e.preventDefault()
+      opt.e.stopPropagation()
+    })
+  }
+  
+  // 拖拽平移
+  private initDragPan() {
+    this.canvas.on('mouse:down', (opt) => {
+      if (opt.e.button === 1 || opt.e.altKey) {  // 中键或Alt+左键
+        this.isDragging = true
+        this.lastX = opt.e.clientX
+        this.lastY = opt.e.clientY
+        this.canvas.selection = false
+      }
+    })
+    
+    this.canvas.on('mouse:move', (opt) => {
+      if (this.isDragging) {
+        const vpt = this.canvas.viewportTransform
+        vpt[4] += opt.e.clientX - this.lastX
+        vpt[5] += opt.e.clientY - this.lastY
+        this.canvas.requestRenderAll()
+        this.lastX = opt.e.clientX
+        this.lastY = opt.e.clientY
+      }
+    })
+    
+    this.canvas.on('mouse:up', () => {
+      this.isDragging = false
+      this.canvas.selection = true
+    })
+  }
+}
+2. 标注功能（点击元素显示尺寸）
+class AnnotationTool {
+  private canvas: fabric.Canvas
+  private annotationGroup: fabric.Group | null = null
+  
+  constructor(canvas: fabric.Canvas) {
+    this.canvas = canvas
+    this.initClickAnnotation()
+  }
+  
+  private initClickAnnotation() {
+    this.canvas.on('mouse:down', (opt) => {
+      if (opt.target) {
+        this.showAnnotation(opt.target)
+      } else {
+        this.hideAnnotation()
+      }
+    })
+  }
+  
+  private showAnnotation(target: fabric.Object) {
+    this.hideAnnotation()
+    
+    const bounds = target.getBoundingRect()
+    const lines: fabric.Line[] = []
+    const texts: fabric.Text[] = []
+    
+    // 宽度标注线
+    const widthLine = new fabric.Line(
+      [bounds.left, bounds.top + bounds.height + 20, 
+       bounds.left + bounds.width, bounds.top + bounds.height + 20],
+      { stroke: '#ff4757', strokeWidth: 1 }
+    )
+    const widthText = new fabric.Text(`${Math.round(bounds.width)}`, {
+      left: bounds.left + bounds.width / 2,
+      top: bounds.top + bounds.height + 25,
+      fontSize: 12,
+      fill: '#ff4757',
+      originX: 'center'
+    })
+    
+    // 高度标注线
+    const heightLine = new fabric.Line(
+      [bounds.left + bounds.width + 20, bounds.top,
+       bounds.left + bounds.width + 20, bounds.top + bounds.height],
+      { stroke: '#2ed573', strokeWidth: 1 }
+    )
+    const heightText = new fabric.Text(`${Math.round(bounds.height)}`, {
+      left: bounds.left + bounds.width + 25,
+      top: bounds.top + bounds.height / 2,
+      fontSize: 12,
+      fill: '#2ed573',
+      originY: 'center',
+      angle: 90
+    })
+    
+    this.annotationGroup = new fabric.Group(
+      [widthLine, widthText, heightLine, heightText],
+      { selectable: false, evented: false }
+    )
+    this.canvas.add(this.annotationGroup)
+    this.canvas.renderAll()
+  }
+  
+  private hideAnnotation() {
+    if (this.annotationGroup) {
+      this.canvas.remove(this.annotationGroup)
+      this.annotationGroup = null
+    }
+  }
+}
+五、UI 组件结构
+src/
+├── components/
+│   ├── Toolbar/           # 工具栏（缩放、适配、图层列表）
+│   ├── Sidebar/           # 侧边栏（图层树、页面列表）
+│   ├── Canvas/            # 画布区域
+│   ├── PropertyPanel/     # 属性面板（颜色、字体、间距）
+│   └── ExportDialog/      # 导出切图弹窗
+│
+├── core/
+│   ├── parser/            # 文件解析器
+│   ├── renderer/          # Canvas 渲染
+│   ├── interaction/       # 交互处理
+│   └── annotation/        # 标注系统
+│
+├── stores/                # 状态管理
+│   ├── useFileStore.ts
+│   ├── useCanvasStore.ts
+│   └── useToolStore.ts
+│
+└── utils/
+    ├── color.ts           # 颜色转换
+    ├── font.ts            # 字体处理
+    └── export.ts          # 切图导出
+六、导出切图功能
+async function exportSlice(layer: fabric.Object, format: 'png' | 'svg' = 'png') {
+  if (format === 'png') {
+    const dataURL = layer.toDataURL({
+      format: 'png',
+      multiplier: 2  // 2x 导出
+    })
+    
+    // 触发下载
+    const link = document.createElement('a')
+    link.download = `${layer.name || 'slice'}.png`
+    link.href = dataURL
+    link.click()
+  }
+  
+  if (format === 'svg') {
+    const svg = layer.toSVG()
+    const blob = new Blob([svg], { type: 'image/svg+xml' })
+    const url = URL.createObjectURL(blob)
+    
+    const link = document.createElement('a')
+    link.download = `${layer.name || 'slice'}.svg`
+    link.href = url
+    link.click()
+    URL.revokeObjectURL(url)
+  }
+}
+七、推荐技术栈
+模块	推荐方案
+框架	Vue 3 + TypeScript 或 React
+状态管理	Zustand (React) / Pinia (Vue)
+Canvas 库	Fabric.js（功能全）或 Konva.js（轻量）
+Sketch 解析	sketch-parser 或自研
+PSD 解析	psd.js
+UI 组件	Ant Design / Element Plus
+构建工具	Vite
+八、简化版 MVP 优先级
+Phase 1: 文件上传 + Sketch 解析 + Canvas 渲染
+Phase 2: 缩放平移 + 图层点击选中
+Phase 3: 尺寸标注 + 颜色/字体提取
+Phase 4: 切图导出 + 图层树
+需要我详细展开某个模块吗？比如完整的 Sketch 解析器实现，或者更复杂的渲染优化方案。
+
+
+
+
+
+
+
+
+✅ 1. ChromePilot（最稳、中文、全能，强推）功能：语音控制标签 / 切换 / 关闭、点击、填表、总结、AI 聊天，完全本机控制。
+商店直达（复制到地址栏）：
+plaintexthttps://chromewebstore.google.com/detail/chromepilot-ai-browser-agent/hdcehjaodheipickeopncehaikamghjk
+
+
+官网：https://chromepilot.org/
+中文指令例子：
+
+“切换到 B 站标签”
+“关闭当前标签”
+“打开新标签页”
+“滚动到页面底部”
+
+
+✅ 2. Do Browser（自然语言控制标签，国内好搜）功能：纯自然语言 / 语音控制浏览器，标签管理、点击、导航。
+商店直达：
+plaintexthttps://chromewebstore.google.com/detail/do-browser/hjcibkpfgnljonndnnanhkholafmgmip
+
+
+特点：Ctrl+K 一键呼出，中文识别强。
+✅ 3. LipSurf（老牌、纯语音、标签控制最成熟）功能：无 AI 也能语音切标签、关标签、滚动、播放暂停，简单稳定。
+商店直达：
+plaintexthttps://chromewebstore.google.com/detail/lipsurf/mipakcajhhkofmbmakkhknelgjckbip
+
+
+中文指令：
+
+“next tab”（下一个标签）
+“close tab”（关闭标签）
+“scroll down”（向下滚动）
+
+
+✅ 4. VoxSight（Gemini 视觉，精准点击任意页面）功能：语音 + 截屏 + AI 视觉分析→精准点击 / 输入 / 切标签，不用适配网站。
+商店直达：
+plaintexthttps://chromewebstore.google.com/detail/voxsight/dfepmfcgbaceajaapbbakoikpfebeiic
+
+
+中文指令：“点击搜索框”“切换到微信标签”。
+✅ 5. Voice Everything（简单直接，标签 + 语音输入）功能：语音切标签、打字、搜索、AI 聊天，轻量好用。
+商店搜索：Voice Everything
+指令：“find 淘宝”（切到淘宝标签）、“open 知乎”。
