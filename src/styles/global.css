@@ -1322,9 +1322,38 @@ table {
   background: var(--zwf-primary-soft);
   border-radius: 0 8px 8px 0;
 }
+.zwf-msg-text .zwf-table-wrapper {
+  position: relative;
+  margin: var(--zwf-md-gap) 0;
+}
+.zwf-msg-text .zwf-table-download-btn {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--zwf-border);
+  border-radius: 6px;
+  background: var(--zwf-bg-soft);
+  cursor: pointer;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.15s;
+  z-index: 1;
+  padding: 0;
+}
+.zwf-msg-text .zwf-table-wrapper:hover .zwf-table-download-btn {
+  opacity: 1;
+}
+.zwf-msg-text .zwf-table-download-btn:hover {
+  background: var(--zwf-primary-soft);
+  border-color: var(--zwf-primary);
+}
 .zwf-msg-text table {
   border-collapse: collapse;
-  margin: var(--zwf-md-gap) 0;
   width: 100%;
   font-size: 13px;
 }
@@ -1959,6 +1988,24 @@ table {
 .zwf-file-modal-meta {
   color: var(--zwf-text-faint);
   font-size: 12px;
+}
+.zwf-file-modal-download {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: var(--zwf-text-soft);
+  cursor: pointer;
+  border-radius: 10px;
+  transition: background 0.15s ease, color 0.15s ease;
+  flex-shrink: 0;
+}
+.zwf-file-modal-download:hover {
+  color: var(--zwf-text);
+  background: var(--zwf-bg-hover);
 }
 .zwf-file-modal-close {
   width: 36px;

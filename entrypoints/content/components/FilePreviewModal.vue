@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted } from 'vue';
 import type { Attachment } from '@/src/types';
-import { getFileTypeIcon, formatFileSize } from '@/src/utils/file-type';
+import { getFileTypeIcon, formatFileSize, getExtension } from '@/src/utils/file-type';
 import { renderMarkdown } from '@/src/utils/markdown';
+import { getOriginalFile } from '@/src/utils/file-parsers';
 import hljs from 'highlight.js';
 
 const props = defineProps<{ attachment: Attachment }>();
@@ -10,8 +11,7 @@ const emit = defineEmits<{ (e: 'close'): void }>();
 
 const isTextPreview = computed(() =>
   ['text', 'code', 'pdf', 'word', 'excel'].includes(props.attachment.type) &&
-  props.attachment.content &&
-  !props.attachment.content.startsWith('[')
+  props.attachment.content
 );
 
 const highlightedContent = computed(() => {
@@ -45,18 +45,14 @@ const isImagePreview = computed(() =>
 
 const errorMessage = computed(() => {
   const content = props.attachment.content;
-  if (content && content.startsWith('[') && content.endsWith(']')) {
-    return content.slice(1, -1);
+  if (!content || !content.startsWith('[') || !content.endsWith(']')) return null;
+  // 只匹配文件解析器的错误标记，不匹配日志内容如 [2026-06-18 xxx]
+  const inner = content.slice(1, -1);
+  if (/解析失败|无可提取|无数据|不支持预览/.test(inner)) {
+    return inner;
   }
   return null;
 });
-
-function onMaskClick(e: MouseEvent) {
-  // 点击遮罩层关闭（只有点击 mask 本身才触发）
-  if (e.target === e.currentTarget) {
-    emit('close');
-  }
-}
 
 function onKeydown(e: KeyboardEvent) {
   if (e.key === 'Escape') {
@@ -72,6 +68,40 @@ onUnmounted(() => document.removeEventListener('keydown', onKeydown, true));
 function escapeHtml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
+
+/** 下载文件：优先原始文件，否则用 content 生成 */
+function downloadFile() {
+  const { attachment } = props;
+
+  // 优先：从内存缓存获取原始 File（当前会话有效）
+  const file = getOriginalFile(attachment);
+  if (file) {
+    const url = URL.createObjectURL(file);
+    triggerDownload(url, file.name);
+    return;
+  }
+
+  // 兜底：用 content 生成文件下载
+  const content = attachment.content;
+  if (!content || content.startsWith('[')) return;
+
+  const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  // 文本/代码保持原扩展名，其他类型用 .txt
+  const ext = getExtension(attachment.name);
+  const name = ['text', 'code'].includes(attachment.type) && ext
+    ? attachment.name
+    : attachment.name.replace(/\.[^.]+$/, '') + '.txt';
+  triggerDownload(url, name);
+}
+
+function triggerDownload(url: string, name: string) {
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name;
+  a.click();
+  URL.revokeObjectURL(url);
+}
 </script>
 
 <template>
@@ -85,6 +115,14 @@ function escapeHtml(s: string): string {
             <span class="zwf-file-modal-meta">{{ formatFileSize(attachment.size) }}</span>
           </div>
         </div>
+        <button class="zwf-file-modal-download" @click="downloadFile" title="下载原始文件">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+            <polyline points="7 10 12 15 17 10" />
+            <line x1="12" y1="15" x2="12" y2="3" />
+          </svg>
+        </button>
         <button class="zwf-file-modal-close" @click="emit('close')" title="关闭 (Esc)">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">

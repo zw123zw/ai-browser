@@ -51,10 +51,47 @@ function onContextMenu(e: MouseEvent) {
   e.stopPropagation();
   emit('context-menu', { message: props.message, x: e.clientX, y: e.clientY });
 }
+
+/** 下载表格为 Excel */
+async function onTableDownload(e: MouseEvent) {
+  const btn = (e.target as HTMLElement).closest('.zwf-table-download-btn');
+  if (!btn) return;
+  e.preventDefault();
+  e.stopPropagation();
+
+  const wrapper = btn.closest('.zwf-table-wrapper');
+  const table = wrapper?.querySelector('table');
+  if (!table) return;
+
+  // 从 DOM 提取表格数据
+  const rows: string[][] = [];
+  for (const tr of table.querySelectorAll('tr')) {
+    const cells: string[] = [];
+    for (const cell of tr.querySelectorAll('th, td')) {
+      cells.push(cell.textContent?.trim() ?? '');
+    }
+    rows.push(cells);
+  }
+
+  if (!rows.length) return;
+
+  const XLSX = await import('xlsx');
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
+  const data = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+  const blob = new Blob([data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'table.xlsx';
+  a.click();
+  URL.revokeObjectURL(url);
+}
 </script>
 
 <template>
-  <div :class="['zwf-msg-row', isUser ? 'zwf-row-user' : 'zwf-row-ai']">
+  <div :class="['zwf-msg-row', isUser ? 'zwf-row-user' : 'zwf-row-ai']" @click="onTableDownload">
     <div
       :class="['zwf-msg', isUser ? 'zwf-bubble-user' : 'zwf-bubble-ai']"
       @contextmenu="onContextMenu"

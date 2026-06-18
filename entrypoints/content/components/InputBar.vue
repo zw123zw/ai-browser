@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { fileToDataURL } from '@/src/utils/file';
-import { parseFile, ocrAttachment } from '@/src/utils/file-parsers';
+import { parseFile, ocrAttachment, removeFromFileCache } from '@/src/utils/file-parsers';
 import { getFileTypeIcon, formatFileSize } from '@/src/utils/file-type';
 import { useToast } from '@/src/composables/useToast';
 import { Logger } from '@/src/utils/logger';
@@ -117,7 +117,8 @@ function startOcr(attachment: Attachment) {
 
 /** 统一文件处理：解析 → 添加附件 → 异步 OCR */
 async function addFiles(files: File[]) {
-  const newAttachments = [...attachments.value];
+  // 上传新文件时，清除旧的非图片附件（用户期望新文件替换旧文件）
+  const newAttachments = attachments.value.filter(a => a.type === 'image');
   const ocrTargets: Attachment[] = [];
   let truncationCount = 0;
 
@@ -284,6 +285,8 @@ function toFetchableUrl(text: string | undefined | null): string | null {
 }
 
 function removeAttachment(i: number) {
+  const att = attachments.value[i];
+  if (att) removeFromFileCache(att.id);
   const next = [...attachments.value];
   next.splice(i, 1);
   setDraftAttachments(next);

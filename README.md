@@ -1,139 +1,314 @@
-# AI 语音浏览器助手
+# AI 浏览器助手 — 总体架构
 
-支持语音控制 + 网页自动化 + 多模型切换的 AI 浏览器助手。
+## 项目概述
 
-## ✨ 核心特性
+AI 浏览器助手是一个 Chrome 浏览器扩展（Manifest V3），支持语音控制、网页自动化、多模型切换和翻译功能。基于 WXT + Vue 3 + TypeScript 构建。
 
-- 🎤 **纯语音交互**：AI 驱动的语音会话，支持连续对话、多指令批量执行
-- 🤖 **多模型切换**：OpenAI 兼容 / 通义千问 / 文心一言，流式输出
-- 🌐 **网页自动化**：打开网站、全网搜索、站内搜索、点击结果、翻页、视频控制
-- 🔥 **热更新开发**：基于 WXT 框架，`npm run dev` 即时预览
-- 📦 **一键打包**：`npm run build` 生成可安装的浏览器扩展
-- 🛡️ **Shadow DOM 隔离**：UI 注入不污染宿主页面
-- 📝 **全局日志系统**：分级日志，便于调试追踪
+**核心能力：**
+- 🤖 多 AI 模型对话（OpenAI / Anthropic / Gemini / 通义千问 / 文心一言 / 豆包等）
+- 🌐 网页自动化（语义骨架 → AI 理解 → 指令执行）
+- 🎤 语音输入/输出（Web Speech API + Sherpa-ONNX）
+- 🌍 翻译功能（划词翻译 / 自动翻译 / 点击翻译）
+- 📎 文件附件（图片 OCR / PDF / Word / Excel）
 
-## 🏗️ 项目架构
+## 技术栈
+
+| 层级 | 技术 |
+|------|------|
+| 构建工具 | WXT (Web Extension Toolkit) |
+| 前端框架 | Vue 3 + Composition API |
+| 状态管理 | Pinia |
+| 类型系统 | TypeScript |
+| 语音识别 | Web Speech API / Sherpa-ONNX |
+| OCR | Tesseract.js |
+| 文件解析 | pdfjs-dist / mammoth / xlsx |
+
+## 分层架构
+
+```mermaid
+graph TD
+    subgraph "UI 层 (Content Script)"
+        App[App.vue]
+        ChatPanel[ChatPanel.vue]
+        InputBar[InputBar.vue]
+        VoicePanel[VoicePanel.vue]
+        SettingsModal[SettingsModal.vue]
+    end
+
+    subgraph "Composable 层"
+        usePipeline[usePipeline]
+        useToast[useToast]
+    end
+
+    subgraph "输入处理层"
+        Router[InputRouter]
+        IntentDetector[IntentDetector]
+        Pipeline[InputPipeline]
+        TagParser[TagParser]
+    end
+
+    subgraph "浏览器执行层"
+        Skeleton[SkeletonManager]
+        ActionExecutor[ActionExecutor]
+        TranslateService[TranslateService]
+        LocalHTML[LocalHTML]
+    end
+
+    subgraph "AI 适配器层"
+        BaseAdapter[BaseAdapter]
+        OpenAI[OpenAIAdapter]
+        Gemini[GeminiAdapter]
+        Qwen[QwenAdapter]
+        Wenxin[WenxinAdapter]
+        Doubao[DoubaoAdapter]
+        Proxy[proxyFetchStream]
+    end
+
+    subgraph "状态管理层"
+        SettingsStore[useSettingsStore]
+        ConvStore[useConversationsStore]
+        VoiceStore[useVoiceStore]
+    end
+
+    subgraph "存储层"
+        Storage[Chrome Storage API]
+        SettingsStorage[settingsStorage]
+        ConvStorage[conversationStorage]
+    end
+
+    subgraph "Background Service Worker"
+        BG[background.ts]
+        ProxyFetch[proxy-fetch-stream]
+        TabMgmt[tab-action]
+        StreamMgr[activeStreams]
+    end
+
+    App --> ChatPanel
+    App --> InputBar
+    App --> VoicePanel
+    App --> SettingsModal
+
+    ChatPanel --> usePipeline
+    InputBar --> usePipeline
+    VoicePanel --> usePipeline
+
+    usePipeline --> Pipeline
+    Pipeline --> Router
+    Pipeline --> IntentDetector
+    Pipeline --> ActionExecutor
+    Pipeline --> Skeleton
+
+    IntentDetector --> BaseAdapter
+    ActionExecutor --> BG
+    TranslateService --> BaseAdapter
+
+    BaseAdapter --> OpenAI
+    BaseAdapter --> Gemini
+    BaseAdapter --> Qwen
+    BaseAdapter --> Wenxin
+    BaseAdapter --> Doubao
+
+    OpenAI --> Proxy
+    Proxy --> BG
+
+    SettingsStore --> Storage
+    ConvStore --> Storage
+
+    BG --> ProxyFetch
+    BG --> TabMgmt
+    BG --> StreamMgr
+```
+
+## 模块列表
+
+| 模块 | 路径 | 职责 |
+|------|------|------|
+| [输入处理流水线](./docs/architecture/input-pipeline.md) | `src/input/` | 用户输入路由、意图检测、指令解析 |
+| [浏览器命令执行](./docs/architecture/browser-command.md) | `src/browser/` | 语义骨架提取、指令执行引擎 |
+| [AI 适配器](./docs/architecture/ai-adapters.md) | `src/adapters/` | 多 AI 提供者协议适配 |
+| [状态管理](./docs/architecture/state-management.md) | `src/stores/` | Pinia stores + 跨标签页同步 |
+| [Background Service](./docs/architecture/background-service.md) | `entrypoints/background.ts` | CORS 代理、标签页管理、流式传输 |
+| [Content Script](./docs/architecture/content-script.md) | `entrypoints/content/` | Shadow DOM + Vue 应用 + 组件 |
+| [翻译功能](./docs/architecture/translation.md) | `src/browser/translate-*.ts` | 划词/自动/点击翻译 |
+| [语音功能](./docs/architecture/voice.md) | `src/voice/` | 语音识别、指令解析、语音播报 |
+| [存储层](./docs/architecture/storage.md) | `src/storage/` | Chrome Storage API 封装 |
+
+## 核心数据流
+
+### 用户输入 → AI 对话
+
+```mermaid
+sequenceDiagram
+    participant User as 用户
+    participant InputBar as 输入框
+    participant Pipeline as InputPipeline
+    participant Router as InputRouter
+    participant Detector as IntentDetector
+    participant AI as AI Adapter
+    participant Executor as ActionExecutor
+
+    User->>InputBar: 输入文本
+    InputBar->>Pipeline: processInput(text)
+    Pipeline->>Router: route(ctx)
+
+    alt /命令
+        Router-->>Pipeline: builtin/skill
+    else AI 处理
+        Router-->>Pipeline: { type: 'ai' }
+        Pipeline->>Detector: detectPhase1(text)
+
+        alt 聊天回复
+            Detector-->>Pipeline: { isChat: true, responseText }
+            Pipeline-->>User: 显示回复
+        else 操作指令
+            Detector-->>Pipeline: { isChat: false }
+            Pipeline->>AI: Phase2 流式调用
+            AI-->>Pipeline: [command] 标签
+            Pipeline->>Executor: execute(cmd)
+            Executor-->>Pipeline: 执行结果
+            Pipeline-->>User: 显示结果
+        end
+    end
+```
+
+### 流式代理架构
+
+```mermaid
+sequenceDiagram
+    participant CS as Content Script
+    participant BG as Background SW
+    participant API as AI API
+
+    CS->>BG: proxy-fetch-stream (url, headers, body)
+    BG->>API: fetch(url, { stream: true })
+    BG-->>CS: { success: true, requestId }
+
+    loop 流式数据
+        API-->>BG: chunk
+        BG->>CS: stream-chunk { requestId, chunk }
+    end
+
+    API-->>BG: stream end
+    BG->>CS: stream-end { requestId }
+```
+
+## 关键设计决策
+
+### 1. 两阶段意图检测
+- **Phase 1**：轻量分类 — 聊天 or 操作？
+- **Phase 2**：从 AI 自然回复中提取结构化指令
+- 优势：AI 回复自然语言，降低对格式的依赖
+
+### 2. 语义骨架（无缓存）
+- 每次调用 `getSkeleton()` 重新提取可视窗口内的可交互元素
+- 不缓存、不监听 DOM 变化 — 简单可靠，永不过期
+- 三重元素定位：elementId → CSS 选择器 → 文本匹配
+
+### 3. 流式单命令执行
+- Phase 2 每次只取 AI 返回的第一条指令执行
+- 执行成功后刷新骨架，再请求下一条
+- 支持最多 5 次重试
+
+### 4. Background 代理流式传输
+- Content Script 无法直接跨域请求
+- Background Service Worker 代理 fetch + SSE 解析
+- 通过 `chrome.runtime.sendMessage` 转发 chunk
+
+### 5. Shadow DOM 隔离
+- Vue 应用挂载在 Shadow DOM 内
+- 样式完全隔离，不影响宿主页面
+- 通过 `createShadowRootUi` (WXT) 创建
+
+## 目录结构
 
 ```
 ai-browser/
-├── entrypoints/                    # WXT 入口文件
-│   ├── background.ts               # 后台 Service Worker
-│   └── content/                    # Content Script（Shadow DOM 注入）
-│       ├── index.ts                # 入口：创建 Shadow Root，挂载 Vue
-│       ├── App.vue                 # 根组件：快捷键、主题、抽屉控制
-│       └── components/
-│           ├── ChatDrawer.vue      # 主抽屉（文字/语音切换）
-│           ├── ChatPanel.vue       # 文字对话面板
-│           ├── VoicePanel.vue      # 语音控制面板（麦克风 + 消息流）
-│           ├── FloatingButton.vue  # 悬浮按钮
-│           ├── SettingsModal.vue   # 设置弹窗
-│           ├── InputBar.vue        # 输入框组件
-│           ├── MessageList.vue     # 消息列表
-│           ├── MessageItem.vue     # 单条消息
+├── entrypoints/
+│   ├── background.ts           # Background Service Worker
+│   └── content/
+│       ├── index.ts            # Content Script 入口
+│       ├── App.vue             # Vue 根组件
+│       └── components/         # UI 组件
+│           ├── ChatDrawer.vue
+│           ├── ChatPanel.vue
+│           ├── InputBar.vue
+│           ├── VoicePanel.vue
+│           ├── SettingsModal.vue
 │           └── ...
 ├── src/
-│   ├── voice/                      # 🎤 语音交互模块（核心）
-│   │   ├── index.ts                # 模块导出
-│   │   ├── recognition.ts          # Web Speech API 封装
-│   │   ├── session.ts              # 语音会话状态机（AI 驱动）
-│   │   ├── commandParser.ts        # 【code】指令解析器
-│   │   └── broadcast.ts            # 语音播报（TTS）
-│   ├── automation/                 # 🌐 网页自动化模块
-│   │   ├── index.ts                # 模块导出
-│   │   ├── actions.ts              # 动作执行器（8 种指令）
-│   │   └── selectors.ts            # DOM 选择器集合
-│   ├── adapters/                   # 🤖 AI 模型适配器
-│   │   ├── index.ts                # 适配器工厂
-│   │   ├── base.ts                 # 基类
-│   │   ├── openai.ts               # OpenAI 协议（GPT/Claude/...）
-│   │   ├── qwen.ts                 # 通义千问
-│   │   └── wenxin.ts               # 文心一言
-│   ├── stores/                     # 📦 Pinia 状态管理
-│   │   ├── settings.ts             # 全局设置
-│   │   ├── conversations.ts        # 文字会话
-│   │   └── voice.ts                # 语音状态（4 状态机）
-│   ├── utils/                      # 🔧 工具函数
-│   │   ├── logger.ts               # 统一日志系统
-│   │   ├── markdown.ts             # Markdown 渲染
-│   │   ├── shortcut.ts             # 快捷键匹配
-│   │   ├── file.ts                 # 文件工具
-│   │   └── storage-sync.ts         # 存储同步
-│   ├── composables/                # Vue 组合式函数
-│   │   └── useToast.ts             # Toast 提示
-│   ├── storage/                    # 存储抽象层
+│   ├── adapters/               # AI 适配器
+│   │   ├── base.ts
+│   │   ├── openai.ts
+│   │   ├── gemini.ts
+│   │   ├── qwen.ts
+│   │   ├── wenxin.ts
+│   │   ├── doubao.ts
+│   │   ├── proxy.ts
 │   │   └── index.ts
-│   └── types.ts                    # TypeScript 类型定义
-├── wxt.config.ts                   # WXT 配置
-├── tsconfig.json                   # TypeScript 配置
+│   ├── browser/                # 浏览器命令执行
+│   │   ├── types.ts
+│   │   ├── skeleton.ts
+│   │   ├── skeleton-id.ts
+│   │   ├── action-executor.ts
+│   │   ├── local-html.ts
+│   │   ├── code-filter.ts
+│   │   ├── translate-service.ts
+│   │   ├── translate-popup.ts
+│   │   ├── translate-click.ts
+│   │   ├── translate-parser.ts
+│   │   └── index.ts
+│   ├── composables/            # Vue Composables
+│   │   ├── usePipeline.ts
+│   │   └── useToast.ts
+│   ├── input/                  # 输入处理
+│   │   ├── types.ts
+│   │   ├── router.ts
+│   │   ├── intent-detector.ts
+│   │   ├── pipeline.ts
+│   │   ├── tag-parser.ts
+│   │   ├── prompts.ts
+│   │   └── index.ts
+│   ├── storage/                # 存储层
+│   │   ├── index.ts
+│   │   └── input-history.ts
+│   ├── stores/                 # Pinia Stores
+│   │   ├── settings.ts
+│   │   ├── conversations.ts
+│   │   └── voice.ts
+│   ├── voice/                  # 语音功能
+│   │   ├── recognition.ts
+│   │   ├── sherpa-recognition.ts
+│   │   ├── commandParser.ts
+│   │   ├── broadcast.ts
+│   │   ├── session.ts
+│   │   └── index.ts
+│   ├── utils/                  # 工具函数
+│   │   ├── logger.ts
+│   │   ├── log-storage.ts
+│   │   ├── storage-sync.ts
+│   │   ├── shortcut.ts
+│   │   ├── markdown.ts
+│   │   ├── file-parsers.ts
+│   │   ├── file-type.ts
+│   │   ├── file.ts
+│   │   └── ocr.ts
+│   ├── types.ts                # 全局类型定义
+│   └── themes.ts               # 主题配置
 └── package.json
 ```
 
-## 🔄 语音交互流程
+## 快速开始
 
+```bash
+# 安装依赖
+npm install
+
+# 开发模式（热更新）
+npm run dev
+
+# 打包生产版本
+npm run build
 ```
-用户说话 → VoiceRecognition (Web Speech API)
-    ↓
-识别文本 → VoiceSession.handleResult()
-    ↓
-发送给 AI → callAI() 流式请求
-    ↓
-AI 返回 【code】 指令 → parseBatchCommand() 解析
-    ↓
-串行执行 → executeAutomationAction() 注入 content script
-    ↓
-语音播报结果 → VoiceBroadcast (TTS)
-    ↓
-回到 IDLE 等待下一轮
-```
-
-## 🎤 语音指令
-
-| 指令类型 | 示例 | 说明 |
-|---------|------|------|
-| 打开网站 | 「打开B站」「打开淘宝」 | 自动补全 https:// |
-| 全网搜索 | 「搜索美食教程」 | 默认百度搜索 |
-| 站内搜索 | 「站内搜索无线耳机」 | 查找页面搜索框 |
-| 点击结果 | 「打开第三个」「点击第五个」 | 按序号点击 |
-| 翻页 | 「下一页」「上一页」 | 自动查找翻页按钮 |
-| 视频控制 | 「播放」「暂停」 | 控制页面视频 |
-| 批量指令 | 「打开B站搜索美食教程」 | AI 自动拆分多条指令 |
-
-## 🤖 支持的 AI 模型
-
-### 国内模型（推荐）
-
-| 模型 | Provider | Base URL |
-|------|----------|----------|
-| 通义千问 | `qwen` | https://dashscope.aliyuncs.com/api/v1 |
-| 智谱 ChatGLM | `zhipu` | https://open.bigmodel.cn/api/paas/v4 |
-| DeepSeek | `deepseek` | https://api.deepseek.com/v1 |
-| Moonshot (Kimi) | `moonshot` | https://api.moonshot.cn/v1 |
-| 百川智能 | `baichuan` | https://api.baichuan-ai.com/v1 |
-| 零一万物 | `yi` | https://api.lingyiwanwu.com/v1 |
-| 讯飞星火 | `spark` | https://spark-api-open.xf-yun.com/v1 |
-| Minimax | `mino` | https://api.minimax.chat/v1 |
-| 文心一言 | `wenxin` | https://aip.baidubce.com/rpc/2.0/ai_custom/v1/wenxinworkshop |
-
-### 国外模型
-
-| 模型 | Provider | Base URL |
-|------|----------|----------|
-| OpenAI | `openai` | https://api.openai.com/v1 |
-| Anthropic Claude | `anthropic` | https://api.anthropic.com/v1 |
-| Google Gemini | `gemini` | https://generativelanguage.googleapis.com/v1beta |
-
-## ⚙️ 配置说明
-
-在扩展的设置面板中配置：
-
-1. **Provider**：选择模型提供商
-2. **Base URL**：API 请求地址
-3. **API Key**：API 密钥
-4. **Model Name**：模型名称
-
-### 快捷键
-
-- `Ctrl+Shift+M`：打开/关闭对话面板（可自定义）
 
 ## 📄 License
 

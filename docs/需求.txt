@@ -1,4 +1,4 @@
-批量指令 跨页面指令  基本指令模糊匹配不需要请求  指令elementId位是数组支持多个elementId指令执行  [command]{"action":"click","elementId":"e3","description":"登录","done":0}[/command]
+批量指令 跨页面指令  指令elementId位是数组支持多个elementId指令执行  [command]{"action":"click","elementId":"e3","description":"登录","done":0}[/command]
 打开百度，搜索vue3 手动点按钮、批量填表、翻页、复制数据 批量点赞、批量互动、批量评论属于平台违规行为
 
 

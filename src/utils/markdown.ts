@@ -20,6 +20,11 @@ const md: MarkdownIt = new MarkdownIt({
 
 md.use(mk, { throwOnError: false, errorColor: '#cc0000' });
 
+// 自定义表格渲染：包裹一层容器 + 下载按钮
+md.renderer.rules.table_open = () => '<div class="zwf-table-wrapper"><table>';
+md.renderer.rules.table_close = (tokens, idx, options, env, self) =>
+  `</table><button class="zwf-table-download-btn" title="下载表格为 Excel">📥</button></div>`;
+
 export function renderMarkdown(text: string): string {
   if (!text) return '';
   return md.render(text);
