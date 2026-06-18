@@ -24,7 +24,7 @@ const greeting = computed(() => {
   <div class="aib-chat-empty">
     <div class="aib-chat-empty-title">{{ greeting }}，今天聊点什么？</div>
     <div class="aib-chat-empty-tags">
-      语音对话 · 网页自动化 · 智能翻译 · AI 联读 · OCR 识别 · 报告生成
+      语音对话 · 网页自动化 · 智能翻译 · AI 联读 · 智能笔记 · OCR 识别 · 报告生成
     </div>
     <div class="aib-suggestions">
       <button
