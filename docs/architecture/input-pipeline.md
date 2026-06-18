@@ -20,23 +20,23 @@
                      ▼
           ┌──────────────────┐
           │  IntentDetector   │
-          │  Phase 1 (轻量)   │  聊天 or [action] 二分类
+          │  Phase 1 (轻量)   │  三分类：[command] / [action] / 聊天
           └────────┬─────────┘
                    │
-           ┌───────┴───────┐
-           │               │
-        聊天回复         [action]
-           │               │
-           ▼               ▼
-        结束       ┌──────────────────┐
-                   │  InputPipeline    │
-                   │  Phase 2 (主力)   │  流式单指令执行 + 重试循环
-                   └────────┬─────────┘
-                            │
-                            ▼
-                   ┌──────────────────┐
-                   │  ActionExecutor   │  执行浏览器操作
-                   └──────────────────┘
+       ┌───────────┼───────────┐
+       │           │           │
+    聊天回复   [command]    [action]
+       │       快速通道       │
+       ▼           │           ▼
+    结束           ▼    ┌──────────────────┐
+               直接执行  │  InputPipeline    │
+               (无需骨架) │  Phase 2 (主力)   │  流式单指令执行 + 重试循环
+                         └────────┬─────────┘
+                                  │
+                                  ▼
+                         ┌──────────────────┐
+                         │  ActionExecutor   │  执行浏览器操作
+                         └──────────────────┘
 ```
 
 ### Mermaid 流程图
@@ -51,7 +51,10 @@ flowchart TD
     C -->|skill| F[技能激活]
 
     D -->|isChat=true| G[返回聊天回复]
+    D -->|Phase1 直出 [command]| FP[快速通道: executePhase1Commands]
     D -->|isChat=false / [action]| H[IntentDetector.detectPhase2]
+
+    FP --> K2[ActionExecutor.execute]
 
     H --> I[InputPipeline.processPhase2WithRetry]
     I --> J{标签提取}
@@ -62,6 +65,8 @@ flowchart TD
 
     K -->|成功| O{done=1?}
     K -->|失败| P{重试次数 < 5?}
+    K2 -->|成功| N
+    K2 -->|失败| N
     O -->|是| N
     O -->|否| I
     P -->|是| I
@@ -79,14 +84,15 @@ flowchart TD
 
 | 阶段 | 模型 | 职责 | 输出 |
 |------|------|------|------|
-| Phase 1 | 轻量模型 | 聊天 vs 操作 二分类 | `[action]` 或自然语言回复 |
+| Phase 1 | 轻量模型 | 聊天 vs 操作 二分类 + 简单指令直出 | `[action]` / `[command]` / 自然语言回复 |
 | Phase 2 | 主力模型 | 从 AI 自然回复中提取结构化指令 | `[command]` / `[skill]` / `[need_full]` 标签 |
 
 **Phase 1 设计考量：**
 - 使用轻量模型做意图分类，降低延迟和成本
-- 系统提示词 (`PHASE1_SYSTEM_PROMPT`) 要求 AI 严格二选一输出
+- 系统提示词 (`PHASE1_SYSTEM_PROMPT`) 要求严格三选一输出：`[command]` / `[action]` / 自然语言
+- **快速通道（Fast Path）：** Phase 1 直出 `[command]` 时跳过 Phase 2，直接执行。适用于不需要页面骨架的简单操作（navigate/scroll/keyboard 等）
 - 流式输出期间实时检测 `[action]` 标签，一旦检测到立即清除流式内容，用户只看到"思考中"
-- 若 Phase 1 异常输出了 `[command]`/`[skill]` 标签，强制进入 Phase 2
+- 若 Phase 1 异常输出了 `[skill]` 标签，强制进入 Phase 2
 
 **Phase 2 设计考量：**
 - 使用主力模型生成操作指令
@@ -187,6 +193,14 @@ class InputRouter {
 **Phase 1 — `detectPhase1()`**
 
 ```typescript
+interface Phase1Detection {
+  isChat: boolean
+  responseText?: string
+  rawText: string
+  /** Phase 1 直接生成的指令（快速通道，跳过 Phase 2） */
+  commands?: Command[]
+}
+
 async detectPhase1(
   text: string,
   onChunk?: (delta: string, reasoningDelta?: string) => void,
@@ -195,11 +209,11 @@ async detectPhase1(
 
 - 使用 `PHASE1_SYSTEM_PROMPT` 系统提示词
 - 流式输出，`onChunk` 回调支持实时展示
-- 返回 `{ isChat: boolean; responseText?: string; rawText: string }`
 - 判断逻辑：
-  1. 提取标签 → 有 `[action]` → `isChat: false`
-  2. 有 `[command]`/`[skill]`（异常情况）→ `isChat: false`，强制进 Phase 2
-  3. 有 `[chat]` 标签或纯文本 → `isChat: true`
+  1. 提取标签 → 有 `[command]` 且无 `[action]` → **快速通道**：`{ isChat: false, commands: [...] }`
+  2. 有 `[action]` → `isChat: false`，进入 Phase 2
+  3. 有 `[skill]`（异常情况）→ `isChat: false`，强制进 Phase 2
+  4. 有 `[chat]` 标签或纯文本 → `isChat: true`
 
 **Phase 2 — `detectPhase2()`**
 
@@ -207,7 +221,7 @@ async detectPhase1(
 async detectPhase2(text: string, skeleton: SemanticSkeleton): Promise<Phase2Result>
 ```
 
-- 使用 `PHASE2_SYSTEM_PROMPT` 系统提示词，运行时替换 `{skillList}` 占位符
+- 使用 `PHASE2_SYSTEM_PROMPT` 系统提示词，运行时替换 `{coreRule}` 和 `{skillList}` 占位符
 - 用户消息通过 `buildPhase2UserMessage()` 构建，包含当前请求和页面骨架
 - 返回 `{ commands?: Command[]; skill?: {...}; needFull?: boolean; rawAiOutput: string }`
 
@@ -241,9 +255,24 @@ class InputPipeline {
    - 流式回调 `onChatDelta()`，实时检测 `[action]` 标签
    - 检测到操作标签 → `onChatDelta('', undefined, true)` 清除内容
    - 聊天回复 → 替换流式内容为最终文本 → `onChatEnd()`
+   - **快速通道：** `p1.commands?.length` → `executePhase1Commands()` 直接执行，跳过 Phase 2
 3. Phase 2 流式执行
    - `onActionDetected()` 移除"思考中"消息
    - `processPhase2WithRetry()` 执行
+
+**`executePhase1Commands()` 方法（快速通道）：**
+
+```typescript
+private async executePhase1Commands(
+  commands: Command[],
+  userText: string,
+  callbacks: PipelineCallbacks,
+): Promise<void>
+```
+
+- 逐条执行 Phase 1 直出的指令（不需要页面骨架）
+- 共用 Phase 2 的执行逻辑和 UI 回调（`onCommandsParsed` / `onCommandResult` / `onAllCommandsDone`）
+- `navigate` 操作后自动失效骨架缓存（`skeletonManager.invalidate()`）
 
 **`processPhase2WithRetry()` 流程：**
 
@@ -330,15 +359,15 @@ function getChatText(tags: ExtractedTags): string
 
 **系统提示词：**
 
-- `PHASE1_SYSTEM_PROMPT`: Phase 1 意图分类，要求严格二选一输出
-- `PHASE2_SYSTEM_PROMPT`: Phase 2 操作决策，包含能力域、指令格式、技能列表
-- `CAPABILITY_DOMAIN`: 所有能力域定义（navigate/search/click/type 等）
+- `PHASE1_SYSTEM_PROMPT`: Phase 1 意图分类，要求严格三选一输出：`[command]` / `[action]` / 自然语言
+- `PHASE2_SYSTEM_PROMPT`: Phase 2 操作决策模板，运行时替换 `{coreRule}`（模式说明）和 `{skillList}`（可用技能列表）
+- `CAPABILITY_DOMAIN`: 所有能力域定义（navigate/search/click/type/scroll/keyboard 等）
 
-**模式说明：**
+**模式说明（注入 `{coreRule}` 占位符）：**
 
-- `MODE_FIRST`: 首次进入，"每次只生成1条指令"
-- `MODE_STREAMING`: 流式执行，"生成下一条指令"
-- `MODE_RETRY`: 错误重试，"根据失败信息重新生成"
+- `MODE_FIRST`: 首次进入，"每次只生成1条指令，系统执行后反馈结果再生成下一条"
+- `MODE_STREAMING`: 流式执行，"按照以下信息和格式，生成下一条指令"
+- `MODE_RETRY`: 错误重试，"上次指令执行失败。根据失败指令、错误信息、最新页面骨架，调整策略"
 
 **消息构建函数：**
 
@@ -373,12 +402,17 @@ sequenceDiagram
         Note over P: Phase 1 开始
         P->>P: callbacks.onChatStart()
         P->>D: detectPhase1(text, onChunk)
-        D-->>P: { isChat, responseText, rawText }
+        D-->>P: { isChat, responseText, rawText, commands? }
 
         alt 聊天回复
             P->>P: callbacks.onChatDelta(responseText)
             P->>P: callbacks.onChatEnd()
-        else 需要操作
+        else Phase 1 快速通道 (commands)
+            P->>P: callbacks.onActionDetected()
+            P->>E: executePhase1Commands(commands)
+            E-->>P: 逐条执行结果
+            P->>P: callbacks.onAllCommandsDone(...)
+        else [action] → Phase 2
             P->>P: callbacks.onActionDetected()
 
             Note over P: Phase 2 重试循环

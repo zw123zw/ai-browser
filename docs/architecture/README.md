@@ -160,7 +160,12 @@ sequenceDiagram
         alt 聊天回复
             Detector-->>Pipeline: { isChat: true, responseText }
             Pipeline-->>User: 显示回复
-        else 操作指令
+        else Phase 1 快速通道 (navigate/scroll 等)
+            Detector-->>Pipeline: { isChat: false, commands }
+            Pipeline->>Executor: executePhase1Commands(commands)
+            Executor-->>Pipeline: 执行结果
+            Pipeline-->>User: 显示结果
+        else [action] → Phase 2
             Detector-->>Pipeline: { isChat: false }
             Pipeline->>AI: Phase2 流式调用
             AI-->>Pipeline: [command] 标签
@@ -194,10 +199,11 @@ sequenceDiagram
 
 ## 关键设计决策
 
-### 1. 两阶段意图检测
-- **Phase 1**：轻量分类 — 聊天 or 操作？
-- **Phase 2**：从 AI 自然回复中提取结构化指令
-- 优势：AI 回复自然语言，降低对格式的依赖
+### 1. 两阶段意图检测 + 快速通道
+- **Phase 1**：轻量分类 — 聊天 / 简单指令直出 / 需要页面操作
+- **Phase 1 快速通道**：navigate/scroll/keyboard 等无需骨架的指令，Phase 1 直出 `[command]` 跳过 Phase 2
+- **Phase 2**：从 AI 自然回复中提取结构化指令（需要页面骨架的操作）
+- 优势：简单操作零延迟，复杂操作仍走 Phase 2 精确定位
 
 ### 2. 语义骨架（无缓存）
 - 每次调用 `getSkeleton()` 重新提取可视窗口内的可交互元素
