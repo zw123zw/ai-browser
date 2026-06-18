@@ -5,6 +5,9 @@ import { getFileTypeIcon, formatFileSize, getExtension } from '@/src/utils/file-
 import { renderMarkdown } from '@/src/utils/markdown';
 import { getOriginalFile } from '@/src/utils/file-parsers';
 import hljs from 'highlight.js';
+import * as XLSX from 'xlsx';
+import { Document, Packer, Paragraph, TextRun } from 'docx';
+import { jsPDF } from 'jspdf';
 
 const props = defineProps<{ attachment: Attachment }>();
 const emit = defineEmits<{ (e: 'close'): void }>();
@@ -69,30 +72,117 @@ function escapeHtml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-/** 下载文件：优先原始文件，否则用 content 生成 */
+/** 文本白名单：content 即原始内容，保持原扩展名（getExtension 返回不带点号） */
+const TEXT_EXTENSIONS = new Set([
+  'json', 'csv', 'tsv', 'md', 'txt', 'html', 'htm', 'xml', 'yaml', 'yml',
+  'ini', 'env', 'log', 'cfg', 'conf', 'toml',
+  'py', 'js', 'ts', 'jsx', 'tsx', 'java', 'go', 'rs', 'rb', 'php',
+  'c', 'cpp', 'h', 'hpp', 'cs', 'swift', 'kt', 'scala',
+  'sh', 'bash', 'zsh', 'bat', 'ps1',
+  'css', 'scss', 'less', 'sql', 'graphql'
+]);
+
+/** dataUrl base64 转 Blob */
+function dataUrlToBlob(dataUrl: string): Blob {
+  const [header, data] = dataUrl.split(',');
+  const mime = header.match(/:(.*?);/)?.[1] ?? 'application/octet-stream';
+  const binary = atob(data);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return new Blob([bytes], { type: mime });
+}
+
+/** 用 xlsx 库从 content 生成 .xlsx */
+function downloadAsXlsx(content: string, name: string) {
+  let ws: XLSX.WorkSheet;
+  if (content.includes('\t')) {
+    ws = XLSX.utils.aoa_to_sheet(content.split('\n').map(row => row.split('\t')));
+  } else if (content.includes('|')) {
+    const rows = content.split('\n')
+      .filter(row => row.trim() && !/^[\s|:-]+$/.test(row))
+      .map(row => row.split('|').map(cell => cell.trim()).filter(Boolean));
+    ws = XLSX.utils.aoa_to_sheet(rows);
+  } else {
+    ws = XLSX.utils.aoa_to_sheet(content.split('\n').map(row => [row]));
+  }
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
+  const xlsxData = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+  const blob = new Blob([xlsxData], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  triggerDownload(URL.createObjectURL(blob), name);
+}
+
+/** 用 docx 库从 content 生成 .docx */
+async function downloadAsDocx(content: string, name: string) {
+  const paragraphs = content.split('\n').map(line =>
+    new Paragraph({ children: [new TextRun(line)] })
+  );
+  const doc = new Document({ sections: [{ children: paragraphs }] });
+  const blob = await Packer.toBlob(doc);
+  triggerDownload(URL.createObjectURL(blob), name);
+}
+
+/** 用 jspdf 库从 content 生成 .pdf */
+function downloadAsPdf(content: string, name: string) {
+  const doc = new jsPDF();
+  const lines = doc.splitTextToSize(content, 180);
+  doc.text(lines, 10, 10);
+  const blob = doc.output('blob');
+  triggerDownload(URL.createObjectURL(blob), name);
+}
+
+/** 下载文件：优先级从高到低 */
 function downloadFile() {
   const { attachment } = props;
 
-  // 优先：从内存缓存获取原始 File（当前会话有效）
+  // 1. 原始 File（当前会话）
   const file = getOriginalFile(attachment);
   if (file) {
-    const url = URL.createObjectURL(file);
-    triggerDownload(url, file.name);
+    triggerDownload(URL.createObjectURL(file), file.name);
     return;
   }
 
-  // 兜底：用 content 生成文件下载
+  // 2. 图片 dataUrl（刷新后仍在）
+  if (attachment.type === 'image' && attachment.dataUrl) {
+    const blob = dataUrlToBlob(attachment.dataUrl);
+    triggerDownload(URL.createObjectURL(blob), attachment.name);
+    return;
+  }
+
   const content = attachment.content;
   if (!content || content.startsWith('[')) return;
 
-  const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  // 文本/代码保持原扩展名，其他类型用 .txt
   const ext = getExtension(attachment.name);
-  const name = ['text', 'code'].includes(attachment.type) && ext
-    ? attachment.name
-    : attachment.name.replace(/\.[^.]+$/, '') + '.txt';
-  triggerDownload(url, name);
+
+  // 3. 文本白名单
+  if (TEXT_EXTENSIONS.has(ext)) {
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+    triggerDownload(URL.createObjectURL(blob), attachment.name);
+    return;
+  }
+
+  // 4. xlsx
+  if (ext === 'xlsx' || ext === 'xls') {
+    downloadAsXlsx(content, attachment.name);
+    return;
+  }
+
+  // 5. docx
+  if (ext === 'docx' || ext === 'doc') {
+    downloadAsDocx(content, attachment.name);
+    return;
+  }
+
+  // 6. pdf
+  if (ext === 'pdf') {
+    downloadAsPdf(content, attachment.name);
+    return;
+  }
+
+  // 7. 兜底 .txt
+  const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+  const name = attachment.name.replace(/\.[^.]+$/, '') + '.txt';
+  triggerDownload(URL.createObjectURL(blob), name);
 }
 
 function triggerDownload(url: string, name: string) {
