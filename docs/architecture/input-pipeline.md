@@ -56,7 +56,7 @@ flowchart TD
     H --> I[InputPipeline.processPhase2WithRetry]
     I --> J{标签提取}
     J -->|[command]| K[ActionExecutor.execute]
-    J -->|[need_html]| L[搜索 HTML 片段]
+    J -->|[need_full]| L[提取全页骨架]
     J -->|[skill]| M[技能激活]
     J -->|无标签| N[任务完成]
 
@@ -80,7 +80,7 @@ flowchart TD
 | 阶段 | 模型 | 职责 | 输出 |
 |------|------|------|------|
 | Phase 1 | 轻量模型 | 聊天 vs 操作 二分类 | `[action]` 或自然语言回复 |
-| Phase 2 | 主力模型 | 从 AI 自然回复中提取结构化指令 | `[command]` / `[skill]` / `[need_html]` 标签 |
+| Phase 2 | 主力模型 | 从 AI 自然回复中提取结构化指令 | `[command]` / `[skill]` / `[need_full]` 标签 |
 
 **Phase 1 设计考量：**
 - 使用轻量模型做意图分类，降低延迟和成本
@@ -118,7 +118,7 @@ Phase 2 采用流式执行模式，每次迭代只执行一条指令：
   - 上次失败的错误信息
   - 上次失败的指令详情
   - 已完成指令列表
-  - `need_html` 搜索到的 HTML 片段（如有）
+  - `need_full` 触发时的全页骨架（如有）
 - **连续错误计数：** 指令成功执行后 `consecutiveErrors` 重置为 0
 
 ### 4. 指令去重 (Command Deduplication)
@@ -209,11 +209,11 @@ async detectPhase2(text: string, skeleton: SemanticSkeleton): Promise<Phase2Resu
 
 - 使用 `PHASE2_SYSTEM_PROMPT` 系统提示词，运行时替换 `{skillList}` 占位符
 - 用户消息通过 `buildPhase2UserMessage()` 构建，包含当前请求和页面骨架
-- 返回 `{ commands?: Command[]; skill?: {...}; needHtml?: NeedHtmlRequest; rawAiOutput: string }`
+- 返回 `{ commands?: Command[]; skill?: {...}; needFull?: boolean; rawAiOutput: string }`
 
 **AI 调用细节：**
 - 消息构建：最近 6 条历史消息（过滤重数据）+ 系统提示词拼接到用户消息前（兼容不支持 system role 的 API）
-- `stripHeavyData()` 清理历史消息中的骨架 JSON 和 HTML 代码块，减少 token 消耗
+- `stripHeavyData()` 清理历史消息中的骨架 JSON 和全页骨架 JSON，减少 token 消耗
 - AbortError 向上抛出，由调用方处理
 
 ### InputPipeline
@@ -259,9 +259,9 @@ while (consecutiveErrors < MAX_RETRY):
      - 执行指令
      - 成功 → 记录、重置错误、sleep 500ms、continue
      - 失败 → 记录错误、consecutiveErrors++、continue
-  7. [need_html]:
-     - searchByKeywords() 搜索 HTML
-     - 记录错误和 HTML 片段、consecutiveErrors++、continue
+  7. [need_full]:
+     - extractFullPageSkeleton() 提取全页骨架
+     - 记录错误和全页骨架、consecutiveErrors++、continue
   8. [skill]:
      - onSkillActivate() 回调
      - 成功/失败处理、continue
@@ -276,13 +276,13 @@ private async callStreamingAI(
   completed: Array<{...}>,
   lastError: string,
   lastFailedCommand?: {...} | null,
-  lastHtmlFragments?: string | null,
+  lastFullSkeleton?: string | null,
   coreRule?: string,
 ): Promise<Phase2Result>
 ```
 
 - 构建系统提示词：`PHASE2_SYSTEM_PROMPT` 替换 `{coreRule}` 和 `{skillList}`
-- 构建用户消息：`buildStreamingUserMessage()` 包含原始请求、已完成列表、错误信息、HTML 片段、当前骨架
+- 构建用户消息：`buildStreamingUserMessage()` 包含原始请求、已完成列表、错误信息、全页骨架、当前骨架
 - 只取 `tags.commands` 的第一条：`tags.commands?.slice(0, 1)`
 
 ### TagParser
@@ -305,12 +305,12 @@ function extractTags(rawText: string): ExtractedTags
 | `[chat]` | `[chat]{"text":"..."}[/chat]` 或 `[chat]文本[/chat]` | Phase 1 聊天回复 |
 | `[command]` | `[command]{"action":"click","elementId":"e3"}[/command]` | 浏览器操作指令 |
 | `[skill]` | `[skill]{"name":"翻译","userText":"..."}[/skill]` | 技能调用 |
-| `[need_html]` | `[need_html]{"keywords":[...],"reason":"...","description":"..."}[/need_html]` | 请求 HTML 片段 |
+| `[need_full]` | `[need_full]`（无内容） | 请求全页骨架 |
 
 **提取策略：**
 - 优先匹配闭合标签 `[tag]...[/tag]`
 - 回退匹配：`[tag]` 后的整个 JSON 对象
-- `need_html` 有容错机制：JSON 解析失败时尝试正则提取 `keywords`、`reason`、`description` 字段
+- `[need_full]` 无需 JSON 解析，检测到标签即触发
 
 **辅助函数：**
 
@@ -346,8 +346,8 @@ function getChatText(tags: ExtractedTags): string
 buildPhase2UserMessage(text, skeleton)
 // Phase 2 标准消息：当前请求 + 页面骨架
 
-buildStreamingUserMessage(text, skeleton, completed, lastError?, lastFailedCommand?, htmlFragments?)
-// 流式执行消息：原始请求 + 已完成列表 + 错误信息 + HTML 片段 + 当前骨架
+buildStreamingUserMessage(text, skeleton, completed, lastError?, lastFailedCommand?, fullSkeleton?)
+// 流式执行消息：原始请求 + 已完成列表 + 错误信息 + 全页骨架 + 当前骨架
 ```
 
 ## 数据流时序图
@@ -399,8 +399,8 @@ sequenceDiagram
                     else 失败
                         P->>P: consecutiveErrors++
                     end
-                else [need_html]
-                    P->>P: searchByKeywords(keywords)
+                else [need_full]
+                    P->>P: extractFullPageSkeleton()
                     P->>P: consecutiveErrors++
                 else [skill]
                     P->>P: onSkillActivate(name, userText)
@@ -464,7 +464,7 @@ interface ExtractedTags {
   commands?: Command[]
   skill?: { name: string; userText: string }
   isAction: boolean
-  needHtml?: NeedHtmlRequest
+  needFull?: boolean
   hasAnyTag: boolean
   rawText: string
 }
@@ -495,7 +495,7 @@ function sleep(ms: number, signal?: AbortSignal): Promise<void>
 | 最新骨架 | AI 了解当前页面状态 |
 | `lastError` | 上次失败的错误描述 |
 | `lastFailedCommand` | 上次失败的指令详情 |
-| `lastHtmlFragments` | `need_html` 搜索到的 HTML |
+| `lastFullSkeleton` | `need_full` 触发时的全页骨架 |
 | `completed` 已完成列表 | 避免重复操作 |
 
 ### AI 调用容错
@@ -528,7 +528,7 @@ pipeline.ts
   └── browser/
       ├── action-executor.ts  (ActionExecutor)
       ├── skeleton.ts         (SkeletonManager)
-      └── local-html.ts       (searchByKeywords)
+      └── local-html.ts       (extractFullPageSkeleton)
 
 intent-detector.ts
   ├── tag-parser.ts       (extractTags, isChatOnlyReply, getChatText)

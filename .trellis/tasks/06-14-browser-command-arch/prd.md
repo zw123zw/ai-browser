@@ -5,7 +5,7 @@
 
 ## Goal
 
-设计浏览器命令的完整执行体系：语义骨架提取、`[command]` 指令格式、三重元素定位、完整事件触发、执行结果判定、失败重试机制、`[need_html]` 局部 HTML 兜底、标签页操作、视频控制。
+设计浏览器命令的完整执行体系：语义骨架提取、`[command]` 指令格式、三重元素定位、完整事件触发、执行结果判定、失败重试机制、`[need_full]` 全页骨架兜底、标签页操作、视频控制。
 
 本文档是统一输入架构的执行层实现，接收来自意图检测架构的 `[action]` 信号，负责在浏览器中实际执行操作。
 
@@ -204,47 +204,55 @@ interface SemanticSkeleton {
 }
 ```
 
-**注意：** 骨架元素只保留 `id`、`tag`、`text`、`parent` 四个字段。`href`、`src`、`type`、`placeholder`、`role`、`aria-label` 等属性不在骨架中，AI 需要时通过 `[need_html]` 获取完整 HTML。
+**注意：** 骨架元素只保留 `id`、`tag`、`text`、`parent` 四个字段。`href`、`src`、`type`、`placeholder`、`role`、`aria-label` 等属性不在骨架中。当视口骨架找不到目标时，AI 通过 `[need_full]` 获取全页骨架（同格式，覆盖所有可交互元素）。
 
 ### 2.4 SkeletonManager（骨架管理器）
 
 ```typescript
 // src/browser/skeleton.ts
 class SkeletonManager {
-  getSkeleton(): SemanticSkeleton   // 每次重新提取（无缓存）
-  invalidate(): void                 // 保留接口兼容，viewport 模式下无需操作
-  dispose(): void                    // 保留接口兼容
-  get cachedUrl(): string            // 保留接口兼容，始终返回 ""
+  getSkeleton(): SemanticSkeleton       // 视口骨架（每次重新提取）
+  getFullSkeleton(): SemanticSkeleton   // 全页骨架（每次重新提取）
+  invalidate(): void                     // 保留接口兼容，viewport 模式下无需操作
+  dispose(): void                        // 保留接口兼容
+  get cachedUrl(): string                // 保留接口兼容，始终返回 ""
 }
 ```
 
-**设计说明：** SkeletonManager 不缓存骨架，每次 `getSkeleton()` 都调用 `extractSkeleton(document)` 重新提取。这是因为 DOM 随时可能被 JavaScript 修改（SPA 路由、弹窗、懒加载），缓存会导致过期数据。简单可靠，永不过期。
+**设计说明：** SkeletonManager 不缓存骨架，每次调用都重新提取。`getSkeleton()` 提取视口内骨架（200 元素上限），`getFullSkeleton()` 提取全页骨架（无上限）。这是因为 DOM 随时可能被 JavaScript 修改（SPA 路由、弹窗、懒加载），缓存会导致过期数据。简单可靠，永不过期。
 
-### 2.5 关键词 HTML 搜索（`[need_html]` 兜底）
+### 2.5 全页骨架提取（`[need_full]` 兜底）
 
 **文件：** `src/browser/local-html.ts`
 
+当视口骨架无法定位目标元素时，AI 输出 `[need_full]` 标签，系统提取全页面所有可交互元素的骨架（与视口骨架格式一致），AI 直接使用 elementId 生成指令。
+
 ```typescript
-export function searchByKeywords(keywords: string[]): string | null
-  // 1. 遍历整个页面 DOM（不限视口）+ 同源 iframe
-  // 2. 对每个元素检查是否可交互（复用骨架的 isClickable 逻辑）
-  // 3. 关键词 OR 模糊匹配（任一关键词命中即可）
-  //    匹配源: textContent / aria-label / placeholder / title / value
-  // 4. 匹配到的元素清洗属性，只保留: data-skeleton-id, href, src, type, name, placeholder, value, role, aria-label, title
-  // 5. 移除 script/style/noscript 子元素，递归清洗，压缩空白
-  // 6. 所有匹配片段拼接返回，未找到返回 null
-  // 注意: data-skeleton-id 只在视口内骨架元素上有，视口外元素靠 text/aria-label/title 定位
+export function extractFullPageSkeleton(): string | null
+  // 1. 调用 extractFullSkeleton(document) 提取全页骨架
+  // 2. 返回 JSON 字符串，未找到返回 null
 ```
 
-**与骨架提取的区别：**
+**与视口骨架提取的区别：**
 
-| 维度 | 骨架提取 | 关键词搜索 |
-|------|---------|-----------|
+| 维度 | 视口骨架（`extractSkeleton`） | 全页骨架（`extractFullSkeleton`） |
+|------|------------------------------|----------------------------------|
 | 搜索范围 | 仅视口内 + 同源 iframe | 全页面 DOM + 同源 iframe |
-| 匹配逻辑 | 无（提取所有可交互元素） | 关键词 OR 模糊匹配 |
-| 输出格式 | 结构化 JSON（id/tag/text/parent） | 清洗后的 HTML 片段 |
-| 可见性检查 | ✅ 跳过不可见元素 | ❌ 不检查可见性（兜底搜索） |
-| 用途 | AI 根据 elementId 精确定位 | AI 根据 HTML 片段重新分析 |
+| 可见性检查 | display:none + visibility:hidden + offsetParent | 同左（逻辑完全一致） |
+| 视口检测 | ✅ 跳过视口外元素 | ❌ 跳过视口检测 |
+| 元素上限 | 200 | 无上限 |
+| 输出格式 | 结构化 JSON（id/tag/text/parent） | 同格式 |
+| 用途 | AI 根据 elementId 精确定位（主路径） | AI 从全页元素中定位视口外目标（兜底） |
+
+**提取流程：** 与视口骨架完全一致（可交互性检测 → 可见性检测 → 提取元素信息 → 地标标注 → iframe 提取 → 去重过滤），唯一区别是跳过视口边界检测，不限制元素数量。
+
+**设计决策 — 不设元素上限：**
+
+全页骨架的核心目的是找到视口骨架中没有的元素。设上限会导致目标元素可能被截断，使兜底机制不可靠。虽然复杂页面可能产生 500-1000 个元素（~10,000-20,000 tokens），但：
+1. 去重逻辑（父子同文本、同级去重）显著减少元素数量
+2. 这是兜底机制，仅在视口骨架找不到时触发，不是常态
+3. 现代 LLM 上下文 128k+，一两万 tokens 的骨架完全可处理
+4. 结构化骨架比 HTML 片段体积更可控、AI 更易理解
 
 ---
 
@@ -620,12 +628,12 @@ Background 处理逻辑（`entrypoints/background.ts`）：
 │    4. 调用 AI 生成 1 条指令（callStreamingAI）            │
 │    5. 解析标签 → 分支处理                                │
 │                                                         │
-│  分支处理（优先级：command > need_html > skill）：        │
+│  分支处理（优先级：command > need_full > skill）：        │
 │    [command] → 指令去重检查 → ActionExecutor.execute()    │
 │      成功 → completedKeys.add, consecutiveErrors=0       │
 │           → done=1? break : wait 500ms → 下一轮          │
 │      失败 → consecutiveErrors++, 记录 lastError → 重试   │
-│    [need_html] → searchByKeywords() → consecutiveErrors++│
+│    [need_full] → extractFullPageSkeleton() → 重试        │
 │    [skill] → onSkillActivate() → consecutiveErrors++     │
 │    无标签 → break（所有步骤完成）                         │
 │                                                         │
@@ -725,7 +733,7 @@ private async processPhase2WithRetry(text: string, callbacks: PipelineCallbacks)
   let consecutiveErrors = 0
   let lastError = ''
   let lastFailedCommand = null
-  let lastHtmlFragments: string | null = null
+  let lastFullSkeleton: string | null = null
 
   while (consecutiveErrors < MAX_RETRY) {
     // ★ 检查 abort signal，支持用户中途停止
@@ -740,12 +748,12 @@ private async processPhase2WithRetry(text: string, callbacks: PipelineCallbacks)
     const coreRule = isFirstEntry ? MODE_FIRST : (lastError ? MODE_RETRY : MODE_STREAMING)
 
     // AI 生成 1 条指令
-    const phase2Result = await this.callStreamingAI(text, skeleton, completed, lastError, lastFailedCommand, lastHtmlFragments, coreRule)
+    const phase2Result = await this.callStreamingAI(text, skeleton, completed, lastError, lastFailedCommand, lastFullSkeleton, coreRule)
 
     // ── 无标签 → AI 无输出，任务完成 ──
     if (!phase2Result.commands?.length && !phase2Result.skill && !phase2Result.needHtml) break
 
-    // ── command → 执行单条指令（优先于 need_html） ──
+    // ── command → 执行单条指令（优先于 need_full） ──
     if (phase2Result.commands?.length) {
       const cmd = phase2Result.commands[0]
 
@@ -766,14 +774,14 @@ private async processPhase2WithRetry(text: string, callbacks: PipelineCallbacks)
         consecutiveErrors = 0
         lastError = ''
         lastFailedCommand = null
-        lastHtmlFragments = null
+        lastFullSkeleton = null
 
         if (cmd.action === 'navigate') this.skeletonManager.invalidate()
 
         // ★ done=1 → 最后一步完成，停止
         if (cmd.done === 1) break
 
-        // command 成功 → 跳过同响应的 need_html/skill，等骨架刷新后下一轮处理
+        // command 成功 → 跳过同响应的 need_full/skill，等骨架刷新后下一轮处理
         await new Promise(resolve => setTimeout(resolve, 500))
         continue
       } else {
@@ -781,16 +789,16 @@ private async processPhase2WithRetry(text: string, callbacks: PipelineCallbacks)
         lastFailedCommand = { action: cmd.action, elementId: cmd.elementId, description: cmd.description, text: cmd.text, url: cmd.url }
         consecutiveErrors++
         callbacks.onRetryMessage(...)
-        // command 失败 → 继续检查 need_html/skill
+        // command 失败 → 继续检查 need_full/skill
       }
     }
 
-    // ── need_html → 搜索 HTML 片段后重试 ──
-    if (phase2Result.needHtml) {
-      const htmlFragments = searchByKeywords(phase2Result.needHtml.keywords)
-      lastError = `未找到 "${phase2Result.needHtml.description}" 对应元素`
-      lastFailedCommand = { action: 'click', description: phase2Result.needHtml.description }
-      lastHtmlFragments = htmlFragments
+    // ── need_full → 提取全页骨架后重试 ──
+    if (phase2Result.needFull) {
+      const fullSkeleton = extractFullPageSkeleton()
+      lastError = '当前视口骨架未找到目标元素，已提取全页骨架'
+      lastFailedCommand = null
+      lastFullSkeleton = fullSkeleton
       consecutiveErrors++
       continue
     }
@@ -828,7 +836,7 @@ private async callStreamingAI(
   completed: Array<{ action: string; elementId?: string; description?: string }>,
   lastError: string,
   lastFailedCommand?: { action: string; elementId?: string; description?: string; text?: string; url?: string } | null,
-  lastHtmlFragments?: string | null,
+  lastFullSkeleton?: string | null,
   coreRule = MODE_STREAMING,
 ): Promise<Phase2Result> {
   const adapter = createAdapter(model.provider || settings.provider)
@@ -836,7 +844,7 @@ private async callStreamingAI(
   const systemPrompt = PHASE2_SYSTEM_PROMPT
     .replace('{coreRule}', coreRule)
     .replace('{skillList}', skillList)
-  const userContent = buildStreamingUserMessage(text, skeleton, completed, lastError || undefined, lastFailedCommand || undefined, lastHtmlFragments || undefined)
+  const userContent = buildStreamingUserMessage(text, skeleton, completed, lastError || undefined, lastFailedCommand || undefined, lastFullSkeleton || undefined)
 
   let fullResponse = ''
   await adapter.chat(
@@ -861,7 +869,7 @@ private async callStreamingAI(
 **用户消息构建 buildStreamingUserMessage()：**
 
 ```typescript
-function buildStreamingUserMessage(text, skeleton, completed, lastError, lastFailedCommand, htmlFragments): string {
+function buildStreamingUserMessage(text, skeleton, completed, lastError, lastFailedCommand, fullSkeleton): string {
   const parts = []
   parts.push(`[原始请求] 用户: "${text}"`)
 
@@ -878,7 +886,7 @@ function buildStreamingUserMessage(text, skeleton, completed, lastError, lastFai
     parts.push(errorParts.join('\n'))
   }
 
-  if (htmlFragments) parts.push(`[相关HTML片段]\n${htmlFragments}`)
+  if (fullSkeleton) parts.push(`[全页骨架]\n${fullSkeleton}`)
 
   parts.push(`[当前页面骨架]\n${JSON.stringify(skeleton)}`)
 
@@ -894,7 +902,7 @@ function buildStreamingUserMessage(text, skeleton, completed, lastError, lastFai
 | `[已完成]` | completed.length > 0 | AI 知道哪些步骤已完成，不重复执行 |
 | `[上次错误]` | lastError 有值 | AI 知道哪里失败，调整策略 |
 | `[失败指令]` | lastFailedCommand 有值 | AI 看到具体的失败指令 JSON |
-| `[相关HTML片段]` | htmlFragments 有值 | need_html 搜索到的 HTML，AI 重新分析 |
+| `[全页骨架]` | fullSkeleton 有值 | need_full 触发时的全页骨架，AI 直接用 elementId |
 | `[当前页面骨架]` | 始终 | 页面可能已变化，AI 基于当前状态生成指令 |
 
 ### 5.5 指令去重机制
@@ -975,15 +983,15 @@ interface ExtractedTags {
   commands?: Command[]                           // [command] 列表
   skill?: { name: string; userText: string }     // [skill]
   isAction: boolean                              // 是否包含 [action]
-  needHtml?: NeedHtmlRequest                     // [need_html]
+  needFull?: boolean                              // [need_full]
   hasAnyTag: boolean                             // 是否提取到了任何标签
   rawText: string                                // 原始文本
 }
 
 function extractTags(rawText: string): ExtractedTags
-  // 正则匹配 [chat], [command](多条), [skill], [action], [need_html]
+  // 正则匹配 [chat], [command](多条), [skill], [action], [need_full]
   // 支持闭合标签 [tag]...[/tag] 和非闭合 fallback [tag]{...}
-  // [need_html] JSON 解析失败时有容错提取（正则提取 keywords/reason/description）
+  // [need_full] 无需 JSON 解析，检测到标签即触发
 
 function isChatOnlyReply(tags: ExtractedTags): boolean
   // 无操作标签 + 有文本 = true
@@ -999,13 +1007,13 @@ function getChatText(tags: ExtractedTags): string
 [action]    → 需要操作（Phase 1 输出）
 [command]   → 浏览器指令（支持多条，流式模式只取第一条）
 [skill]     → 技能触发
-[need_html] → 需要 HTML 片段兜底
+[need_full] → 需要全页骨架兜底
 ```
 
 **解析策略：**
 1. 闭合标签优先：`[tag]...[/tag]`
 2. 非闭合 fallback：`[tag]{...}`（取标签后的整个 JSON 对象）
-3. `[need_html]` 容错：JSON 解析失败时，正则提取 `keywords`、`reason`、`description` 字段
+3. `[need_full]` 无需 JSON，检测到标签即触发
 
 ---
 
@@ -1082,9 +1090,10 @@ export const PHASE2_SYSTEM_PROMPT = `\`\`\`
 - 定位: elementId > fallbackSelector > description
 - elementId来自骨架，找不到时填null用description定位
 
-[need_html] 骨架找不到目标时，关键词搜索页面HTML重新定位：
-[need_html]{"keywords":["收藏","按钮"],"reason":"骨架未找到","description":"点击收藏"}[/need_html]
-- keywords从用户原始语句提取
+[need_full] 当前视口骨架找不到目标时，输出此标签获取全页骨架：
+[need_full]
+- 系统会返回全页面所有可交互元素的骨架（格式同上）
+- 收到全页骨架后，直接用 elementId 生成 [command]
 
 能力域：
 ${CAPABILITY_DOMAIN}
@@ -1099,7 +1108,8 @@ ${CAPABILITY_DOMAIN}
 
 ═══ 规则 ═══
 
-- 标签必须闭合：[command]{...}[/command]、[skill]{...}[/skill]、[need_html]{...}[/need_html]
+- 标签必须闭合：[command]{...}[/command]、[skill]{...}[/skill]
+- [need_full] 不需要闭合，单独输出即可
 - 打开网站/搜索/滚动 → 直接[command]（不需要骨架）
 - 骨架中"(icon)"元素 → 检查aria-label/title判断功能
 
@@ -1108,7 +1118,7 @@ ${CAPABILITY_DOMAIN}
 ❌ 禁止输出分析/解释/说明/思考过程
 ❌ 禁止一次输出多条[command]，每次只能1条
 ❌ 禁止输出自然语言（如"好的，我来帮你..."、"让我分析一下..."）
-只输出 [command] / [skill] / [need_html] 标签，其他内容一律禁止。
+只输出 [command] / [skill] / [need_full] 标签，其他内容一律禁止。
 \`\`\``
 ```
 
@@ -1143,7 +1153,7 @@ function buildStreamingUserMessage(
   completed: Array<{...}>,         // 已执行步骤
   lastError?: string,              // 错误描述
   lastFailedCommand?: {...},       // 失败的指令 JSON
-  htmlFragments?: string,          // need_html 搜索到的 HTML 片段
+  fullSkeleton?: string,           // need_full 触发时的全页骨架 JSON
 ): string
 ```
 
@@ -1155,7 +1165,7 @@ function buildStreamingUserMessage(
 | `[已完成]` | `completed.length > 0` | `1. navigate https://...\n2. click e3 (登录)` |
 | `[上次错误]` | `lastError` 有值 | `[click] 元素不可见` |
 | `[失败指令]` | `lastFailedCommand` 有值 | `{"action":"click","elementId":"e5","description":"登录"}` |
-| `[相关HTML片段]` | `htmlFragments` 有值 | 清洗后的 HTML 元素 |
+| `[全页骨架]` | `fullSkeleton` 有值 | need_full 触发时的全页骨架 |
 | `[当前页面骨架]` | 始终 | `{"url":"...","elements":[...]}` |
 
 ### 8.5 发送给 AI 的完整内容（三种场景）
@@ -1178,9 +1188,10 @@ function buildStreamingUserMessage(
 - 定位: elementId > fallbackSelector > description
 - elementId来自骨架，找不到时填null用description定位
 
-[need_html] 骨架找不到目标时，关键词搜索页面HTML重新定位：
-[need_html]{"keywords":["收藏","按钮"],"reason":"骨架未找到","description":"点击收藏"}[/need_html]
-- keywords从用户原始语句提取
+[need_full] 当前视口骨架找不到目标时，输出此标签获取全页骨架：
+[need_full]
+- 系统会返回全页面所有可交互元素的骨架（格式同上）
+- 收到全页骨架后，直接用 elementId 生成 [command]
 
 能力域：
 navigate    — 打开URL（需url）
@@ -1210,7 +1221,8 @@ prevTab     — 切换到上一个标签页
 
 ═══ 规则 ═══
 
-- 标签必须闭合：[command]{...}[/command]、[skill]{...}[/skill]、[need_html]{...}[/need_html]
+- 标签必须闭合：[command]{...}[/command]、[skill]{...}[/skill]
+- [need_full] 不需要闭合，单独输出即可
 - 打开网站/搜索/滚动 → 直接[command]（不需要骨架）
 - 骨架中"(icon)"元素 → 检查aria-label/title判断功能
 
@@ -1219,7 +1231,7 @@ prevTab     — 切换到上一个标签页
 ❌ 禁止输出分析/解释/说明/思考过程
 ❌ 禁止一次输出多条[command]，每次只能1条
 ❌ 禁止输出自然语言（如"好的，我来帮你..."、"让我分析一下..."）
-只输出 [command] / [skill] / [need_html] 标签，其他内容一律禁止。
+只输出 [command] / [skill] / [need_full] 标签，其他内容一律禁止。
 
 ────────────────────────────────────
 
@@ -1288,9 +1300,9 @@ prevTab     — 切换到上一个标签页
 ]}
 ```
 
-#### 场景 4：错误重试 — need_html 触发后
+#### 场景 4：错误重试 — need_full 触发后
 
-`completed=[{action:"navigate",...}], lastError='未找到 "收藏" 对应元素', lastFailedCommand={action:"click",description:"收藏"}, htmlFragments='<a data-skeleton-id="e15" href="javascript:;">收藏</a>...', isFirstEntry=false`
+`completed=[{action:"navigate",...}], lastError='当前视口骨架未找到目标元素，已提取全页骨架', lastFailedCommand=null, lastFullSkeleton='{"url":"...","elements":[...,{"id":"e150","tag":"a","text":"收藏","parent":"main"},...]}', isFirstEntry=false`
 
 ```
 你是浏览器操作助手。只输出指令标签，禁止分析/解释/说明。
@@ -1306,12 +1318,16 @@ prevTab     — 切换到上一个标签页
 [已完成]
 1. navigate https://example.com/article/123
 
-[上次错误] 未找到 "收藏" 对应元素
-[失败指令] {"action":"click","description":"收藏"}
+[上次错误] 当前视口骨架未找到目标元素，已提取全页骨架
 
-[相关HTML片段]
-<a data-skeleton-id="e15" href="javascript:;">收藏</a>
-<button data-skeleton-id="e23" role="button">收藏本片</button>
+[全页骨架]
+{"url":"https://example.com/article/123","title":"文章详情","elements":[
+  {"id":"e6","tag":"a","text":"首页","parent":"header"},
+  {"id":"e10","tag":"a","text":"(icon)","parent":"header"},
+  {"id":"e150","tag":"a","text":"收藏","parent":"main"},
+  {"id":"e151","tag":"button","text":"收藏本片","parent":"main"},
+  {"id":"e57","tag":"a","text":"推荐本片"}
+]}
 
 [当前页面骨架]
 {"url":"https://example.com/article/123","title":"文章详情","elements":[
@@ -1331,7 +1347,7 @@ prevTab     — 切换到上一个标签页
 | `[已完成]` | ❌ | ✅ | ✅ |
 | `[上次错误]` | ❌ | ❌ | ✅ |
 | `[失败指令]` | ❌ | ❌ | ✅ |
-| `[相关HTML片段]` | ❌ | ❌ | ✅/❌ |
+| `[全页骨架]` | ❌ | ❌ | ✅/❌ |
 | `[当前页面骨架]` | ✅ | ✅ | ✅ |
 
 ### 8.7 IntentDetector 消息构建
@@ -1343,7 +1359,7 @@ IntentDetector 的 `callAI()` 方法构建消息列表：
 1. 获取历史上下文（最近 6 条消息，过滤空内容）
 2. 清洗重数据 `stripHeavyData()`：
    - 去掉骨架 JSON（`页面骨架:` 后的所有内容）
-   - 去掉 need_html 的 HTML 代码块（` ```html ... ``` `）
+   - 去掉全页骨架 JSON（`[全页骨架]:` 后的所有内容）
 3. 拼接 system prompt 到用户消息前面（`用户输入: ${userContent}`）
 4. 兼容不支持 system role 的 API
 
@@ -1373,7 +1389,7 @@ class InputPipeline {
   private async processPhase2WithRetry(text: string, callbacks: PipelineCallbacks): Promise<void>
     // 流式执行循环: 连续错误 < 5 次, 每次 1 条指令
 
-  private async callStreamingAI(text, skeleton, completed, lastError, lastFailedCommand, lastHtmlFragments, coreRule): Promise<Phase2Result>
+  private async callStreamingAI(text, skeleton, completed, lastError, lastFailedCommand, lastFullSkeleton, coreRule): Promise<Phase2Result>
     // 调用 AI 生成 1 条指令（流式），只取第一条 [command]
 }
 ```
@@ -1426,12 +1442,14 @@ class ActionExecutor {
 
 ```typescript
 // src/browser/skeleton.ts
-function extractSkeleton(doc: Document): SemanticSkeleton
+function extractSkeleton(doc: Document, scope?: 'viewport' | 'full'): SemanticSkeleton
+function extractFullSkeleton(doc: Document): SemanticSkeleton  // scope='full' 的快捷方式
 class SkeletonManager {
-  getSkeleton(): SemanticSkeleton   // 每次重新提取
-  invalidate(): void                 // 保留接口兼容
-  dispose(): void                    // 保留接口兼容
-  get cachedUrl(): string            // 保留接口兼容
+  getSkeleton(): SemanticSkeleton       // 视口骨架（每次重新提取）
+  getFullSkeleton(): SemanticSkeleton   // 全页骨架（每次重新提取）
+  invalidate(): void                     // 保留接口兼容
+  dispose(): void                        // 保留接口兼容
+  get cachedUrl(): string                // 保留接口兼容
 }
 ```
 
@@ -1535,17 +1553,17 @@ const SITE_ALIASES: Record<string, string[]> = {
 ```
 src/
 ├── browser/
-│   ├── types.ts                    # SkeletonElement, Command, ActionResult, NeedHtmlRequest, INTERACTIVE_TAGS
-│   ├── skeleton.ts                 # extractSkeleton() + SkeletonManager（无缓存，每次重新提取）
+│   ├── types.ts                    # SkeletonElement, Command, ActionResult, INTERACTIVE_TAGS
+│   ├── skeleton.ts                 # extractSkeleton() + extractFullSkeleton() + SkeletonManager（无缓存，每次重新提取）
 │   ├── action-executor.ts          # ActionExecutor（16 种操作 + 三重定位 + 完整事件序列）
-│   ├── local-html.ts               # searchByKeywords()（全页面 DOM 搜索 + 关键词 OR 匹配 + iframe）
+│   ├── local-html.ts               # extractFullPageSkeleton()（全页骨架提取，兜底用）
 │   └── index.ts
 ├── input/
 │   ├── types.ts                    # InputContext, InputResult, PipelineCallbacks
 │   ├── router.ts                   # InputRouter → builtin/skill/ai 分流（/ 前缀解析）
 │   ├── intent-detector.ts          # IntentDetector（Phase 1 二分类 + Phase 2 保留接口 + 历史消息清洗）
 │   ├── pipeline.ts                 # InputPipeline（流式单条执行 + 连续错误重试 + 指令去重 + abort 支持）
-│   ├── tag-parser.ts               # extractTags() + isChatOnlyReply() + getChatText() + need_html 容错
+│   ├── tag-parser.ts               # extractTags() + isChatOnlyReply() + getChatText() + need_full 检测
 │   ├── prompts.ts                  # 所有 AI 提示词（Phase1/Phase2 + 3 种模式常量 + 消息构建函数）
 │   └── index.ts
 ├── composables/
@@ -1661,7 +1679,7 @@ entrypoints/
 |---------|---------|---------|
 | 元素未找到 | `findElement()` 返回 null | `lastError = "[action] 未找到目标元素"` → consecutiveErrors++ → 重试 |
 | 执行异常 | `execute()` 抛出异常 | `lastError = "[action] 执行异常: ..."` → consecutiveErrors++ → 重试 |
-| need_html | AI 输出 `[need_html]` 标签 | `searchByKeywords()` → consecutiveErrors++ → 重试 |
+| need_full | AI 输出 `[need_full]` 标签 | `extractFullPageSkeleton()` → consecutiveErrors++ → 重试 |
 | 技能失败 | `onSkillActivate()` 返回失败 | `lastError = "技能 xxx 执行失败"` → consecutiveErrors++ → 重试 |
 | AI 无输出 | adapter 返回空字符串 | `break`（视为任务完成） |
 | 无有效标签 | extractTags 未提取到任何标签 | `break`（视为任务完成） |
@@ -1688,10 +1706,10 @@ while (consecutiveErrors < 5):
     成功 → completed.push, completedKeys.add, consecutiveErrors=0
          → done=1? break : wait 500ms → 下一轮
     失败 → lastError, lastFailedCommand, consecutiveErrors++
-         → 继续检查 need_html/skill
+         → 继续检查 need_full/skill
 
-  need_html:
-    searchByKeywords() → lastHtmlFragments
+  need_full:
+    extractFullPageSkeleton() → lastFullSkeleton
     consecutiveErrors++ → 继续循环
 
   skill:
@@ -1754,8 +1772,7 @@ AI 根据这些信息：
 - [x] 指令去重（completedKeys Set + cmdKey 匹配）
 - [x] 连续错误计数重试（最多 5 次，中间成功重置计数）
 - [x] abort 支持（AbortController + signal 检查）
-- [x] `[need_html]` 关键词搜索兜底（全页面 DOM + iframe + OR 匹配 + HTML 清洗）
-- [x] `[need_html]` 容错提取（JSON 解析失败时正则提取 keywords/reason/description）
+- [x] `[need_full]` 全页骨架兜底（全页面 DOM + iframe + 同格式骨架 + 无元素上限）
 - [x] 流式标签检测（Phase 1 流式输出时正则检测 [action]/[command]/[skill]）
 - [x] 提示词集中在 prompts.ts（模板 + 占位符运行时替换）
 - [x] Background CORS 代理（proxy-fetch-stream + 流转发 + 中止支持）

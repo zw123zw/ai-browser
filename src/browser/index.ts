@@ -2,13 +2,13 @@
  * 浏览器命令执行层
  */
 
-export { extractSkeleton, SkeletonManager } from './skeleton'
+export { extractSkeleton, extractFullSkeleton, SkeletonManager } from './skeleton'
+export type { SkeletonScope } from './skeleton'
 export { ActionExecutor } from './action-executor'
-export { searchByKeywords } from './local-html'
+export { extractFullPageSkeleton } from './local-html'
 export type {
   SkeletonElement,
   SemanticSkeleton,
   Command,
   ActionResult,
-  NeedHtmlRequest,
 } from './types'

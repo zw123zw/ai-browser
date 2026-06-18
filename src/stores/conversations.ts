@@ -8,6 +8,7 @@ import { useSettingsStore } from './settings';
 import { createAdapter } from '@/src/adapters';
 import { defineStorageSync } from '@/src/utils/storage-sync';
 import { checkAndAutoClear } from '@/src/utils/cache';
+import { abortPipeline } from '@/src/composables/usePipeline';
 import { Logger } from '@/src/utils/logger';
 
 const log = new Logger('Store:Conversations');
@@ -80,6 +81,8 @@ export const useConversationsStore = defineStore('aib-conversations', () => {
   /** 清除当前会话的历史记录和上下文 */
   async function clearCurrent() {
     if (!conversation.value) return;
+    // 中断进行中的 pipeline 指令流
+    abortPipeline();
     // 中断进行中的请求
     if (currentAborter) {
       currentAborter.abort();
@@ -96,6 +99,8 @@ export const useConversationsStore = defineStore('aib-conversations', () => {
 
   /** 彻底重置会话（清除缓存时使用，同时清空内存状态） */
   async function resetConversation() {
+    // 中断进行中的 pipeline 指令流
+    abortPipeline();
     if (currentAborter) {
       currentAborter.abort();
       currentAborter = null;

@@ -85,9 +85,10 @@ export const PHASE2_SYSTEM_PROMPT = `\`\`\`
 - 定位: elementId > fallbackSelector > description
 - elementId来自骨架，找不到时填null用description定位
 
-[need_html] 骨架找不到目标时，关键词搜索页面HTML重新定位：
-[need_html]{"keywords":["收藏","按钮"],"reason":"骨架未找到","description":"点击收藏"}[/need_html]
-- keywords从用户原始语句提取
+[need_full] 当前视口骨架找不到目标时，输出此标签获取全页骨架：
+[need_full]
+- 系统会返回全页面所有可交互元素的骨架（格式同上）
+- 收到全页骨架后，直接用 elementId 生成 [command]
 
 能力域：
 ${CAPABILITY_DOMAIN}
@@ -102,7 +103,8 @@ ${CAPABILITY_DOMAIN}
 
 ═══ 规则 ═══
 
-- 标签必须闭合：[command]{...}[/command]、[skill]{...}[/skill]、[need_html]{...}[/need_html]
+- 标签必须闭合：[command]{...}[/command]、[skill]{...}[/skill]
+- [need_full] 不需要闭合，单独输出即可
 - 打开网站/搜索/滚动 → 直接[command]（不需要骨架）
 - 骨架中"(icon)"元素 → 检查aria-label/title判断功能
 
@@ -111,7 +113,7 @@ ${CAPABILITY_DOMAIN}
 ❌ 禁止输出分析/解释/说明/思考过程
 ❌ 禁止一次输出多条[command]，每次只能1条
 ❌ 禁止输出自然语言（如"好的，我来帮你..."、"让我分析一下..."）
-只输出 [command] / [skill] / [need_html] 标签，其他内容一律禁止。
+只输出 [command] / [skill] / [need_full] 标签，其他内容一律禁止。
 \`\`\``
 
 /** 首次进入模式说明 */
@@ -149,7 +151,7 @@ export function buildStreamingUserMessage(
   completed: Array<{ action: string; elementId?: string; description?: string }>,
   lastError?: string,
   lastFailedCommand?: { action: string; elementId?: string; description?: string; text?: string; url?: string } | null,
-  htmlFragments?: string,
+  fullSkeleton?: string,
 ): string {
   const parts: string[] = []
 
@@ -171,8 +173,8 @@ export function buildStreamingUserMessage(
     parts.push(errorParts.join('\n'))
   }
 
-  if (htmlFragments) {
-    parts.push(`[相关HTML片段]\n${htmlFragments}`)
+  if (fullSkeleton) {
+    parts.push(`[全页骨架]\n${fullSkeleton}`)
   }
 
   parts.push(`[当前页面骨架]\n${JSON.stringify(skeleton)}`)

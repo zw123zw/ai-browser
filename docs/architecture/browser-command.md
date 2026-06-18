@@ -32,8 +32,8 @@ flowchart TD
     end
 
     subgraph 兜底层
-        H -->|全部失败| N[searchByKeywords]
-        N --> O[清洗 HTML 片段]
+        H -->|全部失败| N[need_full]
+        N --> O[提取全页骨架]
         O --> E
     end
 ```
@@ -337,19 +337,18 @@ mousedown → focus → mouseup → click
 
 通过 `chrome.runtime.sendMessage` 调用 background 的 `tabs` API 代理执行，避免 popup 页面的权限限制。
 
-### searchByKeywords（关键词 HTML 搜索）
+### extractFullPageSkeleton（全页骨架提取）
 
 `src/browser/local-html.ts`
 
-当骨架无法定位目标元素时的兜底机制。AI 提供关键词，在整个页面 DOM 中搜索可交互元素，提取清洗后的 HTML 片段发给 AI 重新分析。
+当视口骨架无法定位目标元素时的兜底机制。AI 输出 `[need_full]` 标签，系统提取全页面所有可交互元素的骨架（与视口骨架格式一致），AI 直接使用 `elementId` 生成指令。
 
 **流程：**
 
-1. `ensureAllSkeletonIds()` 全量打标
-2. 在主文档和同源 iframe 中搜索匹配关键词的可交互元素
-3. 关键词 OR 匹配：任一关键词在 `textContent`/`aria-label`/`placeholder`/`title`/`value`/`alt` 中出现即命中
-4. `label` 匹配时同时返回关联的表单元素
-5. `cleanElement()` 清洗 HTML：只保留关键属性（`data-skeleton-id`/`href`/`src`/`type`/`name`/`placeholder`/`value`/`role`/`aria-label`/`title`/`for`/`id`），移除 `script`/`style`/`noscript`，压缩空白
+1. 调用 `extractFullSkeleton(document)` 提取全页骨架
+2. 与视口骨架逻辑完全一致（可交互性检测 → 可见性检测 → 提取元素 → 地标标注 → iframe → 去重）
+3. 唯一区别：跳过视口边界检测，不限制元素数量
+4. 返回 JSON 字符串，AI 直接解析 elementId
 
 ## 数据流
 
@@ -380,11 +379,13 @@ sequenceDiagram
 
     alt 元素未找到
         AE->>UI: 返回失败
-        UI->>SM: searchByKeywords(keywords)
-        SM->>DOM: 关键词搜索
-        SM-->>UI: 清洗后的 HTML 片段
-        UI->>AI: 发送 HTML 片段 + 用户意图
-        AI-->>UI: 新的 Command JSON
+        UI->>AI: 发送骨架 + 错误信息
+        AI-->>UI: [need_full]
+        UI->>SM: getFullSkeleton()
+        SM->>DOM: 全页骨架提取（无视口限制）
+        SM-->>UI: SemanticSkeleton（全页）
+        UI->>AI: 发送全页骨架 + 用户意图
+        AI-->>UI: 新的 Command JSON（含 elementId）
         UI->>AE: execute(Command)
     end
 ```
@@ -398,9 +399,9 @@ elementId 未命中
   → fallbackSelector 未命中
     → description 文本匹配未命中
       → 返回 ActionResult { success: false }
-        → 调用方触发 searchByKeywords 兜底
-          → 提取清洗 HTML 片段发给 AI 重新分析
-            → AI 生成新的 Command
+        → AI 输出 [need_full]
+          → 提取全页骨架（同格式，无上限）
+            → AI 用 elementId 生成新的 Command
 ```
 
 ### 异常捕获
@@ -428,11 +429,11 @@ elementId 未命中
 ```
 src/browser/
 ├── index.ts              # 模块入口，统一导出
-├── types.ts              # 类型定义：SkeletonElement, SemanticSkeleton, Command, ActionResult, NeedHtmlRequest
+├── types.ts              # 类型定义：SkeletonElement, SemanticSkeleton, Command, ActionResult
 ├── skeleton-id.ts        # data-skeleton-id 打标工具：ensureAllSkeletonIds(), ensureSkeletonId()
-├── skeleton.ts           # 骨架管理器：SkeletonManager 类 + extractSkeleton() 提取函数
+├── skeleton.ts           # 骨架管理器：SkeletonManager 类 + extractSkeleton() + extractFullSkeleton()
 ├── action-executor.ts    # 指令执行引擎：ActionExecutor 类，三重定位 + 完整事件序列
-├── local-html.ts         # 关键词 HTML 搜索：searchByKeywords() 兜底机制
+├── local-html.ts         # 全页骨架提取：extractFullPageSkeleton() 兜底机制
 ├── code-filter.ts        # 代码过滤（辅助）
 ├── translate-parser.ts   # 翻译解析器
 ├── translate-click.ts    # 翻译点击处理

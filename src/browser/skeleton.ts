@@ -19,7 +19,10 @@ const log = new Logger('Skeleton')
 const LANDMARK_TAGS = ['nav', 'header', 'main', 'aside', 'footer']
 const LANDMARK_ROLES = ['navigation', 'banner', 'main', 'complementary', 'contentinfo']
 
-/** 骨架最大元素数（减少 token 消耗） */
+/** 骨架提取范围 */
+export type SkeletonScope = 'viewport' | 'full'
+
+/** 视口骨架最大元素数（减少 token 消耗） */
 const MAX_SKELETON_ELEMENTS = 200
 
 /**
@@ -33,8 +36,22 @@ export class SkeletonManager {
    * 获取当前可视窗口内的语义骨架（每次重新提取）
    */
   getSkeleton(): SemanticSkeleton {
-    const skeleton = extractSkeleton(document)
+    const skeleton = extractSkeleton(document, 'viewport')
     log.info('骨架提取（viewport）', {
+      url: skeleton.url,
+      elements: skeleton.elements.length,
+    })
+    return skeleton
+  }
+
+  /**
+   * 获取全页面的语义骨架（每次重新提取，无元素上限）
+   *
+   * 当视口骨架找不到目标元素时，AI 输出 [need_full] 触发。
+   */
+  getFullSkeleton(): SemanticSkeleton {
+    const skeleton = extractSkeleton(document, 'full')
+    log.info('骨架提取（full）', {
       url: skeleton.url,
       elements: skeleton.elements.length,
     })
@@ -58,15 +75,18 @@ export class SkeletonManager {
 }
 
 /**
- * 从当前页面可视窗口内提取可点击元素骨架
+ * 从当前页面提取可点击元素骨架
  *
  * 1. querySelectorAll('*') 获取所有元素
  * 2. 过滤可交互元素（a/button/input/onclick/cursor:pointer 等）
  * 3. 检查可见性（display:none/visibility:hidden/offsetParent）
- * 4. 检查是否在视口内（垂直+水平）
+ * 4. 检查是否在视口内（垂直+水平）— 仅 viewport 模式
  * 5. 过滤空文本 + 按 parent+text 去重
+ *
+ * @param doc 文档对象
+ * @param scope 'viewport'（默认，仅视口内，200 上限）| 'full'（全页面，无上限）
  */
-export function extractSkeleton(doc: Document): SemanticSkeleton {
+export function extractSkeleton(doc: Document, scope: SkeletonScope = 'viewport'): SemanticSkeleton {
   const elements: SkeletonElement[] = []
   const domParentIdMap = new Map<string, string>()
   const existingIds = new Map<string, boolean>()
@@ -95,12 +115,15 @@ export function extractSkeleton(doc: Document): SemanticSkeleton {
       if (!isClickable(htmlEl)) continue
       if (!isElementVisible(htmlEl)) continue
 
-      const rect = htmlEl.getBoundingClientRect()
-      const top = rect.top + vpOffsetY, bottom = rect.bottom + vpOffsetY
-      const left = rect.left + vpOffsetX, right = rect.right + vpOffsetX
-      if (top >= viewportHeight || bottom <= 0) continue
-      if (left >= viewportWidth || right <= 0) continue
-      if (rect.width < 1 || rect.height < 1) continue
+      // viewport 模式：检查是否在视口内；full 模式：跳过视口检测
+      if (scope === 'viewport') {
+        const rect = htmlEl.getBoundingClientRect()
+        const top = rect.top + vpOffsetY, bottom = rect.bottom + vpOffsetY
+        const left = rect.left + vpOffsetX, right = rect.right + vpOffsetX
+        if (top >= viewportHeight || bottom <= 0) continue
+        if (left >= viewportWidth || right <= 0) continue
+        if (rect.width < 1 || rect.height < 1) continue
+      }
 
       if (forceParent && existingIds.has(id)) continue
 
@@ -180,7 +203,10 @@ export function extractSkeleton(doc: Document): SemanticSkeleton {
     }
     return true
   })
-  const final = filtered.length > MAX_SKELETON_ELEMENTS ? filtered.slice(0, MAX_SKELETON_ELEMENTS) : filtered
+  // viewport 模式有元素上限，full 模式无上限
+  const final = scope === 'viewport' && filtered.length > MAX_SKELETON_ELEMENTS
+    ? filtered.slice(0, MAX_SKELETON_ELEMENTS)
+    : filtered
 
   log.info('骨架提取完成', {
     scannedCount,
@@ -272,7 +298,12 @@ function extractElement(el: HTMLElement, id: string): SkeletonElement | null {
   return base
 }
 
-/** 检查元素是否可见 */
+/**
+ * 检查元素是否可见
+ *
+ * 两种模式共用同一逻辑：display:none / visibility:hidden / offsetParent
+ * 区别仅在调用方是否做视口边界检测
+ */
 function isElementVisible(el: HTMLElement): boolean {
   const style = window.getComputedStyle(el)
   // display:none 或 visibility:hidden → 不可见
@@ -371,4 +402,14 @@ function findLandmarkParent(el: HTMLElement): string | undefined {
     current = current.parentElement
   }
   return undefined
+}
+
+/**
+ * 提取全页面骨架（无元素上限）
+ *
+ * [need_full] 触发时调用，与视口骨架格式一致，
+ * 覆盖所有可交互元素（含视口外），AI 直接用 elementId 定位。
+ */
+export function extractFullSkeleton(doc: Document): SemanticSkeleton {
+  return extractSkeleton(doc, 'full')
 }

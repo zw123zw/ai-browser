@@ -2,7 +2,7 @@
  * 意图检测器
  *
  * Phase 1: 意图检测（轻量模型）— 只做二分类：聊天 or [action]
- * Phase 2: 操作决策（主力模型）— 从 AI 自然回复中提取 [command]/[skill]/[need_html]
+ * Phase 2: 操作决策（主力模型）— 从 AI 自然回复中提取 [command]/[skill]/[need_full]
  */
 
 import { Logger } from '@/src/utils/logger'
@@ -14,7 +14,7 @@ import {
   buildPhase2UserMessage,
 } from './prompts'
 import type { AppSettings, ChatMessage } from '@/src/types'
-import type { SemanticSkeleton, Command, NeedHtmlRequest } from '@/src/browser/types'
+import type { SemanticSkeleton, Command } from '@/src/browser/types'
 
 const log = new Logger('IntentDetector')
 
@@ -36,7 +36,7 @@ export interface Phase1Detection {
 export interface Phase2Result {
   commands?: Command[]
   skill?: { name: string; userText: string }
-  needHtml?: NeedHtmlRequest
+  needFull?: boolean
   rawAiOutput: string
 }
 
@@ -125,13 +125,13 @@ export class IntentDetector {
       commandsCount: tags.commands?.length || 0,
       commands: tags.commands?.map(c => ({ action: c.action, elementId: c.elementId, description: c.description })),
       skill: tags.skill,
-      needHtml: tags.needHtml ? { keywords: tags.needHtml.keywords, reason: tags.needHtml.reason } : undefined,
+      needFull: tags.needFull,
     })
 
-    // 提取到有效标签（need_html 由 pipeline 统一处理）
-    if (tags.commands?.length || tags.skill || tags.needHtml) {
+    // 提取到有效标签（need_full 由 pipeline 统一处理）
+    if (tags.commands?.length || tags.skill || tags.needFull) {
       log.info('[Phase 2] ─── 提取成功 ───')
-      return { commands: tags.commands, skill: tags.skill, needHtml: tags.needHtml, rawAiOutput: aiOutput }
+      return { commands: tags.commands, skill: tags.skill, needFull: tags.needFull, rawAiOutput: aiOutput }
     }
 
     log.warn('[Phase 2] ─── 未提取到有效标签 ───')
@@ -248,7 +248,7 @@ export class IntentDetector {
 }
 
 /**
- * 去掉历史消息中的重数据（骨架 JSON、need_html HTML 等）
+ * 去掉历史消息中的重数据（骨架 JSON、全页骨架 JSON 等）
  * 保留用户输入和 AI 回复的关键信息，减少 token 消耗
  */
 function stripHeavyData(content: string): string {
@@ -257,8 +257,8 @@ function stripHeavyData(content: string): string {
   // 1. 去掉骨架 JSON（页面骨架: 后面的所有内容，直到双换行或结尾）
   result = result.replace(/页面骨架:\n[\s\S]*?(?=\n\n|$)/g, '页面骨架: [已省略]')
 
-  // 2. 去掉 need_html 的 HTML 代码块
-  result = result.replace(/```html\n[\s\S]*?\n```/g, '[HTML已省略]')
+  // 2. 去掉全页骨架 JSON（[全页骨架] 后面的所有内容）
+  result = result.replace(/\[全页骨架\]\n[\s\S]*?(?=\n\n|$)/g, '[全页骨架]: [已省略]')
 
   return result
 }

@@ -4,7 +4,7 @@
  * 完整日志覆盖：路由 → Phase 1 → Phase 2 → 标签提取 → 指令执行 → 重试
  *
  * 重试设计：
- * - 所有错误类型（标签提取失败、指令执行失败、need_html）统一处理
+ * - 所有错误类型（标签提取失败、指令执行失败、need_full）统一处理
  * - 最多重试 5 次
  * - 每次重试：新骨架 + 错误 + HTML 片段 + 已完成指令列表
  * - AI 每次返回完整指令，代码用兜底 key 跳过已完成的
@@ -15,7 +15,7 @@ import { InputRouter } from './router'
 import { IntentDetector } from './intent-detector'
 import { ActionExecutor } from '@/src/browser/action-executor'
 import { SkeletonManager } from '@/src/browser/skeleton'
-import { searchByKeywords } from '@/src/browser/local-html'
+import { extractFullPageSkeleton } from '@/src/browser/local-html'
 import { extractTags } from './tag-parser'
 import { PHASE2_SYSTEM_PROMPT, buildStreamingUserMessage, MODE_FIRST, MODE_STREAMING, MODE_RETRY } from './prompts'
 import type { InputContext, PipelineCallbacks } from './types'
@@ -144,7 +144,7 @@ export class InputPipeline {
     let consecutiveErrors = 0
     let lastError = ''
     let lastFailedCommand: { action: string; elementId?: string; description?: string; text?: string; url?: string } | null = null
-    let lastHtmlFragments: string | null = null
+    let lastFullSkeleton: string | null = null
 
     while (consecutiveErrors < MAX_RETRY) {
       // ★ 检查 abort signal，支持用户中途停止
@@ -166,18 +166,18 @@ export class InputPipeline {
       // AI 生成 1 条指令（根据进入模式选择提示词）
       const isFirstEntry = completed.length === 0 && !lastError
       const coreRule = isFirstEntry ? MODE_FIRST : (lastError ? MODE_RETRY : MODE_STREAMING)
-      const phase2Result = await this.callStreamingAI(text, skeleton, completed, lastError, lastFailedCommand, lastHtmlFragments, coreRule)
+      const phase2Result = await this.callStreamingAI(text, skeleton, completed, lastError, lastFailedCommand, lastFullSkeleton, coreRule)
 
       // ── 无标签 → AI 无输出，任务完成 ──
-      if (!phase2Result.commands?.length && !phase2Result.skill && !phase2Result.needHtml) {
+      if (!phase2Result.commands?.length && !phase2Result.skill && !phase2Result.needFull) {
         log.info('[Phase 2] ═══ AI 无更多指令，任务完成 ═══')
         break
       }
 
-      // ── command → 执行单条指令（优先于 need_html） ──
-      // command + need_html 同时返回时：先执行 command（如输入手机号），
+      // ── command → 执行单条指令（优先于 need_full） ──
+      // command + need_full 同时返回时：先执行 command（如输入手机号），
       // 成功后骨架会刷新，下一轮 AI 就能从新骨架找到目标（如"获取验证码"），
-      // 不需要走 need_html 兜底。
+      // 不需要走 need_full 兜底。
       if (phase2Result.commands?.length) {
         const cmd = phase2Result.commands[0]
         log.info('[Phase 2] ── 执行指令 ──', {
@@ -216,7 +216,7 @@ export class InputPipeline {
           consecutiveErrors = 0
           lastError = ''
           lastFailedCommand = null
-          lastHtmlFragments = null
+          lastFullSkeleton = null
 
           // navigate 后等待页面加载
           if (cmd.action === 'navigate') {
@@ -229,9 +229,9 @@ export class InputPipeline {
             break
           }
 
-          // command 成功 → 跳过同响应的 need_html/skill，等骨架刷新后下一轮处理
-          if (phase2Result.needHtml) {
-            log.info('[Phase 2] → 跳过 need_html（指令执行成功，等待骨架刷新）')
+          // command 成功 → 跳过同响应的 need_full/skill，等骨架刷新后下一轮处理
+          if (phase2Result.needFull) {
+            log.info('[Phase 2] → 跳过 need_full（指令执行成功，等待骨架刷新）')
           }
 
           // 等待页面更新（弹窗/新内容渲染），再进入下一轮提取骨架
@@ -243,21 +243,18 @@ export class InputPipeline {
           consecutiveErrors++
           log.warn('[Phase 2] 指令执行失败', { action: cmd.action, error: lastError })
           callbacks.onRetryMessage(`🔄 正在重试... (${consecutiveErrors}/${MAX_RETRY})`, completed.length + 1, lastFailedCommand)
-          // command 失败 → 继续检查 need_html/skill
+          // command 失败 → 继续检查 need_full/skill
         }
       }
 
-      // ── need_html → 搜索 HTML 片段后重试 ──
-      if (phase2Result.needHtml) {
-        log.info('[Phase 2] → need_html', {
-          keywords: phase2Result.needHtml.keywords,
-          reason: phase2Result.needHtml.reason,
-        })
-        const htmlFragments = searchByKeywords(phase2Result.needHtml.keywords)
-        log.info('[Phase 2] 关键词搜索结果', { found: !!htmlFragments })
-        lastError = `未找到 "${phase2Result.needHtml.description}" 对应元素`
-        lastFailedCommand = { action: 'click', description: phase2Result.needHtml.description }
-        lastHtmlFragments = htmlFragments
+      // ── need_full → 提取全页骨架后重试 ──
+      if (phase2Result.needFull) {
+        log.info('[Phase 2] → need_full')
+        const fullSkeleton = extractFullPageSkeleton()
+        log.info('[Phase 2] 全页骨架提取结果', { found: !!fullSkeleton })
+        lastError = '当前视口骨架未找到目标元素，已提取全页骨架'
+        lastFailedCommand = null
+        lastFullSkeleton = fullSkeleton
         consecutiveErrors++
         callbacks.onRetryMessage(`🔄 正在重试... (${consecutiveErrors}/${MAX_RETRY})`, completed.length + 1, lastFailedCommand)
         continue
@@ -307,7 +304,7 @@ export class InputPipeline {
     completed: Array<{ action: string; elementId?: string; description?: string }>,
     lastError: string,
     lastFailedCommand?: { action: string; elementId?: string; description?: string; text?: string; url?: string } | null,
-    lastHtmlFragments?: string | null,
+    lastFullSkeleton?: string | null,
     coreRule = MODE_STREAMING,
   ): Promise<import('./intent-detector').Phase2Result> {
     const settings = this.options.getSettings()
@@ -325,7 +322,7 @@ export class InputPipeline {
     const systemPrompt = PHASE2_SYSTEM_PROMPT
       .replace('{coreRule}', coreRule)
       .replace('{skillList}', skillList)
-    const userContent = buildStreamingUserMessage(text, skeleton, completed, lastError || undefined, lastFailedCommand || undefined, lastHtmlFragments || undefined)
+    const userContent = buildStreamingUserMessage(text, skeleton, completed, lastError || undefined, lastFailedCommand || undefined, lastFullSkeleton || undefined)
 
     log.info('[流式] ═══ AI 请求 ═══', {
       skeletonElements: skeleton.elements.length,
@@ -374,13 +371,13 @@ export class InputPipeline {
       description: firstCommand?.[0]?.description,
       done: firstCommand?.[0]?.done,
       hasSkill: !!tags.skill,
-      hasNeedHtml: !!tags.needHtml,
+      hasNeedFull: !!tags.needFull,
     })
 
     return {
       commands: firstCommand,
       skill: tags.skill,
-      needHtml: tags.needHtml,
+      needFull: tags.needFull,
       rawAiOutput: fullResponse,
     }
   }

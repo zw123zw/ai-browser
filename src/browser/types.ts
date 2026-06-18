@@ -48,9 +48,3 @@ export interface ActionResult {
   message: string
 }
 
-/** [need_html] 请求 */
-export interface NeedHtmlRequest {
-  keywords: string[] // AI 对用户意图分词，用于在页面 HTML 中搜索
-  reason: string     // 为什么需要 HTML
-  description: string // 操作描述
-}

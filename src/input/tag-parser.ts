@@ -10,7 +10,7 @@
  */
 
 import { Logger } from '@/src/utils/logger'
-import type { Command, NeedHtmlRequest } from '@/src/browser/types'
+import type { Command } from '@/src/browser/types'
 
 const log = new Logger('TagParser')
 
@@ -24,8 +24,8 @@ export interface ExtractedTags {
   skill?: { name: string; userText: string }
   /** 是否包含 [action] 标记 */
   isAction: boolean
-  /** 提取到的 [need_html] */
-  needHtml?: NeedHtmlRequest
+  /** 提取到的 [need_full] */
+  needFull?: boolean
   /** 是否提取到了任何标签 */
   hasAnyTag: boolean
   /** 原始文本 */
@@ -95,29 +95,10 @@ export function extractTags(rawText: string): ExtractedTags {
     result.hasAnyTag = true
   }
 
-  // [need_html] 提取 — 先匹配闭合标签，匹配不到则取 [need_html] 后的整个 JSON 对象
-  const htmlMatch = rawText.match(/\[need_html\]([\s\S]*?)\[\/need_html\]/)
-    || rawText.match(/\[need_html\](\{[\s\S]*\})/)
-  if (htmlMatch) {
-    try {
-      result.needHtml = JSON.parse(htmlMatch[1].trim())
-      result.hasAnyTag = true
-    } catch {
-      log.warn('need_html JSON 解析失败，尝试容错提取', { raw: htmlMatch[1].slice(0, 200) })
-      // 容错：尝试提取 keywords、reason、description 字段
-      const keywords = htmlMatch[1].match(/"keywords"\s*:\s*(\[[^\]]*\])/)?.[1]
-      const reason = htmlMatch[1].match(/"reason"\s*:\s*"([^"]*)"/)?.[1]
-      const description = htmlMatch[1].match(/"description"\s*:\s*"([^"]*)"/)?.[1]
-      if (keywords && description) {
-        try {
-          result.needHtml = { keywords: JSON.parse(keywords), reason: reason || '', description }
-          result.hasAnyTag = true
-          log.info('need_html 容错提取成功', result.needHtml)
-        } catch {
-          log.warn('need_html 容错提取也失败了')
-        }
-      }
-    }
+  // [need_full] 提取 — 无需 JSON，检测到标签即触发
+  if (rawText.includes('[need_full]')) {
+    result.needFull = true
+    result.hasAnyTag = true
   }
 
   return result
@@ -126,11 +107,11 @@ export function extractTags(rawText: string): ExtractedTags {
 /**
  * 判断 Phase 1 的回复是否是纯聊天（无任何操作标签）
  *
- * 纯聊天 = 有文本内容 + 没有 [action]/[command]/[skill]/[need_html] 标签
+ * 纯聊天 = 有文本内容 + 没有 [action]/[command]/[skill]/[need_full] 标签
  */
 export function isChatOnlyReply(tags: ExtractedTags): boolean {
   // 有操作类标签 → 不是纯聊天
-  if (tags.isAction || tags.commands?.length || tags.skill || tags.needHtml) {
+  if (tags.isAction || tags.commands?.length || tags.skill || tags.needFull) {
     return false
   }
   // 有 [chat] 标签 → 是纯聊天
