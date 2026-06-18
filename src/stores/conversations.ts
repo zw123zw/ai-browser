@@ -110,6 +110,17 @@ export const useConversationsStore = defineStore('zwf-conversations', () => {
     log.info('已清除当前会话历史和上下文');
   }
 
+  /** 彻底重置会话（清除缓存时使用，同时清空内存状态） */
+  async function resetConversation() {
+    if (currentAborter) {
+      currentAborter.abort();
+      currentAborter = null;
+    }
+    conversation.value = createDefaultConversation();
+    contextCleared.value = false;
+    log.info('会话已彻底重置');
+  }
+
   /** 删除单条消息 */
   function deleteMessage(msgId: string) {
     if (!conversation.value) return;
@@ -258,6 +269,7 @@ export const useConversationsStore = defineStore('zwf-conversations', () => {
     contextCleared,
     init,
     clearCurrent,
+    resetConversation,
     deleteMessage,
     updateScroll,
     send,

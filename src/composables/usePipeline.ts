@@ -18,6 +18,14 @@ const log = new Logger('usePipeline')
 
 const isProcessing = ref(false)
 
+/** 模块级别的 abort 引用，供外部（清除会话/缓存）调用 */
+let _abortFn: (() => void) | null = null
+
+/** 中止 pipeline（模块级函数，供清除会话/缓存时调用） */
+export function abortPipeline() {
+  _abortFn?.()
+}
+
 export function usePipeline() {
   const convStore = useConversationsStore()
   const settingsStore = useSettingsStore()
@@ -265,7 +273,11 @@ export function usePipeline() {
     log.debug('中止 pipeline 请求')
     currentAborter?.abort()
     currentAborter = null
+    isProcessing.value = false
   }
+
+  // 注册模块级 abort 引用
+  _abortFn = abort
 
   return { isProcessing, processInput, executeCommand, addSystemMessage, abort }
 }

@@ -2,35 +2,48 @@
 import { computed, nextTick, reactive, ref, watch } from 'vue';
 import { v4 as uuid } from 'uuid';
 import { useSettingsStore } from '@/src/stores/settings';
+import { useConversationsStore } from '@/src/stores/conversations';
 import { useToast } from '@/src/composables/useToast';
+import { abortPipeline } from '@/src/composables/usePipeline';
 import type { ModelConfig, Provider } from '@/src/types';
 import { eventToShortcut } from '@/src/utils/shortcut';
 import { THEMES } from '@/src/themes';
+import ConfirmDialog from './ConfirmDialog.vue';
 
 const emit = defineEmits<{ (e: 'close'): void }>();
 const store = useSettingsStore();
 const toast = useToast();
 
-// ========== License & 日志 ==========
+// ========== License & 缓存 ==========
 const licenseKey = ref('');
 const logEnabled = !!import.meta.env.VITE_LOG_ENABLED;
+const showClearCacheConfirm = ref(false);
 
 function activateLicense() {
   // TODO: 激活逻辑暂未实现
   toast.info('激活功能暂未开放');
 }
 
+async function handleClearCache() {
+  showClearCacheConfirm.value = true;
+}
+
+async function confirmClearCache() {
+  showClearCacheConfirm.value = false;
+  // 先中断所有进行中的请求
+  abortPipeline();
+  const convStore = useConversationsStore();
+  convStore.abort();
+  await convStore.resetConversation();
+  const { clearCache } = await import('@/src/utils/cache');
+  await clearCache();
+  toast.success('缓存已清除');
+}
+
 async function handleDownloadLogs() {
   const { downloadLogs } = await import('@/src/utils/log-storage');
   await downloadLogs();
   toast.success('日志已下载');
-}
-
-async function handleClearLogs() {
-  if (!confirm('确定要清除所有日志吗？此操作不可恢复。')) return;
-  const { clearAllLogs } = await import('@/src/utils/log-storage');
-  await clearAllLogs();
-  toast.success('日志已清除');
 }
 
 const tab = ref<'ai' | 'general' | 'user'>('ai');
@@ -834,11 +847,28 @@ function importModels(e: Event) {
               </div>
             </div>
 
-            <!-- 日志管理（仅 debug 包可见） -->
+            <!-- 缓存管理 -->
+            <div class="zwf-form-row">
+              <label>缓存管理</label>
+              <div class="zwf-cache-actions">
+                <button class="zwf-btn zwf-btn-icon zwf-btn-danger" @click="handleClearCache">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="3 6 5 6 21 6"/>
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                    <line x1="10" y1="11" x2="10" y2="17"/>
+                    <line x1="14" y1="11" x2="14" y2="17"/>
+                  </svg>
+                  清除缓存
+                </button>
+                <span class="zwf-text-faint">会话消息、日志、输入历史（设置不会丢失）</span>
+              </div>
+            </div>
+
+            <!-- 日志管理（仅测试包可见） -->
             <template v-if="logEnabled">
               <div class="zwf-form-row">
                 <label>日志管理</label>
-                <div class="zwf-log-actions">
+                <div class="zwf-cache-actions">
                   <button class="zwf-btn zwf-btn-icon" @click="handleDownloadLogs">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                       <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
@@ -846,15 +876,6 @@ function importModels(e: Event) {
                       <line x1="12" y1="15" x2="12" y2="3"/>
                     </svg>
                     下载日志
-                  </button>
-                  <button class="zwf-btn zwf-btn-icon zwf-btn-danger" @click="handleClearLogs">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                      <polyline points="3 6 5 6 21 6"/>
-                      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
-                      <line x1="10" y1="11" x2="10" y2="17"/>
-                      <line x1="14" y1="11" x2="14" y2="17"/>
-                    </svg>
-                    清除日志
                   </button>
                 </div>
               </div>
@@ -864,6 +885,27 @@ function importModels(e: Event) {
       </div>
     </div>
   </div>
+
+  <!-- 清除缓存确认弹窗 -->
+  <ConfirmDialog
+    :visible="showClearCacheConfirm"
+    title="清除缓存"
+    desc="将清除会话消息、日志和输入历史，设置不会丢失。"
+    confirm-text="确认清除"
+    variant="danger"
+    @confirm="confirmClearCache"
+    @cancel="showClearCacheConfirm = false"
+  >
+    <template #icon>
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+        stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="3 6 5 6 21 6" />
+        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+        <path d="M10 11v6" />
+        <path d="M14 11v6" />
+      </svg>
+    </template>
+  </ConfirmDialog>
 </template>
 
 <style scoped>
@@ -998,9 +1040,10 @@ function importModels(e: Event) {
   background: var(--zwf-primary-soft);
 }
 
-/* 日志管理按钮组 */
-.zwf-log-actions {
+/* 缓存管理按钮组 */
+.zwf-cache-actions {
   display: flex;
+  align-items: center;
   gap: 10px;
 }
 

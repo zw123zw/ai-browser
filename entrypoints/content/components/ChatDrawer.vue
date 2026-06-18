@@ -3,6 +3,7 @@ import { computed, ref, onMounted, onUnmounted, watch } from 'vue';
 import { useConversationsStore } from '@/src/stores/conversations';
 import { useSettingsStore } from '@/src/stores/settings';
 import { useToast } from '@/src/composables/useToast';
+import { abortPipeline } from '@/src/composables/usePipeline';
 import ChatPanel from './ChatPanel.vue';
 import VoicePanel from './VoicePanel.vue';
 import ConfirmDialog from './ConfirmDialog.vue';
@@ -83,6 +84,8 @@ function askClear() {
 }
 
 async function doClear() {
+  abortPipeline();
+  store.abort();
   await store.clearCurrent();
   showConfirm.value = false;
   toast.success('对话已清除');
