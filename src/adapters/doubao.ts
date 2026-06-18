@@ -7,7 +7,6 @@
 
 import { BaseAdapter } from './base';
 import { Logger } from '@/src/utils/logger';
-import { saveApiLog } from '@/src/utils/log-storage';
 import { proxyFetchStream } from './proxy';
 import type { ChatMessage, ChatRequestOptions, StreamChunk } from '@/src/types';
 
@@ -55,7 +54,6 @@ export class DoubaoAdapter extends BaseAdapter {
       stream: true,
     });
 
-    let fullResponse = '';
     let doneFired = false;
     const fireDone = () => {
       if (doneFired) return;
@@ -72,7 +70,6 @@ export class DoubaoAdapter extends BaseAdapter {
         const delta = choice.delta || choice.message || {};
         const content = delta.content;
         if (content) {
-          fullResponse += content;
           onChunk({ delta: content });
         }
         if (choice.finish_reason) {
@@ -97,7 +94,6 @@ export class DoubaoAdapter extends BaseAdapter {
       fireDone();
       const duration = Date.now() - startTime;
       log.info('请求完成', { duration: `${duration}ms` });
-      saveApiLog('INFO', 'API', `← [stream] ${url} 响应 (${duration}ms):\n${fullResponse}`);
       return;
     } catch (proxyError) {
       log.warn('代理请求失败，尝试直接请求:', proxyError);
@@ -124,6 +120,5 @@ export class DoubaoAdapter extends BaseAdapter {
     fireDone();
     const duration2 = Date.now() - startTime;
     log.info('请求完成', { duration: `${duration2}ms` });
-    saveApiLog('INFO', 'API', `← ${url} 响应 (${duration2}ms):\n${fullResponse}`);
   }
 }

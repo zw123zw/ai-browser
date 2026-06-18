@@ -19,7 +19,7 @@ const licenseKey = ref('');
 const logEnabled = !!import.meta.env.VITE_LOG_ENABLED;
 const showClearCacheConfirm = ref(false);
 
-const CACHE_LIMIT = 5 * 1024 * 1024; // 5MB
+const CACHE_LIMIT = 30 * 1024 * 1024; // 30MB
 const cacheUsed = ref(0);
 
 async function loadCacheSize() {
@@ -889,7 +889,7 @@ function importModels(e: Event) {
                 </button>
                 <div class="aib-cache-info">
                   <div class="aib-cache-size">
-                    <span>{{ cacheSizeText }} / 5MB</span>
+                    <span>{{ cacheSizeText }} / 30MB</span>
                     <div class="aib-cache-bar">
                       <div class="aib-cache-bar-fill" :class="cacheBarClass" :style="{ width: cachePercent + '%' }" />
                     </div>

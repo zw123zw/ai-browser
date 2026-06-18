@@ -44,8 +44,8 @@ function formatArgs(args: unknown[]): string {
 }
 
 /** 缓存的日志写入函数 */
-let cachedSaveFrontendLog: ((level: LogLevel, module: string, msg: string) => Promise<void>) | null = null
-let cachedSaveApiLog: ((level: LogLevel, module: string, msg: string) => Promise<void>) | null = null
+let cachedSaveFrontendLog: ((level: LogLevel, module: string, msg: string) => void) | null = null
+let cachedSaveApiLog: ((level: LogLevel, module: string, msg: string) => void) | null = null
 let logStorageLoaded = false
 
 /** 加载 log-storage 模块 */

@@ -13,7 +13,7 @@ export default defineConfig({
     name: 'AI 语音浏览器助手',
     description: '支持语音控制 + 网页自动化 + 多模型切换的 AI 浏览器助手',
     version: '1.0.0',
-    permissions: ['storage', 'activeTab', 'scripting', 'tabs'],
+    permissions: ['storage', 'unlimitedStorage', 'activeTab', 'scripting', 'tabs'],
     host_permissions: [
       '<all_urls>',
       'https://*.dashscope.aliyuncs.com/*',

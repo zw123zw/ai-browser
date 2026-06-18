@@ -52,13 +52,15 @@ async function doAppend(key: string, entry: LogEntry): Promise<void> {
   }
 }
 
-/** 写入一条前端日志 */
+/** 写入一条前端日志（仅 debug 包） */
 export function saveFrontendLog(level: LogLevel, module: string, msg: string): void {
+  if (!import.meta.env.VITE_LOG_ENABLED) return
   enqueueWrite(KEY_FRONTEND, { time: formatTime(), level, module, msg })
 }
 
-/** 写入一条 API 日志 */
+/** 写入一条 API 日志（仅 debug 包） */
 export function saveApiLog(level: LogLevel, module: string, msg: string): void {
+  if (!import.meta.env.VITE_LOG_ENABLED) return
   enqueueWrite(KEY_API, { time: formatTime(), level, module, msg })
 }
 

@@ -7,7 +7,6 @@
 
 import { BaseAdapter } from './base';
 import { Logger } from '@/src/utils/logger';
-import { saveApiLog } from '@/src/utils/log-storage';
 import { proxyFetchStream } from './proxy';
 import type { ChatMessage, ChatRequestOptions, StreamChunk } from '@/src/types';
 
@@ -50,7 +49,6 @@ export class WenxinAdapter extends BaseAdapter {
       stream: true,
     });
 
-    let fullResponse = '';
     let doneFired = false;
     const fireDone = () => {
       if (doneFired) return;
@@ -67,7 +65,6 @@ export class WenxinAdapter extends BaseAdapter {
         }
         const result = json.result;
         if (result) {
-          fullResponse += result;
           onChunk({ delta: result });
         }
         if (json.is_end) {
@@ -96,7 +93,6 @@ export class WenxinAdapter extends BaseAdapter {
       fireDone();
       const duration = Date.now() - startTime;
       log.info('请求完成', { duration: `${duration}ms` });
-      saveApiLog('INFO', 'API', `← [stream] ${url} 响应 (${duration}ms):\n${fullResponse}`);
       return;
     } catch (proxyError) {
       log.warn('代理请求失败，尝试直接请求:', proxyError);
@@ -123,6 +119,5 @@ export class WenxinAdapter extends BaseAdapter {
     fireDone();
     const duration2 = Date.now() - startTime;
     log.info('请求完成', { duration: `${duration2}ms` });
-    saveApiLog('INFO', 'API', `← ${url} 响应 (${duration2}ms):\n${fullResponse}`);
   }
 }

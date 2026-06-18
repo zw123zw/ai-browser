@@ -7,6 +7,7 @@ import { pushInputHistory } from '@/src/storage/input-history';
 import { useSettingsStore } from './settings';
 import { createAdapter } from '@/src/adapters';
 import { defineStorageSync } from '@/src/utils/storage-sync';
+import { checkAndAutoClear } from '@/src/utils/cache';
 import { Logger } from '@/src/utils/logger';
 
 const log = new Logger('Store:Conversations');
@@ -71,6 +72,8 @@ export const useConversationsStore = defineStore('aib-conversations', () => {
     if (conversation.value) {
       conversation.value.updatedAt = Date.now();
       await conversationStorage.setValue(conversation.value);
+      // 异步检查缓存大小，超限自动清除（不阻塞保存）
+      checkAndAutoClear();
     }
   }
 
