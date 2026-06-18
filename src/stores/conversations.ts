@@ -2,10 +2,7 @@ import { defineStore } from 'pinia';
 import { computed, reactive, ref } from 'vue';
 import { v4 as uuid } from 'uuid';
 import type { ChatMessage, Conversation, Attachment } from '@/src/types';
-import {
-  conversationStorage,
-  conversationsStorageOld,
-} from '@/src/storage';
+import { conversationStorage } from '@/src/storage';
 import { pushInputHistory } from '@/src/storage/input-history';
 import { useSettingsStore } from './settings';
 import { createAdapter } from '@/src/adapters';
@@ -38,32 +35,16 @@ export const useConversationsStore = defineStore('zwf-conversations', () => {
     },
   });
 
-  /** 初始化：读取本地数据，兼容旧的多会话格式 */
+  /** 初始化：读取本地会话数据 */
   async function init() {
     log.info('初始化会话数据');
 
-    // 先尝试读取新格式（单会话）
     const stored = await conversationStorage.getValue();
     if (stored && typeof stored === 'object' && Array.isArray((stored as any).messages)) {
       conversation.value = stored as Conversation;
-      log.info('从新格式存储加载会话', { id: conversation.value.id });
+      log.info('从存储加载会话', { id: conversation.value.id });
     } else {
-      // 兼容旧格式：从多会话数组迁移
-      const oldStored = await conversationsStorageOld.getValue();
-      if (Array.isArray(oldStored) && oldStored.length > 0) {
-        const first = oldStored[0];
-        if (first && typeof first === 'object' && Array.isArray((first as any).messages)) {
-          conversation.value = first;
-          log.info('从旧格式迁移会话', { id: conversation.value.id });
-          // 保存到新格式并清理旧数据
-          await saveConversation();
-          await conversationsStorageOld.setValue([]);
-        }
-      }
-    }
-
-    // 如果没有会话，创建一个
-    if (!conversation.value) {
+      // 没有会话，创建一个
       conversation.value = createDefaultConversation();
       await saveConversation();
     }

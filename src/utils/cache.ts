@@ -11,10 +11,10 @@ const log = new Logger('Cache');
 
 /** 需要清除的键列表 */
 const CACHE_KEYS = [
-  'zwf-conversation',
+  'ai-browser-conversation',
   'logs:frontend',
   'logs:api',
-  'zwf-input-history',
+  'ai-browser-input-history',
 ];
 
 /** 清除缓存（会话消息 + 日志 + 输入历史） */

@@ -45,13 +45,10 @@ export const DEFAULT_SETTINGS: AppSettings = {
   models: localModels,
 };
 
-/** 存储键 —— 都用 zwf- 命名空间 */
-const KEY_SETTINGS = 'local:zwf-settings';
-/** @deprecated 旧的多会话存储键，仅用于迁移 */
-const KEY_CONVERSATIONS_OLD = 'local:zwf-conversations';
-const KEY_CONVERSATION = 'local:zwf-conversation';
-const KEY_ACTIVE_ID = 'local:zwf-active-id'; // 保留兼容，不再使用
-const KEY_FAB_POS = 'local:zwf-fab-pos';
+/** 存储键 */
+const KEY_SETTINGS = 'local:ai-browser-settings';
+const KEY_CONVERSATION = 'local:ai-browser-conversation';
+const KEY_FAB_POS = 'local:ai-browser-fab-pos';
 
 export const settingsStorage = storage.defineItem<AppSettings>(KEY_SETTINGS, {
   fallback: DEFAULT_SETTINGS,
@@ -61,12 +58,6 @@ export const settingsStorage = storage.defineItem<AppSettings>(KEY_SETTINGS, {
 export const conversationStorage = storage.defineItem<Conversation | null>(
   KEY_CONVERSATION,
   { fallback: null }
-);
-
-/** @deprecated 旧的多会话存储（仅迁移用） */
-export const conversationsStorageOld = storage.defineItem<Conversation[]>(
-  KEY_CONVERSATIONS_OLD,
-  { fallback: [] }
 );
 
 /** 悬浮按钮位置 (距离视口右下角) */
@@ -79,11 +70,11 @@ export const fabPosStorage = storage.defineItem<FabPos>(KEY_FAB_POS, {
 });
 
 /** 抽屉展开状态（跨页面持久化） */
-export const drawerOpenStorage = storage.defineItem<boolean>('local:zwf-drawer-open', {
+export const drawerOpenStorage = storage.defineItem<boolean>('local:ai-browser-drawer-open', {
   fallback: false,
 });
 
 /** 输入历史记录（跨标签页 + 跨浏览器重启持久化，上限 100 条） */
-export const inputHistoryStorage = storage.defineItem<string[]>('local:zwf-input-history', {
+export const inputHistoryStorage = storage.defineItem<string[]>('local:ai-browser-input-history', {
   fallback: [],
 });

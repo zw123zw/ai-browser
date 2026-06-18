@@ -1328,29 +1328,25 @@ table {
 }
 .zwf-msg-text .zwf-table-download-btn {
   position: absolute;
-  top: 4px;
-  right: 4px;
-  width: 28px;
-  height: 28px;
-  border: 1px solid var(--zwf-border);
+  top: 6px;
+  right: 6px;
+  width: 26px;
+  height: 26px;
+  border: none;
   border-radius: 6px;
   background: var(--zwf-bg-soft);
+  color: var(--zwf-text-faint);
   cursor: pointer;
-  font-size: 14px;
   display: flex;
   align-items: center;
   justify-content: center;
-  opacity: 0;
-  transition: opacity 0.15s;
   z-index: 1;
   padding: 0;
-}
-.zwf-msg-text .zwf-table-wrapper:hover .zwf-table-download-btn {
-  opacity: 1;
+  transition: background 0.15s, color 0.15s;
 }
 .zwf-msg-text .zwf-table-download-btn:hover {
   background: var(--zwf-primary-soft);
-  border-color: var(--zwf-primary);
+  color: var(--zwf-primary);
 }
 .zwf-msg-text table {
   border-collapse: collapse;
