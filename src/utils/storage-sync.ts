@@ -6,6 +6,15 @@ export function plain<T>(v: T): T {
   return JSON.parse(JSON.stringify(toRaw(v)));
 }
 
+/** 检测扩展上下文是否仍有效 */
+function isContextValid(): boolean {
+  try {
+    return !!chrome?.runtime?.id;
+  } catch {
+    return false;
+  }
+}
+
 interface StorageItemLike<T> {
   setValue: (v: T) => Promise<void>;
   watch: (cb: (nv: T | null) => void) => void;
@@ -54,10 +63,12 @@ export function defineStorageSync<T>(opts: SyncOptions<T>) {
     source,
     () => {
       if (!ready.value || applyingRemote) return;
+      if (!isContextValid()) return;
       if (timer) window.clearTimeout(timer);
       timer = window.setTimeout(() => {
+        if (!isContextValid()) return;
         lastSelfWrite = Date.now();
-        storage.setValue(plain(source.value));
+        storage.setValue(plain(source.value)).catch(() => {});
       }, debounceMs);
     },
     { deep: true }
@@ -65,9 +76,10 @@ export function defineStorageSync<T>(opts: SyncOptions<T>) {
 
   /** 显式立即写入（绕过防抖） */
   async function flush() {
+    if (!isContextValid()) return;
     if (timer) window.clearTimeout(timer);
     lastSelfWrite = Date.now();
-    await storage.setValue(plain(source.value));
+    await storage.setValue(plain(source.value)).catch(() => {});
   }
 
   return {

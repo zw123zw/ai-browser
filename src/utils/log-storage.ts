@@ -64,19 +64,31 @@ export function saveApiLog(level: LogLevel, module: string, msg: string): void {
 
 /** 获取前端日志 */
 export async function getFrontendLogs(): Promise<LogEntry[]> {
-  const result = await chrome.storage.local.get(KEY_FRONTEND)
-  return result[KEY_FRONTEND] || []
+  try {
+    const result = await chrome.storage.local.get(KEY_FRONTEND)
+    return result[KEY_FRONTEND] || []
+  } catch {
+    return []
+  }
 }
 
 /** 获取 API 日志 */
 export async function getApiLogs(): Promise<LogEntry[]> {
-  const result = await chrome.storage.local.get(KEY_API)
-  return result[KEY_API] || []
+  try {
+    const result = await chrome.storage.local.get(KEY_API)
+    return result[KEY_API] || []
+  } catch {
+    return []
+  }
 }
 
 /** 清除所有日志 */
 export async function clearAllLogs(): Promise<void> {
-  await chrome.storage.local.remove([KEY_FRONTEND, KEY_API])
+  try {
+    await chrome.storage.local.remove([KEY_FRONTEND, KEY_API])
+  } catch {
+    // 扩展上下文失效时静默忽略
+  }
 }
 
 /** 将日志条目格式化为文本行 */
