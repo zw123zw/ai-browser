@@ -1369,6 +1369,46 @@ table {
 .zwf-msg-text tr:hover {
   background: var(--zwf-bg-soft);
 }
+.zwf-msg-text .zwf-code-wrapper {
+  position: relative;
+  margin: var(--zwf-md-gap) 0;
+}
+.zwf-msg-text .zwf-code-lang {
+  position: absolute;
+  top: 6px;
+  left: 12px;
+  font-size: 11px;
+  color: var(--zwf-text-faint);
+  opacity: 0.7;
+  pointer-events: none;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.zwf-msg-text .zwf-code-copy-btn {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--zwf-text-faint);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1;
+  padding: 0;
+  transition: background 0.15s, color 0.15s;
+}
+.zwf-msg-text .zwf-code-copy-btn:hover {
+  background: rgba(255, 255, 255, 0.15);
+  color: var(--zwf-primary);
+}
+.zwf-msg-text .zwf-code-copy-btn--copied {
+  color: #22c55e;
+}
 .zwf-msg-text pre {
   background: var(--zwf-md-code-bg);
   color: var(--zwf-md-code-color);
@@ -1377,7 +1417,7 @@ table {
   overflow-x: auto;
   font-size: 13px;
   line-height: 1.5;
-  margin: var(--zwf-md-gap) 0;
+  margin: 0;
   border: 1px solid rgba(255, 255, 255, 0.06);
 }
 .zwf-msg-text pre code {

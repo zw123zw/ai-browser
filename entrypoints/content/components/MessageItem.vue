@@ -88,10 +88,33 @@ async function onTableDownload(e: MouseEvent) {
   a.click();
   URL.revokeObjectURL(url);
 }
+
+/** 复制代码块内容 */
+function onCodeCopy(e: MouseEvent) {
+  const btn = (e.target as HTMLElement).closest('.zwf-code-copy-btn');
+  if (!btn) return;
+  e.preventDefault();
+  e.stopPropagation();
+
+  const wrapper = btn.closest('.zwf-code-wrapper');
+  const code = wrapper?.querySelector('code');
+  if (!code) return;
+
+  const text = code.textContent ?? '';
+  navigator.clipboard.writeText(text).then(() => {
+    // 切换为勾图标，1.5s 后恢复
+    btn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
+    btn.classList.add('zwf-code-copy-btn--copied');
+    setTimeout(() => {
+      btn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`;
+      btn.classList.remove('zwf-code-copy-btn--copied');
+    }, 1500);
+  });
+}
 </script>
 
 <template>
-  <div :class="['zwf-msg-row', isUser ? 'zwf-row-user' : 'zwf-row-ai']" @click="onTableDownload">
+  <div :class="['zwf-msg-row', isUser ? 'zwf-row-user' : 'zwf-row-ai']" @click="(e) => { onTableDownload(e); onCodeCopy(e) }">
     <div
       :class="['zwf-msg', isUser ? 'zwf-bubble-user' : 'zwf-bubble-ai']"
       @contextmenu="onContextMenu"

@@ -3,18 +3,26 @@ import hljs from 'highlight.js';
 // @ts-ignore - markdown-it-katex 没有 TS 声明
 import mk from 'markdown-it-katex';
 
+const COPY_SVG = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`;
+const CHECK_SVG = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
+
 const md: MarkdownIt = new MarkdownIt({
   html: false,
   linkify: true,
   breaks: true,
   highlight(str: string, lang: string): string {
+    let highlighted: string;
     if (lang && hljs.getLanguage(lang)) {
       try {
-        const code = hljs.highlight(str, { language: lang, ignoreIllegals: true }).value;
-        return `<pre class="zwf-code"><code class="hljs language-${lang}">${code}</code></pre>`;
-      } catch {}
+        highlighted = hljs.highlight(str, { language: lang, ignoreIllegals: true }).value;
+      } catch {
+        highlighted = md.utils.escapeHtml(str);
+      }
+    } else {
+      highlighted = md.utils.escapeHtml(str);
     }
-    return `<pre class="zwf-code"><code class="hljs">${md.utils.escapeHtml(str)}</code></pre>`;
+    const langLabel = lang ? `<span class="zwf-code-lang">${lang}</span>` : '';
+    return `<div class="zwf-code-wrapper">${langLabel}<button class="zwf-code-copy-btn" title="复制代码">${COPY_SVG}</button><pre class="zwf-code"><code class="hljs${lang ? ` language-${lang}` : ''}">${highlighted}</code></pre></div>`;
   },
 });
 
