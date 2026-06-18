@@ -23,7 +23,7 @@ graph TB
         PFS[proxy-fetch-stream<br/>流式代理]
         TA[tab-action<br/>标签页操作]
         AS[abort-stream<br/>中止流]
-        DS[zwf-drawer-changed<br/>抽屉状态同步]
+        DS[aib-drawer-changed<br/>抽屉状态同步]
         STREAMS[activeStreams Map<br/>活跃流追踪]
     end
 
@@ -49,7 +49,7 @@ graph TB
     PFS -->|fetch + ReadableStream| API
     PFS -.->|stream-chunk / stream-end / stream-error| CS1
     TA -->|chrome.tabs API| TABS
-    DS -->|zwf-drawer-sync| CS2
+    DS -->|aib-drawer-sync| CS2
     AS -->|reader.cancel()| STREAMS
 
     STREAMS --- PFS
@@ -65,15 +65,15 @@ graph LR
         M3[proxy-fetch-stream]
         M4[abort-stream]
         M5[tab-action]
-        M6[zwf-drawer-changed]
-        M7[zwf-toggle]
+        M6[aib-drawer-changed]
+        M7[aib-toggle]
     end
 
     subgraph 推送消息 Background → Content
         R1[stream-chunk]
         R2[stream-end]
         R3[stream-error]
-        R4[zwf-drawer-sync]
+        R4[aib-drawer-sync]
     end
 
     M3 -.->|流数据| R1
@@ -116,7 +116,7 @@ const activeStreams = new Map<string, {
 
 ### 4. 跨标签页抽屉状态同步
 
-通过 `zwf-drawer-changed` / `zwf-drawer-sync` 消息对实现：
+通过 `aib-drawer-changed` / `aib-drawer-sync` 消息对实现：
 
 - 当某个标签页的抽屉打开/关闭时，广播到所有其他标签页
 - 保持用户在不同标签页间的 UI 状态一致性
@@ -308,7 +308,7 @@ sequenceDiagram
 - 通知 content script 流已结束（content script 的 `stream-end` 监听器会清理本地状态）
 - 注意：`sendResponse` 未被调用（返回 `false`），因为这是单向通知
 
-### zwf-drawer-changed — 跨标签页抽屉状态同步
+### aib-drawer-changed — 跨标签页抽屉状态同步
 
 ```mermaid
 sequenceDiagram
@@ -317,13 +317,13 @@ sequenceDiagram
     participant T2 as 标签页 B
     participant T3 as 标签页 C
 
-    T1->>BG: zwf-drawer-changed { open: true }
+    T1->>BG: aib-drawer-changed { open: true }
     BG->>BG: chrome.tabs.query({})
 
     par 广播到其他标签页
-        BG->>T2: zwf-drawer-sync { open: true }
+        BG->>T2: aib-drawer-sync { open: true }
     and
-        BG->>T3: zwf-drawer-sync { open: true }
+        BG->>T3: aib-drawer-sync { open: true }
     end
 
     Note over T1: 不发送给自己（sender.tab.id 过滤）
@@ -410,7 +410,7 @@ chrome.runtime.onMessage.addListener(
     //   - 'proxy-fetch'         → 返回 true（异步）
     //   - 'proxy-fetch-stream'  → 返回 true（异步）
     //   - 'tab-action'          → 返回 true（异步）
-    //   - 'zwf-drawer-changed'  → 返回 false（同步）
+    //   - 'aib-drawer-changed'  → 返回 false（同步）
     //   - 'abort-stream'        → 返回 false（同步）
   }
 );
@@ -511,10 +511,10 @@ stateDiagram-v2
 
 除了消息路由，Background SW 还处理两个入口的 UI 切换：
 
-1. **工具栏图标点击** (`chrome.action.onClicked`)：发送 `zwf-toggle` 到当前活跃标签页
+1. **工具栏图标点击** (`chrome.action.onClicked`)：发送 `aib-toggle` 到当前活跃标签页
 2. **快捷键** (`chrome.commands.onCommand`，命令 `toggle-chat`)：同上
 
-两者都通过 `chrome.tabs.sendMessage` 向当前标签页发送 `zwf-toggle` 消息，由 content script 切换抽屉的显示/隐藏。
+两者都通过 `chrome.tabs.sendMessage` 向当前标签页发送 `aib-toggle` 消息，由 content script 切换抽屉的显示/隐藏。
 
 ## 源文件
 

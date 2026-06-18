@@ -11,7 +11,7 @@ import { Logger } from '@/src/utils/logger';
 
 const log = new Logger('Store:Conversations');
 
-export const useConversationsStore = defineStore('zwf-conversations', () => {
+export const useConversationsStore = defineStore('aib-conversations', () => {
   /** 单一会话（不再支持多会话） */
   const conversation = ref<Conversation | null>(null);
   const ready = ref(false);

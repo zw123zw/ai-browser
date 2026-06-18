@@ -502,11 +502,11 @@ function importModels(e: Event) {
 </script>
 
 <template>
-  <div class="zwf-modal-mask">
-    <div class="zwf-modal zwf-modal-settings">
-      <div class="zwf-modal-header">
+  <div class="aib-modal-mask">
+    <div class="aib-modal aib-modal-settings">
+      <div class="aib-modal-header">
         <span>设置</span>
-        <button class="zwf-modal-close zwf-modal-close-inline" @click="emit('close')">
+        <button class="aib-modal-close aib-modal-close-inline" @click="emit('close')">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <line x1="18" y1="6" x2="6" y2="18" />
@@ -515,10 +515,10 @@ function importModels(e: Event) {
         </button>
       </div>
 
-      <div class="zwf-settings-body">
-        <aside class="zwf-settings-tabs">
+      <div class="aib-settings-body">
+        <aside class="aib-settings-tabs">
           <button
-            :class="['zwf-settings-tab', { 'zwf-tab-active': tab === 'ai' }]"
+            :class="['aib-settings-tab', { 'aib-tab-active': tab === 'ai' }]"
             @click="tab = 'ai'"
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -528,7 +528,7 @@ function importModels(e: Event) {
             模型配置
           </button>
           <button
-            :class="['zwf-settings-tab', { 'zwf-tab-active': tab === 'general' }]"
+            :class="['aib-settings-tab', { 'aib-tab-active': tab === 'general' }]"
             @click="tab = 'general'"
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -539,7 +539,7 @@ function importModels(e: Event) {
             通用配置
           </button>
           <button
-            :class="['zwf-settings-tab', { 'zwf-tab-active': tab === 'user' }]"
+            :class="['aib-settings-tab', { 'aib-tab-active': tab === 'user' }]"
             @click="tab = 'user'"
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -551,28 +551,28 @@ function importModels(e: Event) {
           </button>
         </aside>
 
-        <div class="zwf-settings-pane">
+        <div class="aib-settings-pane">
           <!-- ========== 模型配置 ========== -->
-          <div v-show="tab === 'ai'" class="zwf-modal-body">
+          <div v-show="tab === 'ai'" class="aib-modal-body">
             <!-- 标题 -->
-            <div class="zwf-section-title">模型配置</div>
+            <div class="aib-section-title">模型配置</div>
 
             <!-- 默认模型选择（按钮式） -->
-            <div class="zwf-form-row">
+            <div class="aib-form-row">
               <label>默认模型</label>
-              <div class="zwf-model-chips">
+              <div class="aib-model-chips">
                 <button
                   v-for="m in localModels"
                   :key="m.id"
-                  :class="['zwf-chip', { 'zwf-chip-active': selectedModelId === m.id }]"
+                  :class="['aib-chip', { 'aib-chip-active': selectedModelId === m.id }]"
                   @click="selectModel(m.id)"
                 >
                   {{ m.label || m.modelName || '未命名' }}
                 </button>
-                <button class="zwf-chip zwf-chip-new" @click="createNewModel">
+                <button class="aib-chip aib-chip-new" @click="createNewModel">
                   + 新建
                 </button>
-                <button class="zwf-chip zwf-chip-tool" @click="exportModels" title="导出配置">
+                <button class="aib-chip aib-chip-tool" @click="exportModels" title="导出配置">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
                     <polyline points="7 10 12 15 17 10"/>
@@ -580,7 +580,7 @@ function importModels(e: Event) {
                   </svg>
                   导出
                 </button>
-                <button class="zwf-chip zwf-chip-tool" @click="triggerImport" title="导入配置">
+                <button class="aib-chip aib-chip-tool" @click="triggerImport" title="导入配置">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
                     <polyline points="17 8 12 3 7 8"/>
@@ -599,13 +599,13 @@ function importModels(e: Event) {
             </div>
 
             <!-- 快速填充 -->
-            <div class="zwf-form-row">
+            <div class="aib-form-row">
               <label>快速填充</label>
-              <div class="zwf-preset-grid">
+              <div class="aib-preset-grid">
                 <button
                   v-for="(preset, key) in providerPresets"
                   :key="key"
-                  class="zwf-preset-btn"
+                  class="aib-preset-btn"
                   @click="applyPreset(key as string)"
                 >
                   {{ preset.name }}
@@ -614,9 +614,9 @@ function importModels(e: Event) {
             </div>
 
             <!-- 供应商 -->
-            <div class="zwf-form-row">
+            <div class="aib-form-row">
               <label>供应商</label>
-              <select v-model="form.provider" class="zwf-select">
+              <select v-model="form.provider" class="aib-select">
                 <option value="openai">OpenAI 兼容</option>
                 <option value="anthropic">Anthropic</option>
                 <option value="gemini">Google Gemini</option>
@@ -632,37 +632,37 @@ function importModels(e: Event) {
             </div>
 
             <!-- 显示名称 -->
-            <div class="zwf-form-row">
+            <div class="aib-form-row">
               <label>显示名称</label>
               <input
                 v-model="form.label"
-                class="zwf-input"
+                class="aib-input"
                 placeholder="如：GPT-4o、DeepSeek Chat"
               />
             </div>
 
             <!-- 请求地址 -->
-            <div class="zwf-form-row">
+            <div class="aib-form-row">
               <label>请求地址</label>
               <input
                 v-model="form.baseUrl"
-                class="zwf-input"
+                class="aib-input"
                 placeholder="https://api.openai.com/v1"
               />
             </div>
 
             <!-- API Key -->
-            <div class="zwf-form-row">
+            <div class="aib-form-row">
               <label>API Key</label>
-              <div class="zwf-input-group">
+              <div class="aib-input-group">
                 <input
                   v-model="form.apiKey"
                   :type="showApiKey ? 'text' : 'password'"
-                  class="zwf-input zwf-input-with-btn"
+                  class="aib-input aib-input-with-btn"
                   placeholder="sk-..."
                 />
                 <button
-                  class="zwf-btn zwf-btn-toggle"
+                  class="aib-btn aib-btn-toggle"
                   @click="showApiKey = !showApiKey"
                   :title="showApiKey ? '隐藏' : '显示'"
                 >
@@ -679,9 +679,9 @@ function importModels(e: Event) {
             </div>
 
             <!-- 认证字段 -->
-            <div class="zwf-form-row">
+            <div class="aib-form-row">
               <label>认证字段</label>
-              <select v-model="form.authField" class="zwf-select">
+              <select v-model="form.authField" class="aib-select">
                 <option v-for="a in authFields" :key="a.value" :value="a.value">
                   {{ a.label }}
                 </option>
@@ -689,169 +689,169 @@ function importModels(e: Event) {
             </div>
 
             <!-- 主模型 -->
-            <div class="zwf-form-row">
+            <div class="aib-form-row">
               <label>主模型</label>
               <input
                 v-model="form.modelName"
-                class="zwf-input"
+                class="aib-input"
                 placeholder="如：gpt-4o、deepseek-chat、qwen-turbo"
               />
             </div>
 
             <!-- 官网地址 -->
-            <div class="zwf-form-row">
+            <div class="aib-form-row">
               <label>官网地址</label>
               <input
                 v-model="form.website"
-                class="zwf-input"
+                class="aib-input"
                 placeholder="如：https://platform.openai.com/"
               />
             </div>
 
             <!-- 保存/删除按钮 -->
-            <div class="zwf-tab-footer">
+            <div class="aib-tab-footer">
               <button
                 v-if="!isNewMode"
-                class="zwf-btn zwf-btn-danger"
+                class="aib-btn aib-btn-danger"
                 @click="deleteModel"
               >
                 删除模型
               </button>
               <div style="flex:1" />
-              <button class="zwf-btn" @click="emit('close')">取消</button>
-              <button class="zwf-btn zwf-btn-primary" @click="saveModel">
+              <button class="aib-btn" @click="emit('close')">取消</button>
+              <button class="aib-btn aib-btn-primary" @click="saveModel">
                 保存
               </button>
             </div>
           </div>
 
           <!-- ========== 通用配置 ========== -->
-          <div v-show="tab === 'general'" class="zwf-modal-body">
-            <div class="zwf-form-row">
+          <div v-show="tab === 'general'" class="aib-modal-body">
+            <div class="aib-form-row">
               <label>主题风格</label>
-              <div class="zwf-theme-grid">
+              <div class="aib-theme-grid">
                 <div
                   v-for="t in THEMES"
                   :key="t.id"
-                  :class="['zwf-theme-card', { 'zwf-theme-active': generalForm.theme === t.id }]"
+                  :class="['aib-theme-card', { 'aib-theme-active': generalForm.theme === t.id }]"
                   @click="generalForm.theme = t.id"
                 >
-                  <div class="zwf-theme-preview" :style="{ background: t.dark ? t.vars['--zwf-bg'] : t.vars['--zwf-bg'] }">
-                    <div class="zwf-theme-dot" :style="{ background: t.accent }" />
-                    <div class="zwf-theme-line" :style="{ background: t.vars['--zwf-border'] }" />
-                    <div class="zwf-theme-line zwf-theme-line-short" :style="{ background: t.vars['--zwf-border'] }" />
+                  <div class="aib-theme-preview" :style="{ background: t.dark ? t.vars['--aib-bg'] : t.vars['--aib-bg'] }">
+                    <div class="aib-theme-dot" :style="{ background: t.accent }" />
+                    <div class="aib-theme-line" :style="{ background: t.vars['--aib-border'] }" />
+                    <div class="aib-theme-line aib-theme-line-short" :style="{ background: t.vars['--aib-border'] }" />
                   </div>
-                  <div class="zwf-theme-name">
-                    <span class="zwf-theme-swatch" :style="{ background: t.accent }" />
+                  <div class="aib-theme-name">
+                    <span class="aib-theme-swatch" :style="{ background: t.accent }" />
                     {{ t.name }}
                   </div>
                 </div>
               </div>
             </div>
 
-            <div class="zwf-form-row">
+            <div class="aib-form-row">
               <label>快捷键</label>
-              <div class="zwf-shortcut-row">
+              <div class="aib-shortcut-row">
                 <div
                   ref="shortcutInputRef"
-                  :class="['zwf-shortcut-input', { 'zwf-shortcut-recording': recording }]"
+                  :class="['aib-shortcut-input', { 'aib-shortcut-recording': recording }]"
                   tabindex="0"
                   @click="startRecord"
                   @keydown="onShortcutKeydown"
                   @blur="recording = false"
                 >
-                  <span v-if="recording" class="zwf-text-faint">按下任意组合键，Esc 取消</span>
-                  <span v-else-if="generalForm.shortcut" class="zwf-shortcut-keys">
-                    <kbd v-for="(k, i) in generalForm.shortcut.split('+')" :key="i" class="zwf-kbd">{{ k }}</kbd>
+                  <span v-if="recording" class="aib-text-faint">按下任意组合键，Esc 取消</span>
+                  <span v-else-if="generalForm.shortcut" class="aib-shortcut-keys">
+                    <kbd v-for="(k, i) in generalForm.shortcut.split('+')" :key="i" class="aib-kbd">{{ k }}</kbd>
                   </span>
-                  <span v-else class="zwf-text-faint">点击录制快捷键</span>
+                  <span v-else class="aib-text-faint">点击录制快捷键</span>
                 </div>
-                <button class="zwf-btn" @click="clearShortcut">清除</button>
+                <button class="aib-btn" @click="clearShortcut">清除</button>
               </div>
-              <div class="zwf-text-faint" style="font-size: 12px;">
+              <div class="aib-text-faint" style="font-size: 12px;">
                 提示：浏览器扩展全局快捷键需在 chrome://extensions/shortcuts 配置；此处设置的是页面内监听的快捷键。
               </div>
             </div>
 
-            <div class="zwf-form-row">
+            <div class="aib-form-row">
               <label>划词操作</label>
-              <div class="zwf-radio-group">
+              <div class="aib-radio-group">
                 <div
                   v-for="opt in autoSendOptions"
                   :key="opt.value"
-                  :class="['zwf-radio-card', { 'zwf-radio-active': generalForm.autoSendSelection === opt.value }]"
+                  :class="['aib-radio-card', { 'aib-radio-active': generalForm.autoSendSelection === opt.value }]"
                   @click="generalForm.autoSendSelection = opt.value"
                 >
-                  <div class="zwf-radio-dot">
-                    <span v-if="generalForm.autoSendSelection === opt.value" class="zwf-radio-dot-fill" />
+                  <div class="aib-radio-dot">
+                    <span v-if="generalForm.autoSendSelection === opt.value" class="aib-radio-dot-fill" />
                   </div>
-                  <div class="zwf-radio-body">
-                    <span class="zwf-radio-label">{{ opt.label }}</span>
-                    <span class="zwf-radio-desc">{{ opt.desc }}</span>
+                  <div class="aib-radio-body">
+                    <span class="aib-radio-label">{{ opt.label }}</span>
+                    <span class="aib-radio-desc">{{ opt.desc }}</span>
                   </div>
                 </div>
               </div>
             </div>
 
             <!-- 翻译配置 -->
-            <div class="zwf-form-row">
+            <div class="aib-form-row">
               <label>翻译配置</label>
-              <div class="zwf-translate-section">
-                <div class="zwf-form-row-inner">
-                  <span class="zwf-translate-label">目标语言</span>
-                  <select v-model="generalForm.translateTargetLang" class="zwf-select zwf-select-sm">
+              <div class="aib-translate-section">
+                <div class="aib-form-row-inner">
+                  <span class="aib-translate-label">目标语言</span>
+                  <select v-model="generalForm.translateTargetLang" class="aib-select aib-select-sm">
                     <option v-for="lang in translateLangOptions" :key="lang.value" :value="lang.value">
                       {{ lang.label }}
                     </option>
                   </select>
                 </div>
-                <div class="zwf-radio-group">
+                <div class="aib-radio-group">
                   <div
                     v-for="opt in translateModeOptions"
                     :key="opt.value"
-                    :class="['zwf-radio-card', { 'zwf-radio-active': generalForm.translateMode === opt.value }]"
+                    :class="['aib-radio-card', { 'aib-radio-active': generalForm.translateMode === opt.value }]"
                     @click="generalForm.translateMode = opt.value"
                   >
-                    <div class="zwf-radio-dot">
-                      <span v-if="generalForm.translateMode === opt.value" class="zwf-radio-dot-fill" />
+                    <div class="aib-radio-dot">
+                      <span v-if="generalForm.translateMode === opt.value" class="aib-radio-dot-fill" />
                     </div>
-                    <div class="zwf-radio-body">
-                      <span class="zwf-radio-label">{{ opt.label }}</span>
-                      <span class="zwf-radio-desc">{{ opt.desc }}</span>
+                    <div class="aib-radio-body">
+                      <span class="aib-radio-label">{{ opt.label }}</span>
+                      <span class="aib-radio-desc">{{ opt.desc }}</span>
                     </div>
                   </div>
                 </div>
               </div>
             </div>
 
-            <div class="zwf-tab-footer">
+            <div class="aib-tab-footer">
               <div style="flex:1" />
-              <button class="zwf-btn" @click="emit('close')">取消</button>
-              <button class="zwf-btn zwf-btn-primary" @click="saveGeneral">保存</button>
+              <button class="aib-btn" @click="emit('close')">取消</button>
+              <button class="aib-btn aib-btn-primary" @click="saveGeneral">保存</button>
             </div>
           </div>
 
           <!-- ========== 用户配置 ========== -->
-          <div v-show="tab === 'user'" class="zwf-modal-body">
-            <div class="zwf-form-row">
+          <div v-show="tab === 'user'" class="aib-modal-body">
+            <div class="aib-form-row">
               <label>激活码</label>
-              <div class="zwf-input-group">
+              <div class="aib-input-group">
                 <input
                   v-model="licenseKey"
-                  class="zwf-input zwf-input-with-btn"
+                  class="aib-input aib-input-with-btn"
                   placeholder="请输入激活码"
                 />
-                <button class="zwf-btn-activate" @click="activateLicense">
+                <button class="aib-btn-activate" @click="activateLicense">
                   激活
                 </button>
               </div>
             </div>
 
             <!-- 缓存管理 -->
-            <div class="zwf-form-row">
+            <div class="aib-form-row">
               <label>缓存管理</label>
-              <div class="zwf-cache-actions">
-                <button class="zwf-btn zwf-btn-icon zwf-btn-danger" @click="handleClearCache">
+              <div class="aib-cache-actions">
+                <button class="aib-btn aib-btn-icon aib-btn-danger" @click="handleClearCache">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <polyline points="3 6 5 6 21 6"/>
                     <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
@@ -860,16 +860,16 @@ function importModels(e: Event) {
                   </svg>
                   清除缓存
                 </button>
-                <span class="zwf-text-faint">会话消息、日志、输入历史（设置不会丢失）</span>
+                <span class="aib-text-faint">会话消息、日志、输入历史（设置不会丢失）</span>
               </div>
             </div>
 
             <!-- 日志管理（仅测试包可见） -->
             <template v-if="logEnabled">
-              <div class="zwf-form-row">
+              <div class="aib-form-row">
                 <label>日志管理</label>
-                <div class="zwf-cache-actions">
-                  <button class="zwf-btn zwf-btn-icon" @click="handleDownloadLogs">
+                <div class="aib-cache-actions">
+                  <button class="aib-btn aib-btn-icon" @click="handleDownloadLogs">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                       <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
                       <polyline points="7 10 12 15 17 10"/>
@@ -910,122 +910,122 @@ function importModels(e: Event) {
 
 <style scoped>
 /* 区块标题 */
-.zwf-section-title {
+.aib-section-title {
   font-size: 15px;
   font-weight: 600;
-  color: var(--zwf-text);
+  color: var(--aib-text);
   padding-bottom: 12px;
-  border-bottom: 1px solid var(--zwf-border);
+  border-bottom: 1px solid var(--aib-border);
   margin-bottom: 4px;
 }
 
 /* 模型选择（按钮式） */
-.zwf-model-chips {
+.aib-model-chips {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
 }
 
-.zwf-chip {
+.aib-chip {
   padding: 6px 14px;
-  border: 1px solid var(--zwf-border-strong);
+  border: 1px solid var(--aib-border-strong);
   border-radius: 8px;
-  background: var(--zwf-bg-card);
+  background: var(--aib-bg-card);
   cursor: pointer;
   font-size: 13px;
-  color: var(--zwf-text);
+  color: var(--aib-text);
   transition: all 0.15s ease;
   font-family: inherit;
 }
 
-.zwf-chip:hover {
-  border-color: var(--zwf-primary);
-  color: var(--zwf-primary);
-  background: var(--zwf-primary-soft);
+.aib-chip:hover {
+  border-color: var(--aib-primary);
+  color: var(--aib-primary);
+  background: var(--aib-primary-soft);
 }
 
-.zwf-chip-active {
-  background: var(--zwf-primary);
-  border-color: var(--zwf-primary);
+.aib-chip-active {
+  background: var(--aib-primary);
+  border-color: var(--aib-primary);
   color: #fff;
   font-weight: 500;
 }
 
-.zwf-chip-active:hover {
-  background: var(--zwf-primary);
+.aib-chip-active:hover {
+  background: var(--aib-primary);
   color: #fff;
 }
 
-.zwf-chip-new {
+.aib-chip-new {
   border-style: dashed;
-  color: var(--zwf-text-soft);
+  color: var(--aib-text-soft);
 }
 
-.zwf-chip-new:hover {
-  border-color: var(--zwf-primary);
-  color: var(--zwf-primary);
-  background: var(--zwf-primary-soft);
+.aib-chip-new:hover {
+  border-color: var(--aib-primary);
+  color: var(--aib-primary);
+  background: var(--aib-primary-soft);
 }
 
-.zwf-chip-tool {
+.aib-chip-tool {
   display: inline-flex;
   align-items: center;
   gap: 4px;
   border-style: dashed;
-  color: var(--zwf-text-soft);
+  color: var(--aib-text-soft);
 }
 
-.zwf-chip-tool:hover {
-  border-color: var(--zwf-primary);
-  color: var(--zwf-primary);
-  background: var(--zwf-primary-soft);
+.aib-chip-tool:hover {
+  border-color: var(--aib-primary);
+  color: var(--aib-primary);
+  background: var(--aib-primary-soft);
 }
 
 /* 输入框 + 按钮组合 */
-.zwf-input-group {
+.aib-input-group {
   display: flex;
   align-items: center;
   gap: 0;
   width: 100%;
 }
 
-.zwf-input-with-btn {
+.aib-input-with-btn {
   border-top-right-radius: 0;
   border-bottom-right-radius: 0;
   flex: 1;
 }
 
-.zwf-btn-toggle {
+.aib-btn-toggle {
   display: flex;
   align-items: center;
   justify-content: center;
   width: 40px;
   height: 36px;
-  border: 1px solid var(--zwf-border);
+  border: 1px solid var(--aib-border);
   border-left: none;
   border-top-right-radius: 8px;
   border-bottom-right-radius: 8px;
-  background: var(--zwf-bg-card);
+  background: var(--aib-bg-card);
   cursor: pointer;
-  color: var(--zwf-text-soft);
+  color: var(--aib-text-soft);
   transition: all 0.15s ease;
   flex-shrink: 0;
 }
 
-.zwf-btn-toggle:hover {
-  background: var(--zwf-bg-hover);
-  color: var(--zwf-text);
+.aib-btn-toggle:hover {
+  background: var(--aib-bg-hover);
+  color: var(--aib-text);
 }
 
 /* 激活按钮 — 与 chip/preset 统一风格 */
-.zwf-btn-activate {
+.aib-btn-activate {
   padding: 10px 20px;
-  border: 1px solid var(--zwf-border-strong);
+  border: 1px solid var(--aib-border-strong);
   border-left: none;
   border-top-left-radius: 0;
   border-bottom-left-radius: 0;
-  background: var(--zwf-bg-card);
-  color: var(--zwf-text-soft);
+  background: var(--aib-bg-card);
+  color: var(--aib-text-soft);
   flex-shrink: 0;
   font-size: 14px;
   font-weight: 500;
@@ -1034,20 +1034,20 @@ function importModels(e: Event) {
   font-family: inherit;
 }
 
-.zwf-btn-activate:hover {
-  border-color: var(--zwf-primary);
-  color: var(--zwf-primary);
-  background: var(--zwf-primary-soft);
+.aib-btn-activate:hover {
+  border-color: var(--aib-primary);
+  color: var(--aib-primary);
+  background: var(--aib-primary-soft);
 }
 
 /* 缓存管理按钮组 */
-.zwf-cache-actions {
+.aib-cache-actions {
   display: flex;
   align-items: center;
   gap: 10px;
 }
 
-.zwf-btn-icon {
+.aib-btn-icon {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -1056,42 +1056,42 @@ function importModels(e: Event) {
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
-  border: 1px solid var(--zwf-border);
-  background: var(--zwf-bg-card);
-  color: var(--zwf-text);
+  border: 1px solid var(--aib-border);
+  background: var(--aib-bg-card);
+  color: var(--aib-text);
   transition: all 0.15s ease;
   font-family: inherit;
 }
 
-.zwf-btn-icon:hover {
-  border-color: var(--zwf-primary);
-  color: var(--zwf-primary);
-  background: var(--zwf-primary-soft);
+.aib-btn-icon:hover {
+  border-color: var(--aib-primary);
+  color: var(--aib-primary);
+  background: var(--aib-primary-soft);
 }
 
-.zwf-btn-icon.zwf-btn-danger {
+.aib-btn-icon.aib-btn-danger {
   color: #ef4444;
   border: 1px solid rgba(239,68,68,0.3);
   background: rgba(239,68,68,0.06);
 }
 
-.zwf-btn-icon.zwf-btn-danger:hover {
+.aib-btn-icon.aib-btn-danger:hover {
   background: rgba(239,68,68,0.12);
   border-color: rgba(239,68,68,0.5);
   color: #dc2626;
 }
 
 /* Tab 底部保存按钮 */
-.zwf-tab-footer {
+.aib-tab-footer {
   display: flex;
   align-items: center;
   gap: 10px;
   padding-top: 16px;
   margin-top: 8px;
-  border-top: 1px solid var(--zwf-border);
+  border-top: 1px solid var(--aib-border);
 }
 
-.zwf-btn-danger {
+.aib-btn-danger {
   color: #ef4444;
   border: 1px solid rgba(239,68,68,0.3);
   background: rgba(239,68,68,0.06);
@@ -1103,13 +1103,13 @@ function importModels(e: Event) {
   font-family: inherit;
 }
 
-.zwf-btn-danger:hover {
+.aib-btn-danger:hover {
   background: rgba(239,68,68,0.12);
   border-color: rgba(239,68,68,0.5);
   color: #dc2626;
 }
 
-.zwf-tab-footer .zwf-btn {
+.aib-tab-footer .aib-btn {
   padding: 7px 20px;
   border-radius: 8px;
   font-size: 13px;
@@ -1117,72 +1117,72 @@ function importModels(e: Event) {
   transition: all 0.15s ease;
 }
 
-.zwf-tab-footer .zwf-btn-primary {
-  background: var(--zwf-primary);
-  border: 1px solid var(--zwf-primary);
+.aib-tab-footer .aib-btn-primary {
+  background: var(--aib-primary);
+  border: 1px solid var(--aib-primary);
   color: #fff;
-  box-shadow: 0 2px 8px var(--zwf-primary-glow);
+  box-shadow: 0 2px 8px var(--aib-primary-glow);
 }
 
-.zwf-tab-footer .zwf-btn-primary:hover {
-  background: var(--zwf-primary);
+.aib-tab-footer .aib-btn-primary:hover {
+  background: var(--aib-primary);
   filter: brightness(1.1);
-  box-shadow: 0 4px 12px var(--zwf-primary-glow);
+  box-shadow: 0 4px 12px var(--aib-primary-glow);
   transform: translateY(-1px);
 }
 
 /* 供应商预设 */
-.zwf-preset-grid {
+.aib-preset-grid {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
 }
 
-.zwf-preset-btn {
+.aib-preset-btn {
   padding: 6px 14px;
-  border: 1px solid var(--zwf-border-strong);
+  border: 1px solid var(--aib-border-strong);
   border-radius: 8px;
-  background: var(--zwf-bg-card);
-  color: var(--zwf-text-soft);
+  background: var(--aib-bg-card);
+  color: var(--aib-text-soft);
   cursor: pointer;
   font-size: 13px;
   transition: all 0.15s ease;
 }
 
-.zwf-preset-btn:hover {
-  border-color: var(--zwf-primary);
-  color: var(--zwf-primary);
-  background: var(--zwf-primary-soft);
+.aib-preset-btn:hover {
+  border-color: var(--aib-primary);
+  color: var(--aib-primary);
+  background: var(--aib-primary-soft);
 }
 
 /* 主题选择器 */
-.zwf-theme-grid {
+.aib-theme-grid {
   display: grid;
   grid-template-columns: repeat(5, 1fr);
   gap: 10px;
 }
 
-.zwf-theme-card {
-  border: 2px solid var(--zwf-border);
+.aib-theme-card {
+  border: 2px solid var(--aib-border);
   border-radius: 12px;
   cursor: pointer;
   overflow: hidden;
   transition: all 0.2s ease;
-  background: var(--zwf-bg-card);
+  background: var(--aib-bg-card);
 }
 
-.zwf-theme-card:hover {
-  border-color: var(--zwf-text-soft);
+.aib-theme-card:hover {
+  border-color: var(--aib-text-soft);
   transform: translateY(-2px);
   box-shadow: 0 4px 12px rgba(0,0,0,0.15);
 }
 
-.zwf-theme-active {
-  border-color: var(--zwf-primary) !important;
-  box-shadow: 0 0 16px var(--zwf-primary-glow);
+.aib-theme-active {
+  border-color: var(--aib-primary) !important;
+  box-shadow: 0 0 16px var(--aib-primary-glow);
 }
 
-.zwf-theme-preview {
+.aib-theme-preview {
   height: 56px;
   padding: 10px;
   display: flex;
@@ -1192,52 +1192,52 @@ function importModels(e: Event) {
   position: relative;
 }
 
-.zwf-theme-preview::after {
+.aib-theme-preview::after {
   content: '';
   position: absolute;
   top: 0;
   left: 0;
   right: 0;
   height: 2px;
-  background: var(--zwf-primary);
+  background: var(--aib-primary);
   opacity: 0;
   transition: opacity 0.2s;
 }
 
-.zwf-theme-active .zwf-theme-preview::after {
+.aib-theme-active .aib-theme-preview::after {
   opacity: 1;
 }
 
-.zwf-theme-dot {
+.aib-theme-dot {
   width: 14px;
   height: 14px;
   border-radius: 50%;
   box-shadow: 0 0 6px currentColor;
 }
 
-.zwf-theme-line {
+.aib-theme-line {
   height: 3px;
   border-radius: 2px;
   width: 100%;
   opacity: 0.6;
 }
 
-.zwf-theme-line-short {
+.aib-theme-line-short {
   width: 55%;
 }
 
-.zwf-theme-name {
+.aib-theme-name {
   padding: 8px 10px;
   font-size: 12px;
   font-weight: 500;
-  color: var(--zwf-text-soft);
+  color: var(--aib-text-soft);
   display: flex;
   align-items: center;
   gap: 6px;
-  border-top: 1px solid var(--zwf-border);
+  border-top: 1px solid var(--aib-border);
 }
 
-.zwf-theme-swatch {
+.aib-theme-swatch {
   width: 10px;
   height: 10px;
   border-radius: 50%;
@@ -1246,30 +1246,30 @@ function importModels(e: Event) {
 }
 
 /* 开关 */
-.zwf-switch-row {
+.aib-switch-row {
   display: flex;
   align-items: center;
   gap: 10px;
 }
 
-.zwf-switch {
+.aib-switch {
   position: relative;
   width: 40px;
   height: 22px;
   border-radius: 11px;
   border: none;
-  background: var(--zwf-border-strong, #3a3a4a);
+  background: var(--aib-border-strong, #3a3a4a);
   cursor: pointer;
   transition: background 0.25s ease;
   flex-shrink: 0;
   padding: 0;
 }
 
-.zwf-switch-on {
-  background: var(--zwf-primary);
+.aib-switch-on {
+  background: var(--aib-primary);
 }
 
-.zwf-switch-thumb {
+.aib-switch-thumb {
   position: absolute;
   top: 2px;
   left: 2px;
@@ -1281,48 +1281,48 @@ function importModels(e: Event) {
   transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.zwf-switch-on .zwf-switch-thumb {
+.aib-switch-on .aib-switch-thumb {
   transform: translateX(18px);
 }
 
 /* 卡片式 Radio - 水平小卡片 */
-.zwf-radio-group {
+.aib-radio-group {
   display: flex;
   flex-direction: row;
   gap: 8px;
   margin-top: 4px;
 }
 
-.zwf-radio-card {
+.aib-radio-card {
   display: flex;
   align-items: center;
   gap: 8px;
   padding: 8px 14px;
-  border: 1px solid var(--zwf-border);
+  border: 1px solid var(--aib-border);
   border-radius: 10px;
-  background: var(--zwf-bg-card);
+  background: var(--aib-bg-card);
   cursor: pointer;
   transition: all 0.2s ease;
   flex: 1;
   min-width: 0;
 }
 
-.zwf-radio-card:hover {
-  border-color: var(--zwf-primary);
-  background: var(--zwf-primary-soft);
+.aib-radio-card:hover {
+  border-color: var(--aib-primary);
+  background: var(--aib-primary-soft);
 }
 
-.zwf-radio-active {
-  border-color: var(--zwf-primary);
-  background: var(--zwf-primary-soft);
-  box-shadow: 0 0 0 1px var(--zwf-primary);
+.aib-radio-active {
+  border-color: var(--aib-primary);
+  background: var(--aib-primary-soft);
+  box-shadow: 0 0 0 1px var(--aib-primary);
 }
 
-.zwf-radio-dot {
+.aib-radio-dot {
   width: 16px;
   height: 16px;
   border-radius: 50%;
-  border: 2px solid var(--zwf-border);
+  border: 2px solid var(--aib-border);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1330,15 +1330,15 @@ function importModels(e: Event) {
   transition: border-color 0.2s ease;
 }
 
-.zwf-radio-active .zwf-radio-dot {
-  border-color: var(--zwf-primary);
+.aib-radio-active .aib-radio-dot {
+  border-color: var(--aib-primary);
 }
 
-.zwf-radio-dot-fill {
+.aib-radio-dot-fill {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: var(--zwf-primary);
+  background: var(--aib-primary);
   animation: radio-fill 0.2s ease;
 }
 
@@ -1353,98 +1353,98 @@ function importModels(e: Event) {
   }
 }
 
-.zwf-radio-body {
+.aib-radio-body {
   display: flex;
   flex-direction: column;
   gap: 2px;
   min-width: 0;
 }
 
-.zwf-radio-label {
+.aib-radio-label {
   font-size: 13px;
   font-weight: 500;
-  color: var(--zwf-text);
+  color: var(--aib-text);
   white-space: nowrap;
 }
 
-.zwf-radio-active .zwf-radio-label {
-  color: var(--zwf-primary);
+.aib-radio-active .aib-radio-label {
+  color: var(--aib-primary);
 }
 
-.zwf-radio-desc {
+.aib-radio-desc {
   display: none;
 }
 
 /* 小屏适配 */
 @media (max-width: 640px) {
-  .zwf-theme-grid {
+  .aib-theme-grid {
     grid-template-columns: repeat(3, 1fr);
     gap: 8px;
   }
 
-  .zwf-theme-preview {
+  .aib-theme-preview {
     height: 44px;
     padding: 8px;
   }
 
-  .zwf-theme-name {
+  .aib-theme-name {
     padding: 6px 8px;
     font-size: 11px;
   }
 
-  .zwf-radio-group {
+  .aib-radio-group {
     flex-direction: column;
     gap: 6px;
   }
 
-  .zwf-radio-card {
+  .aib-radio-card {
     padding: 8px 12px;
   }
 
-  .zwf-radio-desc {
+  .aib-radio-desc {
     display: block;
     font-size: 11px;
   }
 
-  .zwf-radio-label {
+  .aib-radio-label {
     font-size: 12px;
   }
 }
 
 /* 翻译配置 */
-.zwf-translate-section {
+.aib-translate-section {
   display: flex;
   flex-direction: column;
   gap: 12px;
   margin-top: 4px;
 }
 
-.zwf-form-row-inner {
+.aib-form-row-inner {
   display: flex;
   align-items: center;
   gap: 12px;
 }
 
-.zwf-translate-label {
+.aib-translate-label {
   font-size: 13px;
-  color: var(--zwf-text);
+  color: var(--aib-text);
   white-space: nowrap;
   min-width: 64px;
 }
 
-.zwf-select-sm {
+.aib-select-sm {
   padding: 6px 10px;
   font-size: 13px;
   border-radius: 8px;
-  border: 1px solid var(--zwf-border);
-  background: var(--zwf-bg-card);
-  color: var(--zwf-text);
+  border: 1px solid var(--aib-border);
+  background: var(--aib-bg-card);
+  color: var(--aib-text);
   cursor: pointer;
   min-width: 120px;
 }
 
-.zwf-select-sm:focus {
-  border-color: var(--zwf-primary);
+.aib-select-sm:focus {
+  border-color: var(--aib-primary);
   outline: none;
 }
 </style>

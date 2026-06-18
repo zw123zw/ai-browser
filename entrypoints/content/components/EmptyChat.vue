@@ -21,22 +21,22 @@ const greeting = computed(() => {
 </script>
 
 <template>
-  <div class="zwf-chat-empty">
-    <div class="zwf-chat-empty-title">{{ greeting }}，今天聊点什么？</div>
-    <div class="zwf-chat-empty-desc">
+  <div class="aib-chat-empty">
+    <div class="aib-chat-empty-title">{{ greeting }}，今天聊点什么？</div>
+    <div class="aib-chat-empty-desc">
       提问、写代码、分析图片、深度思考——直接输入或试试下面的提示
     </div>
-    <div class="zwf-suggestions">
+    <div class="aib-suggestions">
       <button
         v-for="s in SUGGESTIONS"
         :key="s.title"
-        class="zwf-suggestion"
+        class="aib-suggestion"
         @click="$emit('pick', s.desc)"
       >
-        <span class="zwf-suggestion-icon">{{ s.icon }}</span>
-        <span class="zwf-suggestion-text">
-          <span class="zwf-suggestion-title">{{ s.title }}</span>
-          <span class="zwf-suggestion-desc">{{ s.desc }}</span>
+        <span class="aib-suggestion-icon">{{ s.icon }}</span>
+        <span class="aib-suggestion-text">
+          <span class="aib-suggestion-title">{{ s.title }}</span>
+          <span class="aib-suggestion-desc">{{ s.desc }}</span>
         </span>
       </button>
     </div>

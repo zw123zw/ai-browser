@@ -44,32 +44,32 @@
 
 ### 设置弹框 — UI 设计
 
-在「通用配置」tab 底部（保存按钮之前）新增两个区块，复用现有 `.zwf-form-row` + `.zwf-section-title` 布局体系。
+在「通用配置」tab 底部（保存按钮之前）新增两个区块，复用现有 `.aib-form-row` + `.aib-section-title` 布局体系。
 
 #### 区块 1：License 激活码（始终显示）
 
 ```
 ┌─────────────────────────────────────────────┐
-│  License                                    │  ← .zwf-section-title
+│  License                                    │  ← .aib-section-title
 │                                             │
-│  激活码                        [激活]        │  ← .zwf-form-row
+│  激活码                        [激活]        │  ← .aib-form-row
 │  ┌─────────────────────────┐ ┌──────────┐   │
-│  │ 请输入激活码...          │ │   激活   │   │  ← .zwf-input + .zwf-btn-primary
+│  │ 请输入激活码...          │ │   激活   │   │  ← .aib-input + .aib-btn-primary
 │  └─────────────────────────┘ └──────────┘   │
 │                                             │
 └─────────────────────────────────────────────┘
 ```
 
-- 输入框：复用 `.zwf-input` 样式，`placeholder="请输入激活码"`
-- 激活按钮：复用 `.zwf-btn .zwf-btn-primary` 样式
+- 输入框：复用 `.aib-input` 样式，`placeholder="请输入激活码"`
+- 激活按钮：复用 `.aib-btn .aib-btn-primary` 样式
 - 按钮点击暂无响应（占位）
-- 输入框和按钮用 `.zwf-input-group` 组合（与 API Key 行相同的输入框+按钮组合样式）
+- 输入框和按钮用 `.aib-input-group` 组合（与 API Key 行相同的输入框+按钮组合样式）
 
 #### 区块 2：日志管理（仅 debug 包可见）
 
 ```
 ┌─────────────────────────────────────────────┐
-│  开发工具                                    │  ← .zwf-section-title
+│  开发工具                                    │  ← .aib-section-title
 │                                             │
 │  日志管理                                    │  ← label
 │  [📥 下载日志]    [🗑️ 清除日志]              │  ← 两个按钮并排
@@ -77,10 +77,10 @@
 └─────────────────────────────────────────────┘
 ```
 
-- 标题：`.zwf-section-title` 显示「开发工具」
-- label：复用 `.zwf-form-row > label` 显示「日志管理」
-- 下载日志按钮：`.zwf-btn` 样式，左侧加下载 SVG 图标
-- 清除日志按钮：`.zwf-btn .zwf-btn-danger` 样式（红色危险按钮），左侧加垃圾桶 SVG 图标
+- 标题：`.aib-section-title` 显示「开发工具」
+- label：复用 `.aib-form-row > label` 显示「日志管理」
+- 下载日志按钮：`.aib-btn` 样式，左侧加下载 SVG 图标
+- 清除日志按钮：`.aib-btn .aib-btn-danger` 样式（红色危险按钮），左侧加垃圾桶 SVG 图标
 - 两个按钮用 `display: flex; gap: 10px` 并排排列
 - 整个区块用 `v-if="import.meta.env.VITE_LOG_ENABLED"` 控制，生产包完全不渲染
 
@@ -90,14 +90,14 @@
 
 | 元素 | 复用样式 | 说明 |
 |------|---------|------|
-| 区块标题 | `.zwf-section-title` | 15px, font-weight 600, 底部 border |
-| 行容器 | `.zwf-form-row` | label + 内容纵向布局 |
-| 输入框 | `.zwf-input` | 圆角 8px, 边框 `--zwf-border`, 聚焦 `--zwf-primary` |
-| 输入框+按钮组合 | `.zwf-input-group` | 输入框左圆角，按钮右圆角，无缝拼接 |
-| 主按钮 | `.zwf-btn .zwf-btn-primary` | `--zwf-primary` 背景，白色文字，glow 阴影 |
-| 危险按钮 | `.zwf-btn .zwf-btn-danger` | 红色边框+背景，hover 加深 |
-| 普通按钮 | `.zwf-btn` | 透明背景，`--zwf-border` 边框 |
-| 分隔线 | `border-top: 1px solid var(--zwf-border)` | 区块间分隔 |
+| 区块标题 | `.aib-section-title` | 15px, font-weight 600, 底部 border |
+| 行容器 | `.aib-form-row` | label + 内容纵向布局 |
+| 输入框 | `.aib-input` | 圆角 8px, 边框 `--aib-border`, 聚焦 `--aib-primary` |
+| 输入框+按钮组合 | `.aib-input-group` | 输入框左圆角，按钮右圆角，无缝拼接 |
+| 主按钮 | `.aib-btn .aib-btn-primary` | `--aib-primary` 背景，白色文字，glow 阴影 |
+| 危险按钮 | `.aib-btn .aib-btn-danger` | 红色边框+背景，hover 加深 |
+| 普通按钮 | `.aib-btn` | 透明背景，`--aib-border` 边框 |
+| 分隔线 | `border-top: 1px solid var(--aib-border)` | 区块间分隔 |
 
 #### 交互细节
 

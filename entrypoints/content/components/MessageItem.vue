@@ -54,12 +54,12 @@ function onContextMenu(e: MouseEvent) {
 
 /** 下载表格为 Excel */
 async function onTableDownload(e: MouseEvent) {
-  const btn = (e.target as HTMLElement).closest('.zwf-table-download-btn');
+  const btn = (e.target as HTMLElement).closest('.aib-table-download-btn');
   if (!btn) return;
   e.preventDefault();
   e.stopPropagation();
 
-  const wrapper = btn.closest('.zwf-table-wrapper');
+  const wrapper = btn.closest('.aib-table-wrapper');
   const table = wrapper?.querySelector('table');
   if (!table) return;
 
@@ -91,12 +91,12 @@ async function onTableDownload(e: MouseEvent) {
 
 /** 复制代码块内容 */
 function onCodeCopy(e: MouseEvent) {
-  const btn = (e.target as HTMLElement).closest('.zwf-code-copy-btn');
+  const btn = (e.target as HTMLElement).closest('.aib-code-copy-btn');
   if (!btn) return;
   e.preventDefault();
   e.stopPropagation();
 
-  const wrapper = btn.closest('.zwf-code-wrapper');
+  const wrapper = btn.closest('.aib-code-wrapper');
   const code = wrapper?.querySelector('code');
   if (!code) return;
 
@@ -104,65 +104,65 @@ function onCodeCopy(e: MouseEvent) {
   navigator.clipboard.writeText(text).then(() => {
     // 切换为勾图标，1.5s 后恢复
     btn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
-    btn.classList.add('zwf-code-copy-btn--copied');
+    btn.classList.add('aib-code-copy-btn--copied');
     setTimeout(() => {
       btn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`;
-      btn.classList.remove('zwf-code-copy-btn--copied');
+      btn.classList.remove('aib-code-copy-btn--copied');
     }, 1500);
   });
 }
 </script>
 
 <template>
-  <div :class="['zwf-msg-row', isUser ? 'zwf-row-user' : 'zwf-row-ai']" @click="(e) => { onTableDownload(e); onCodeCopy(e) }">
+  <div :class="['aib-msg-row', isUser ? 'aib-row-user' : 'aib-row-ai']" @click="(e) => { onTableDownload(e); onCodeCopy(e) }">
     <div
-      :class="['zwf-msg', isUser ? 'zwf-bubble-user' : 'zwf-bubble-ai']"
+      :class="['aib-msg', isUser ? 'aib-bubble-user' : 'aib-bubble-ai']"
       @contextmenu="onContextMenu"
     >
       <!-- 思考块（仅在用户开启深度思考时展示） -->
-      <div v-if="message.reasoningEnabled && message.reasoning" class="zwf-reasoning">
-        <div class="zwf-reasoning-title">💭 深度思考</div>
-        <div class="zwf-msg-text" v-html="renderedReasoning" />
+      <div v-if="message.reasoningEnabled && message.reasoning" class="aib-reasoning">
+        <div class="aib-reasoning-title">💭 深度思考</div>
+        <div class="aib-msg-text" v-html="renderedReasoning" />
       </div>
 
       <!-- 多模态：图片 -->
-      <div v-if="allImages.length" class="zwf-msg-images">
+      <div v-if="allImages.length" class="aib-msg-images">
         <img
           v-for="(src, i) in allImages"
           :key="i"
           :src="src"
-          class="zwf-msg-image"
+          class="aib-msg-image"
           @click="openPreview({ id: `img-${i}`, type: 'image', name: `图片 ${i + 1}`, size: 0, mimeType: 'image/png', dataUrl: src })"
         />
       </div>
 
       <!-- 文件附件 -->
-      <div v-if="fileAttachments.length" class="zwf-msg-files">
+      <div v-if="fileAttachments.length" class="aib-msg-files">
         <div
           v-for="att in fileAttachments"
           :key="att.id"
-          class="zwf-msg-file-chip"
+          class="aib-msg-file-chip"
           @click="openPreview(att)"
         >
-          <span class="zwf-msg-file-icon">{{ getFileTypeIcon(att.type) }}</span>
-          <span class="zwf-msg-file-name">{{ att.name }}</span>
-          <span v-if="att.truncated" class="zwf-msg-file-truncated" title="内容已截断">⚠️</span>
-          <span class="zwf-msg-file-size">{{ formatFileSize(att.size) }}</span>
+          <span class="aib-msg-file-icon">{{ getFileTypeIcon(att.type) }}</span>
+          <span class="aib-msg-file-name">{{ att.name }}</span>
+          <span v-if="att.truncated" class="aib-msg-file-truncated" title="内容已截断">⚠️</span>
+          <span class="aib-msg-file-size">{{ formatFileSize(att.size) }}</span>
         </div>
       </div>
 
       <!-- 文本内容 -->
       <div
         v-if="message.content || !message.reasoning"
-        class="zwf-msg-text"
+        class="aib-msg-text"
         v-html="renderedContent"
       />
 
       <!-- 状态 -->
-      <div v-if="message.status === 'streaming'" class="zwf-typing">
+      <div v-if="message.status === 'streaming'" class="aib-typing">
         <span /><span /><span />
       </div>
-      <div v-else-if="message.status === 'error'" class="zwf-msg-banner zwf-banner-error">
+      <div v-else-if="message.status === 'error'" class="aib-msg-banner aib-banner-error">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
           stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <circle cx="12" cy="12" r="10" />
@@ -171,7 +171,7 @@ function onCodeCopy(e: MouseEvent) {
         </svg>
         <span>{{ message.errorMessage || '请求失败' }}</span>
       </div>
-      <div v-else-if="message.status === 'aborted'" class="zwf-msg-banner zwf-banner-warning">
+      <div v-else-if="message.status === 'aborted'" class="aib-msg-banner aib-banner-warning">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none">
           <rect x="6" y="6" width="12" height="12" rx="2" />
         </svg>

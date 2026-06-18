@@ -91,36 +91,36 @@ async function doClear() {
   toast.success('对话已清除');
 }
 
-const drawerClass = computed(() => ({ 'zwf-open': props.open }));
+const drawerClass = computed(() => ({ 'aib-open': props.open }));
 </script>
 
 <template>
-  <div class="zwf-drawer-mask" />
-  <div :class="['zwf-drawer', drawerClass]" :style="{ width: drawerWidth + 'px' }" @click.stop>
+  <div class="aib-drawer-mask" />
+  <div :class="['aib-drawer', drawerClass]" :style="{ width: drawerWidth + 'px' }" @click.stop>
     <!-- 左侧拖拽条 -->
-    <div class="zwf-drag-handle" @mousedown="onDragStart" />
-    <div class="zwf-drawer-header">
-      <div class="zwf-header-left">
+    <div class="aib-drag-handle" @mousedown="onDragStart" />
+    <div class="aib-drawer-header">
+      <div class="aib-header-left">
         <!-- 语音模式：返回按钮 + 标题 -->
         <template v-if="activeMode === 'voice'">
-          <button class="zwf-back-btn" title="返回文字模式" @click="switchToChat">
+          <button class="aib-back-btn" title="返回文字模式" @click="switchToChat">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M19 12H5M12 19l-7-7 7-7" />
             </svg>
           </button>
-          <span class="zwf-drawer-title">🎤 语音助手</span>
+          <span class="aib-drawer-title">🎤 语音助手</span>
         </template>
         <!-- 文字模式：始终显示品牌 logo -->
         <template v-else>
-          <span class="zwf-brand">
-            <span class="zwf-brand-ai">ai</span><span class="zwf-brand-sep">-</span><span class="zwf-brand-browser">browser</span>
-            <span class="zwf-brand-shine" />
+          <span class="aib-brand">
+            <span class="aib-brand-ai">ai</span><span class="aib-brand-sep">-</span><span class="aib-brand-browser">browser</span>
+            <span class="aib-brand-shine" />
           </span>
         </template>
       </div>
-      <div class="zwf-header-actions">
+      <div class="aib-header-actions">
         <template v-if="activeMode === 'chat'">
-          <button class="zwf-icon-btn" title="清除对话" @click="askClear">
+          <button class="aib-icon-btn" title="清除对话" @click="askClear">
             <!-- eraser -->
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
               stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
@@ -130,7 +130,7 @@ const drawerClass = computed(() => ({ 'zwf-open': props.open }));
             </svg>
           </button>
         </template>
-        <button class="zwf-icon-btn" title="设置" @click="emit('open-settings')">
+        <button class="aib-icon-btn" title="设置" @click="emit('open-settings')">
           <!-- settings (gear) -->
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
             stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
@@ -138,8 +138,8 @@ const drawerClass = computed(() => ({ 'zwf-open': props.open }));
             <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
           </svg>
         </button>
-        <span class="zwf-header-divider" />
-        <button class="zwf-icon-btn" title="关闭" @click="emit('close')">
+        <span class="aib-header-divider" />
+        <button class="aib-icon-btn" title="关闭" @click="emit('close')">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <line x1="18" y1="6" x2="6" y2="18" />
@@ -148,7 +148,7 @@ const drawerClass = computed(() => ({ 'zwf-open': props.open }));
         </button>
       </div>
     </div>
-    <div class="zwf-drawer-body">
+    <div class="aib-drawer-body">
       <ChatPanel v-if="open && activeMode === 'chat'" @switch-voice="switchToVoice" />
       <VoicePanel v-if="open && activeMode === 'voice'" @switch-chat="switchToChat" />
     </div>
@@ -177,13 +177,13 @@ const drawerClass = computed(() => ({ 'zwf-open': props.open }));
 </template>
 
 <style scoped>
-.zwf-back-btn {
+.aib-back-btn {
   width: 32px;
   height: 32px;
   border-radius: 6px;
   border: none;
   background: transparent;
-  color: var(--zwf-text-soft);
+  color: var(--aib-text-soft);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -192,12 +192,12 @@ const drawerClass = computed(() => ({ 'zwf-open': props.open }));
   margin-right: 4px;
 }
 
-.zwf-back-btn:hover {
-  background: var(--zwf-bg-hover);
-  color: var(--zwf-primary);
+.aib-back-btn:hover {
+  background: var(--aib-bg-hover);
+  color: var(--aib-primary);
 }
 
-.zwf-drag-handle {
+.aib-drag-handle {
   position: absolute;
   top: 0;
   left: -4px;
@@ -207,14 +207,14 @@ const drawerClass = computed(() => ({ 'zwf-open': props.open }));
   z-index: 1;
 }
 
-.zwf-drag-handle:hover,
-.zwf-drag-handle:active {
-  background: var(--zwf-primary);
+.aib-drag-handle:hover,
+.aib-drag-handle:active {
+  background: var(--aib-primary);
   opacity: 0.3;
 }
 
 @media (max-width: 640px) {
-  .zwf-drag-handle {
+  .aib-drag-handle {
     display: none;
   }
 }

@@ -16,7 +16,7 @@ const scroller = ref<HTMLDivElement | null>(null);
 const anchor = ref<HTMLDivElement | null>(null);
 /** 用户没主动上滚就一直贴底 */
 const stickToBottom = ref(true);
-/** 实际滚动容器（.zwf-centered-body） */
+/** 实际滚动容器（.aib-centered-body） */
 const scrollContainer = ref<HTMLDivElement | null>(null);
 /** 距离底部的阈值 */
 const BOTTOM_THRESHOLD = 30;
@@ -31,9 +31,9 @@ const MENU_WIDTH = 160;
 const MENU_HEIGHT = 92;
 
 function onContextMenu(payload: { message: ChatMessage; x: number; y: number }) {
-  // .zwf-drawer 上有 transform，会让内部 position:fixed 以 drawer 为参考系。
+  // .aib-drawer 上有 transform，会让内部 position:fixed 以 drawer 为参考系。
   // 把鼠标的视口坐标换算成 drawer 本地坐标
-  const drawer = scroller.value?.closest('.zwf-drawer') as HTMLElement | null;
+  const drawer = scroller.value?.closest('.aib-drawer') as HTMLElement | null;
   const rect = drawer?.getBoundingClientRect();
   const ox = rect?.left ?? 0;
   const oy = rect?.top ?? 0;
@@ -156,8 +156,8 @@ async function quickSend(text: string) {
 }
 
 onMounted(() => {
-  // 获取实际的滚动容器（.zwf-centered-body）
-  scrollContainer.value = scroller.value?.closest('.zwf-centered-body') as HTMLDivElement | null;
+  // 获取实际的滚动容器（.aib-centered-body）
+  scrollContainer.value = scroller.value?.closest('.aib-centered-body') as HTMLDivElement | null;
   if (scrollContainer.value) {
     scrollContainer.value.addEventListener('scroll', onScroll);
   }
@@ -185,8 +185,8 @@ defineExpose({
 </script>
 
 <template>
-  <div class="zwf-msg-list-wrap">
-    <div ref="scroller" class="zwf-msg-list">
+  <div class="aib-msg-list-wrap">
+    <div ref="scroller" class="aib-msg-list">
       <template v-if="conversation.messages.length">
         <MessageItem
           v-for="m in conversation.messages"
@@ -194,7 +194,7 @@ defineExpose({
           :message="m"
           @context-menu="onContextMenu"
         />
-        <div ref="anchor" class="zwf-msg-anchor" aria-hidden="true" />
+        <div ref="anchor" class="aib-msg-anchor" aria-hidden="true" />
       </template>
       <EmptyChat v-else @pick="quickSend" />
     </div>

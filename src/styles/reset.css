@@ -8,7 +8,7 @@
 }
 
 /* Remove default margin and padding (exclude markdown content) */
-*:not(.zwf-msg-text):not(.zwf-msg-text *) {
+*:not(.aib-msg-text):not(.aib-msg-text *) {
   margin: 0;
   padding: 0;
 }
@@ -34,8 +34,8 @@ ol[role='list'] {
 }
 
 /* Set shorter line heights on headings and interactive elements (exclude markdown) */
-h1:not(.zwf-msg-text h1), h2:not(.zwf-msg-text h2), h3:not(.zwf-msg-text h3),
-h4:not(.zwf-msg-text h4), h5:not(.zwf-msg-text h5), h6:not(.zwf-msg-text h6),
+h1:not(.aib-msg-text h1), h2:not(.aib-msg-text h2), h3:not(.aib-msg-text h3),
+h4:not(.aib-msg-text h4), h5:not(.aib-msg-text h5), h6:not(.aib-msg-text h6),
 button, input, label {
   line-height: 1.1;
 }
@@ -46,7 +46,7 @@ h1, h2, h3, h4 {
 }
 
 /* Avoid text overflows (exclude markdown) */
-p:not(.zwf-msg-text p), li:not(.zwf-msg-text li), figcaption {
+p:not(.aib-msg-text p), li:not(.aib-msg-text li), figcaption {
   text-wrap: pretty;
 }
 

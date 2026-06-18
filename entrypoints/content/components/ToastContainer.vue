@@ -5,11 +5,11 @@ const { toasts, dismiss } = useToast();
 </script>
 
 <template>
-  <transition-group tag="div" name="zwf-toast" class="zwf-toast-container">
+  <transition-group tag="div" name="aib-toast" class="aib-toast-container">
     <div
       v-for="t in toasts"
       :key="t.id"
-      :class="['zwf-toast', `zwf-toast-${t.type}`]"
+      :class="['aib-toast', `aib-toast-${t.type}`]"
       @click="dismiss(t.id)"
     >
       <svg

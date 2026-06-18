@@ -1467,7 +1467,7 @@ function usePipeline(): {
 
 | 消息类型 | 方向 | 用途 |
 |---------|------|------|
-| `zwf-toggle` | Background → Content | 切换抽屉显示/隐藏 |
+| `aib-toggle` | Background → Content | 切换抽屉显示/隐藏 |
 | `proxy-fetch` | Content → Background | 代理非流式 HTTP 请求（避免 CORS） |
 | `proxy-fetch-stream` | Content → Background | 代理流式 HTTP 请求（SSE） |
 | `stream-chunk` | Background → Content | 转发 SSE 数据块 |
@@ -1476,8 +1476,8 @@ function usePipeline(): {
 | `abort-stream` | Content → Background | 中止进行中的 SSE 流 |
 | `tab-action` | Content → Background | 标签页操作（newTab/closeTab/switchTab） |
 | `read-local-file` | Content → Background | 读取本地文件（Content Script 无法 fetch file://） |
-| `zwf-drawer-changed` | Content → Background | 抽屉状态变化，广播到其他标签页 |
-| `zwf-drawer-sync` | Background → Content | 同步其他标签页的抽屉状态 |
+| `aib-drawer-changed` | Content → Background | 抽屉状态变化，广播到其他标签页 |
+| `aib-drawer-sync` | Background → Content | 同步其他标签页的抽屉状态 |
 
 ### 10.2 流式代理流程
 

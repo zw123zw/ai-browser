@@ -38,24 +38,24 @@ const translationCache = new WeakMap<HTMLElement, { translated: string; resultEl
 
 /** 注入样式（幂等） */
 function ensureStyles(): void {
-  if (document.getElementById('zwf-click-translate-style')) return
+  if (document.getElementById('aib-click-translate-style')) return
   const style = document.createElement('style')
-  style.id = 'zwf-click-translate-style'
+  style.id = 'aib-click-translate-style'
   style.textContent = `
-    .zwf-click-result {
+    .aib-click-result {
       position: relative;
       margin: 6px 0;
       padding: 12px 16px;
       padding-right: 36px;
       border-radius: 8px;
-      border: 1px solid var(--zwf-border, rgba(255,255,255,0.08));
-      background: var(--zwf-bg-card, #1e1e2e);
+      border: 1px solid var(--aib-border, rgba(255,255,255,0.08));
+      background: var(--aib-bg-card, #1e1e2e);
       font-size: 14px;
       line-height: 1.7;
-      color: var(--zwf-text, #e0e0e0);
-      animation: zwf-click-in 0.2s ease;
+      color: var(--aib-text, #e0e0e0);
+      animation: aib-click-in 0.2s ease;
     }
-    .zwf-click-result-close {
+    .aib-click-result-close {
       position: absolute;
       top: 8px;
       right: 8px;
@@ -64,7 +64,7 @@ function ensureStyles(): void {
       border: none;
       border-radius: 4px;
       background: transparent;
-      color: var(--zwf-text-soft, #888);
+      color: var(--aib-text-soft, #888);
       font-size: 14px;
       line-height: 22px;
       text-align: center;
@@ -72,72 +72,72 @@ function ensureStyles(): void {
       padding: 0;
       transition: all 0.15s ease;
     }
-    .zwf-click-result-close:hover {
+    .aib-click-result-close:hover {
       background: rgba(255,255,255,0.1);
-      color: var(--zwf-text, #fff);
+      color: var(--aib-text, #fff);
     }
-    @keyframes zwf-click-in {
+    @keyframes aib-click-in {
       from { opacity: 0; transform: translateY(-4px); }
       to   { opacity: 1; transform: translateY(0); }
     }
-    .zwf-click-result-content {
+    .aib-click-result-content {
       word-break: break-word;
       white-space: pre-wrap;
     }
-    .zwf-click-result-loading {
+    .aib-click-result-loading {
       display: flex;
       align-items: center;
       gap: 6px;
       font-size: 13px;
-      color: var(--zwf-text-soft, #888);
+      color: var(--aib-text-soft, #888);
       padding: 2px 0;
     }
-    .zwf-click-result-loading .zwf-dot-anim {
+    .aib-click-result-loading .aib-dot-anim {
       display: inline-block;
       width: 20px;
       font-size: 0;
     }
-    .zwf-click-result-loading .zwf-dot-anim::after {
+    .aib-click-result-loading .aib-dot-anim::after {
       content: '...';
       font-size: 13px;
-      animation: zwf-dot-blink 1.2s infinite steps(3, end);
+      animation: aib-dot-blink 1.2s infinite steps(3, end);
     }
-    @keyframes zwf-dot-blink {
+    @keyframes aib-dot-blink {
       0%, 20% { content: '.'; }
       40% { content: '..'; }
       60%, 100% { content: '...'; }
     }
-    .zwf-click-result-bar {
+    .aib-click-result-bar {
       display: flex;
       align-items: center;
       justify-content: space-between;
       margin-top: 8px;
       padding-top: 8px;
-      border-top: 1px solid var(--zwf-border, rgba(255,255,255,0.08));
+      border-top: 1px solid var(--aib-border, rgba(255,255,255,0.08));
     }
-    .zwf-click-result-label {
+    .aib-click-result-label {
       font-size: 11px;
-      color: var(--zwf-text-soft, #666);
+      color: var(--aib-text-soft, #666);
     }
-    .zwf-click-result-actions {
+    .aib-click-result-actions {
       display: flex;
       gap: 6px;
     }
-    .zwf-click-result-btn {
+    .aib-click-result-btn {
       padding: 3px 12px;
-      border: 1px solid var(--zwf-border, rgba(255,255,255,0.12));
+      border: 1px solid var(--aib-border, rgba(255,255,255,0.12));
       border-radius: 6px;
-      background: var(--zwf-bg-card, rgba(255,255,255,0.04));
-      color: var(--zwf-text-soft, #aaa);
+      background: var(--aib-bg-card, rgba(255,255,255,0.04));
+      color: var(--aib-text-soft, #aaa);
       font-size: 12px;
       cursor: pointer;
       font-family: inherit;
       transition: all 0.15s ease;
       line-height: 1.4;
     }
-    .zwf-click-result-btn:hover {
-      background: var(--zwf-bg-hover, rgba(255,255,255,0.1));
-      color: var(--zwf-text, #fff);
+    .aib-click-result-btn:hover {
+      background: var(--aib-bg-hover, rgba(255,255,255,0.1));
+      color: var(--aib-text, #fff);
     }
   `
   document.head.appendChild(style)
@@ -216,7 +216,7 @@ function findNearestLeafIn(container: HTMLElement, target: HTMLElement): HTMLEle
 function findSemanticParent(target: HTMLElement): HTMLElement | null {
   let el: HTMLElement | null = target
   while (el) {
-    if (el.classList.contains('zwf-click-result')) return null
+    if (el.classList.contains('aib-click-result')) return null
 
     const tag = el.tagName
 
@@ -263,12 +263,12 @@ function findSemanticParent(target: HTMLElement): HTMLElement | null {
  */
 function createResultContainer(): HTMLElement {
   const container = document.createElement('div')
-  container.className = 'zwf-click-result'
+  container.className = 'aib-click-result'
   container.setAttribute('translate', 'no')
 
   // 右上角关闭按钮
   const closeBtn = document.createElement('button')
-  closeBtn.className = 'zwf-click-result-close'
+  closeBtn.className = 'aib-click-result-close'
   closeBtn.textContent = '✕'
   closeBtn.addEventListener('click', (e) => {
     e.stopPropagation()
@@ -278,19 +278,19 @@ function createResultContainer(): HTMLElement {
 
   // loading
   const loading = document.createElement('div')
-  loading.className = 'zwf-click-result-loading'
-  loading.innerHTML = '<span>翻译中</span><span class="zwf-dot-anim"></span>'
+  loading.className = 'aib-click-result-loading'
+  loading.innerHTML = '<span>翻译中</span><span class="aib-dot-anim"></span>'
   container.appendChild(loading)
 
   // 内容区
   const content = document.createElement('div')
-  content.className = 'zwf-click-result-content'
+  content.className = 'aib-click-result-content'
   content.style.display = 'none'
   container.appendChild(content)
 
   // 底栏
   const bar = document.createElement('div')
-  bar.className = 'zwf-click-result-bar'
+  bar.className = 'aib-click-result-bar'
   bar.style.display = 'none'
   container.appendChild(bar)
 
@@ -317,15 +317,15 @@ function fillResult(container: HTMLElement, translated: string): void {
   bar.innerHTML = ''
 
   const label = document.createElement('span')
-  label.className = 'zwf-click-result-label'
+  label.className = 'aib-click-result-label'
   label.textContent = 'AI 翻译'
   bar.appendChild(label)
 
   const actions = document.createElement('div')
-  actions.className = 'zwf-click-result-actions'
+  actions.className = 'aib-click-result-actions'
 
   const copyBtn = document.createElement('button')
-  copyBtn.className = 'zwf-click-result-btn'
+  copyBtn.className = 'aib-click-result-btn'
   copyBtn.textContent = '复制'
   copyBtn.addEventListener('click', (e) => {
     e.stopPropagation()
@@ -349,7 +349,7 @@ function fillError(container: HTMLElement, message: string, onRetry?: () => void
 
   content.textContent = message
   content.style.display = ''
-  content.style.color = 'var(--zwf-text-soft, #888)'
+  content.style.color = 'var(--aib-text-soft, #888)'
   content.style.fontSize = '13px'
   loading.style.display = 'none'
 
@@ -358,11 +358,11 @@ function fillError(container: HTMLElement, message: string, onRetry?: () => void
   bar.innerHTML = ''
 
   const actions = document.createElement('div')
-  actions.className = 'zwf-click-result-actions'
+  actions.className = 'aib-click-result-actions'
 
   if (onRetry) {
     const retryBtn = document.createElement('button')
-    retryBtn.className = 'zwf-click-result-btn'
+    retryBtn.className = 'aib-click-result-btn'
     retryBtn.textContent = '刷新'
     retryBtn.addEventListener('click', (e) => {
       e.stopPropagation()
@@ -406,7 +406,7 @@ export function initClickTranslate(
     if (!el) return false
     const node = el instanceof HTMLElement ? el : el.parentElement
     if (!node) return false
-    if (node.closest('.zwf-translate-popup')) return true
+    if (node.closest('.aib-translate-popup')) return true
     const root = node.getRootNode()
     if (root instanceof ShadowRoot) {
       const host = root.host as HTMLElement
@@ -419,7 +419,7 @@ export function initClickTranslate(
   document.addEventListener('click', async (e) => {
     const target = e.target as HTMLElement
     if (isInExtensionUI(target)) return
-    if (target.closest('.zwf-click-result')) return
+    if (target.closest('.aib-click-result')) return
 
     const settings = await getSettings()
     if (settings?.translateMode !== 'click') return
@@ -435,10 +435,10 @@ export function initClickTranslate(
       const isHidden = cached.resultEl.style.display === 'none'
       if (isHidden) {
         cached.resultEl.style.display = ''
-        blockEl.setAttribute('data-zwf-click-hidden', 'false')
+        blockEl.setAttribute('data-aib-click-hidden', 'false')
       } else {
         cached.resultEl.style.display = 'none'
-        blockEl.setAttribute('data-zwf-click-hidden', 'true')
+        blockEl.setAttribute('data-aib-click-hidden', 'true')
       }
       return
     }

@@ -10,10 +10,10 @@
 * **输入组件**: `entrypoints/content/components/InputBar.vue`，基于 `<textarea>`，绑定 `conversation.draftText`
 * **发送流程**: `send()` → emit `send` 事件 → `ChatPanel` → `conversationsStore.sendMessage()` → 将用户消息 push 到 `conversation.messages[]`
 * **存储现状**: 使用 `wxt/storage`（封装 `chrome.storage.local`），当前存储的数据：
-  - `local:zwf-settings` — 全局设置（provider、API key、模型列表等）
-  - `local:zwf-conversation` — 单个活跃会话（messages、draftText、draftAttachments 等）
-  - `local:zwf-fab-pos` — 悬浮按钮位置
-  - `local:zwf-drawer-open` — 抽屉展开状态
+  - `local:aib-settings` — 全局设置（provider、API key、模型列表等）
+  - `local:aib-conversation` — 单个活跃会话（messages、draftText、draftAttachments 等）
+  - `local:aib-fab-pos` — 悬浮按钮位置
+  - `local:aib-drawer-open` — 抽屉展开状态
   - `logs:frontend` / `logs:api` — 仅 debug 构建
 * **消息结构**: `ChatMessage` 包含 `role`、`content`、`attachments?`、`timestamp`、`status`
 * **当前无历史功能**: InputBar 没有 Up/Down 处理，没有 inputHistory 字段，发送后 draftText 清空
@@ -24,7 +24,7 @@
 **Context**: 需要在输入框实现 Up/Down 箭头切换历史输入，用户要求跨标签页、跨浏览器重启都可用。
 
 **Decision**:
-* **存储方案**: 独立 key `local:zwf-input-history`，使用 `chrome.storage.local` 持久化，跨标签页天然同步
+* **存储方案**: 独立 key `local:aib-input-history`，使用 `chrome.storage.local` 持久化，跨标签页天然同步
 * **去重策略**: 连续去重（与 bash history 行为一致）
 * **上限**: 100 条
 * **触发条件**: 仅空输入框按 Up 触发历史切换，有文本时 Up/Down 正常移动光标
@@ -70,7 +70,7 @@
 新增 storage key:
 ```typescript
 export const inputHistoryStorage = storage.defineItem<string[]>(
-  'local:zwf-input-history',
+  'local:aib-input-history',
   { fallback: [] }
 );
 ```

@@ -124,8 +124,8 @@ Layer 3 的正则模式按优先级排列（长模式优先），包括：块注
 
 | 场景 | 实现 | 样式 |
 |------|------|------|
-| 自动翻译 | 元素末尾追加 `<span class="zwf-tl-loading">` | 12x12px 蓝色旋转圆圈，0.6s 线性旋转 |
-| 划词翻译 | 浮层内 "翻译中..." 文字 + 动画省略号 | CSS `@keyframes zwf-dot-blink`，`steps(3, end)` |
+| 自动翻译 | 元素末尾追加 `<span class="aib-tl-loading">` | 12x12px 蓝色旋转圆圈，0.6s 线性旋转 |
+| 划词翻译 | 浮层内 "翻译中..." 文字 + 动画省略号 | CSS `@keyframes aib-dot-blink`，`steps(3, end)` |
 | 点击翻译 | 结果卡片内 "翻译中..." + 动画省略号 | 同划词翻译的省略号动画 |
 
 自动翻译的 loading 标记带 `translate="no"` 属性，防止被 AI 翻译。翻译完成或失败后自动移除。
@@ -247,11 +247,11 @@ function initClickTranslate(
 4. 明确内容元素（p, h1-h6, blockquote...）→ 直接使用
 5. 布局容器（div, section 有多个子块）→ 向下找离点击最近的叶子内容块
 6. 内联元素 → 继续向上
-7. 在 `.zwf-click-result` 内 → 返回 null（避免递归翻译）
+7. 在 `.aib-click-result` 内 → 返回 null（避免递归翻译）
 
 **缓存：** `WeakMap<HTMLElement, { translated, resultEl }>`，元素从 DOM 移除后自动 GC。
 
-**Toggle 行为：** 首次点击请求翻译；后续点击切换结果卡片的显示/隐藏。`data-zwf-click-hidden` 属性跟踪状态。
+**Toggle 行为：** 首次点击请求翻译；后续点击切换结果卡片的显示/隐藏。`data-aib-click-hidden` 属性跟踪状态。
 
 ### translate-parser.ts
 

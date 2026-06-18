@@ -8,13 +8,13 @@ defineEmits<{
 
 <template>
   <div
-    class="zwf-ctx-menu"
+    class="aib-ctx-menu"
     :style="{ left: x + 'px', top: y + 'px' }"
     @click.stop
     @mousedown.stop
     @contextmenu.prevent
   >
-    <button class="zwf-ctx-item" @click="$emit('copy')">
+    <button class="aib-ctx-item" @click="$emit('copy')">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
         stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
         <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
@@ -22,7 +22,7 @@ defineEmits<{
       </svg>
       复制内容
     </button>
-    <button class="zwf-ctx-item zwf-ctx-danger" @click="$emit('delete')">
+    <button class="aib-ctx-item aib-ctx-danger" @click="$emit('delete')">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
         stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
         <polyline points="3 6 5 6 21 6" />

@@ -296,7 +296,7 @@ export class TranslateService {
       this.isTranslating = false
       this.abortController = null
       // AI 回复完成，清除页面上所有 loading 标记
-      document.querySelectorAll('.zwf-tl-loading').forEach(m => m.remove())
+      document.querySelectorAll('.aib-tl-loading').forEach(m => m.remove())
     }
   }
 
@@ -333,7 +333,7 @@ export class TranslateService {
         this.removeLoadingMark(el)
       }
     }
-    document.querySelectorAll('.zwf-tl-loading').forEach(m => m.remove())
+    document.querySelectorAll('.aib-tl-loading').forEach(m => m.remove())
     this.translatedList = []
     this.pendingElements = []
     this.observedIds.clear()
@@ -481,7 +481,7 @@ export class TranslateService {
 
   /** 给元素添加 loading 标记（旋转圈圈，紧跟文本） */
   private addLoadingMark(el: HTMLElement): void {
-    if (el.querySelector('.zwf-tl-loading')) return
+    if (el.querySelector('.aib-tl-loading')) return
 
     // 只给有直接文本节点的元素加 loading，容器元素不加
     let hasDirectText = false
@@ -506,21 +506,21 @@ export class TranslateService {
     }
     if (!hasDirectText) return
 
-    if (!document.getElementById('zwf-tl-loading-style')) {
+    if (!document.getElementById('aib-tl-loading-style')) {
       const style = document.createElement('style')
-      style.id = 'zwf-tl-loading-style'
+      style.id = 'aib-tl-loading-style'
       style.textContent = `
-        @keyframes zwf-tl-spin {
+        @keyframes aib-tl-spin {
           to { transform: rotate(360deg); }
         }
-        .zwf-tl-loading {
+        .aib-tl-loading {
           display: inline-block;
           width: 12px;
           height: 12px;
           border: 2px solid #409eff;
           border-top-color: transparent;
           border-radius: 50%;
-          animation: zwf-tl-spin 0.6s linear infinite;
+          animation: aib-tl-spin 0.6s linear infinite;
           vertical-align: middle;
           margin-left: 4px;
         }
@@ -529,14 +529,14 @@ export class TranslateService {
     }
 
     const mark = document.createElement('span')
-    mark.className = 'zwf-tl-loading'
+    mark.className = 'aib-tl-loading'
     mark.setAttribute('translate', 'no')
     el.appendChild(mark)
   }
 
   /** 移除元素的 loading 标记 */
   private removeLoadingMark(el: HTMLElement): void {
-    const mark = el.querySelector('.zwf-tl-loading')
+    const mark = el.querySelector('.aib-tl-loading')
     if (mark) mark.remove()
   }
 

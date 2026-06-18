@@ -7,7 +7,7 @@ import { Logger } from '@/src/utils/logger';
 
 const log = new Logger('Store:Settings');
 
-export const useSettingsStore = defineStore('zwf-settings', () => {
+export const useSettingsStore = defineStore('aib-settings', () => {
   const settings = ref<AppSettings>({ ...DEFAULT_SETTINGS });
   const ready = ref(false);
 

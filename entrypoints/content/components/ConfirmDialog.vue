@@ -23,16 +23,16 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <div v-if="visible" class="zwf-modal-mask">
-    <div class="zwf-modal zwf-modal-confirm">
-      <button class="zwf-modal-close" title="关闭" @click="emit('cancel')">
+  <div v-if="visible" class="aib-modal-mask">
+    <div class="aib-modal aib-modal-confirm">
+      <button class="aib-modal-close" title="关闭" @click="emit('cancel')">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
           stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <line x1="18" y1="6" x2="6" y2="18" />
           <line x1="6" y1="6" x2="18" y2="18" />
         </svg>
       </button>
-      <div :class="['zwf-modal-icon', variant === 'danger' ? 'zwf-modal-icon-danger' : 'zwf-modal-icon-primary']">
+      <div :class="['aib-modal-icon', variant === 'danger' ? 'aib-modal-icon-danger' : 'aib-modal-icon-primary']">
         <slot name="icon">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -42,12 +42,12 @@ const emit = defineEmits<{
           </svg>
         </slot>
       </div>
-      <div class="zwf-modal-title">{{ title }}</div>
-      <div v-if="desc" class="zwf-modal-desc">{{ desc }}</div>
-      <div class="zwf-modal-actions">
-        <button class="zwf-btn" @click="emit('cancel')">{{ cancelText }}</button>
+      <div class="aib-modal-title">{{ title }}</div>
+      <div v-if="desc" class="aib-modal-desc">{{ desc }}</div>
+      <div class="aib-modal-actions">
+        <button class="aib-btn" @click="emit('cancel')">{{ cancelText }}</button>
         <button
-          :class="['zwf-btn', variant === 'danger' ? 'zwf-btn-danger' : 'zwf-btn-primary']"
+          :class="['aib-btn', variant === 'danger' ? 'aib-btn-danger' : 'aib-btn-primary']"
           @click="emit('confirm')"
         >
           {{ confirmText }}

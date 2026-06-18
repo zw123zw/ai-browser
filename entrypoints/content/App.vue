@@ -26,10 +26,10 @@ function toggle() {
 }
 
 function onMessage(msg: any, sender: chrome.runtime.MessageSender, sendResponse: (response?: any) => void) {
-  if (msg?.type === 'zwf-toggle') toggle();
+  if (msg?.type === 'aib-toggle') toggle();
 
   // 接收其他标签页的抽屉状态同步
-  if (msg?.type === 'zwf-drawer-sync') {
+  if (msg?.type === 'aib-drawer-sync') {
     if (msg.open !== open.value) {
       syncingFromRemote = true;
       open.value = msg.open;
@@ -105,8 +105,8 @@ function applyTheme() {
     host.style.setProperty(key, value);
   }
   // 兼容旧版 primaryColor
-  host.style.setProperty('--zwf-primary', theme.vars['--zwf-primary'] || settingsStore.settings.primaryColor);
-  host.style.setProperty('--zwf-drawer-width', '480px');
+  host.style.setProperty('--aib-primary', theme.vars['--aib-primary'] || settingsStore.settings.primaryColor);
+  host.style.setProperty('--aib-drawer-width', '480px');
 }
 
 watch(
@@ -119,7 +119,7 @@ let syncingFromRemote = false;
 watch(open, async (val) => {
   if (syncingFromRemote) return;
   await drawerOpenStorage.setValue(val);
-  chrome.runtime?.sendMessage?.({ type: 'zwf-drawer-changed', open: val }).catch?.(() => {});
+  chrome.runtime?.sendMessage?.({ type: 'aib-drawer-changed', open: val }).catch?.(() => {});
 });
 
 onMounted(async () => {

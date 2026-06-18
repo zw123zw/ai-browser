@@ -55,7 +55,7 @@ export function showTranslateLoading(x: number, y: number, original: string): vo
   hideTranslatePopup()
 
   const popup = document.createElement('div')
-  popup.className = 'zwf-translate-popup'
+  popup.className = 'aib-translate-popup'
   popup.setAttribute('translate', 'no')
 
   Object.assign(popup.style, {
@@ -116,7 +116,7 @@ export function showTranslateLoading(x: number, y: number, original: string): vo
   Object.assign(dots.style, { letterSpacing: '1px' })
 
   const animDots = document.createElement('span')
-  animDots.className = 'zwf-translate-dots'
+  animDots.className = 'aib-translate-dots'
   Object.assign(animDots.style, {
     display: 'inline-block',
     width: '20px',
@@ -127,17 +127,17 @@ export function showTranslateLoading(x: number, y: number, original: string): vo
   // CSS 动画
   const style = document.createElement('style')
   style.textContent = `
-    @keyframes zwf-dot-blink {
+    @keyframes aib-dot-blink {
       0%, 20% { content: '.'; }
       40% { content: '..'; }
       60%, 100% { content: '...'; }
     }
-    .zwf-translate-dots::after {
+    .aib-translate-dots::after {
       content: '...';
-      animation: zwf-dot-blink 1.2s infinite steps(3, end);
+      animation: aib-dot-blink 1.2s infinite steps(3, end);
     }
-    .zwf-translate-dots { font-size: 0; }
-    .zwf-translate-dots::after { font-size: 12px; }
+    .aib-translate-dots { font-size: 0; }
+    .aib-translate-dots::after { font-size: 12px; }
   `
   popup.appendChild(style)
 
@@ -245,7 +245,7 @@ export function updateTranslateError(message: string, onRetry?: () => void): voi
   // 更新内容区为错误提示
   if (contentEl) {
     contentEl.textContent = message
-    contentEl.style.color = 'var(--zwf-text-soft, #888)'
+    contentEl.style.color = 'var(--aib-text-soft, #888)'
     contentEl.style.fontSize = '13px'
   }
 

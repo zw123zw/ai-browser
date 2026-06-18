@@ -428,34 +428,34 @@ onUnmounted(() => document.removeEventListener('click', onDocClick, true));
 </script>
 
 <template>
-  <div class="zwf-input-card">
+  <div class="aib-input-card">
     <!-- 图片预览（带 OCR 进度） -->
-    <div v-if="imageAttachments.length" class="zwf-image-preview">
-      <div v-for="att in imageAttachments" :key="att.id" class="zwf-image-thumb" @click="openFilePreview(att)">
+    <div v-if="imageAttachments.length" class="aib-image-preview">
+      <div v-for="att in imageAttachments" :key="att.id" class="aib-image-thumb" @click="openFilePreview(att)">
         <img :src="att.dataUrl" />
         <!-- OCR 进度覆盖层 -->
-        <div v-if="att.id in ocrProgressMap" class="zwf-ocr-overlay">
-          <div class="zwf-ocr-overlay-bar" :style="{ width: (ocrProgressMap[att.id] * 100) + '%' }"></div>
-          <span class="zwf-ocr-overlay-text">OCR</span>
+        <div v-if="att.id in ocrProgressMap" class="aib-ocr-overlay">
+          <div class="aib-ocr-overlay-bar" :style="{ width: (ocrProgressMap[att.id] * 100) + '%' }"></div>
+          <span class="aib-ocr-overlay-text">OCR</span>
         </div>
-        <button class="zwf-image-del" @click.stop="removeAttachment(attachments.indexOf(att))">×</button>
+        <button class="aib-image-del" @click.stop="removeAttachment(attachments.indexOf(att))">×</button>
       </div>
     </div>
 
     <!-- 非图片附件预览 -->
-    <div v-if="nonImageAttachments.length" class="zwf-attachment-preview">
-      <div v-for="(att, i) in nonImageAttachments" :key="att.id" class="zwf-attachment-chip" @click="openFilePreview(att)">
-        <span class="zwf-attachment-icon">{{ getFileTypeIcon(att.type) }}</span>
-        <span class="zwf-attachment-name" :title="att.name">{{ att.name }}</span>
-        <span class="zwf-attachment-size">{{ formatFileSize(att.size) }}</span>
-        <button class="zwf-attachment-del" @click.stop="removeAttachment(attachments.indexOf(att))">×</button>
+    <div v-if="nonImageAttachments.length" class="aib-attachment-preview">
+      <div v-for="(att, i) in nonImageAttachments" :key="att.id" class="aib-attachment-chip" @click="openFilePreview(att)">
+        <span class="aib-attachment-icon">{{ getFileTypeIcon(att.type) }}</span>
+        <span class="aib-attachment-name" :title="att.name">{{ att.name }}</span>
+        <span class="aib-attachment-size">{{ formatFileSize(att.size) }}</span>
+        <button class="aib-attachment-del" @click.stop="removeAttachment(attachments.indexOf(att))">×</button>
       </div>
     </div>
 
     <textarea
       ref="textarea"
       v-model="text"
-      class="zwf-input-area"
+      class="aib-input-area"
       placeholder="输入消息... (Enter 发送，Shift+Enter 换行)"
       rows="1"
       @input="autoResize"
@@ -463,9 +463,9 @@ onUnmounted(() => document.removeEventListener('click', onDocClick, true));
       @paste="onPaste"
     />
 
-    <div class="zwf-input-toolbar">
-      <div class="zwf-toolbar-left">
-        <button class="zwf-tool-btn" title="上传文件" @click="fileInput?.click()">
+    <div class="aib-input-toolbar">
+      <div class="aib-toolbar-left">
+        <button class="aib-tool-btn" title="上传文件" @click="fileInput?.click()">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
@@ -479,20 +479,20 @@ onUnmounted(() => document.removeEventListener('click', onDocClick, true));
           @change="pickFiles"
         />
 
-        <div ref="modelMenuRef" class="zwf-model-pill-wrap">
-          <button class="zwf-tool-pill" @click="modelMenuOpen = !modelMenuOpen">
+        <div ref="modelMenuRef" class="aib-model-pill-wrap">
+          <button class="aib-tool-pill" @click="modelMenuOpen = !modelMenuOpen">
             {{ currentModel?.label || '选择模型' }}
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
               stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
               <polyline points="6 9 12 15 18 9" />
             </svg>
           </button>
-          <div v-if="modelMenuOpen" class="zwf-model-menu">
+          <div v-if="modelMenuOpen" class="aib-model-menu">
             <div
               v-for="m in models"
               :key="m.id"
-              class="zwf-model-item"
-              :class="{ 'zwf-model-active': m.id === conversation?.modelId }"
+              class="aib-model-item"
+              :class="{ 'aib-model-active': m.id === conversation?.modelId }"
               @click="pickModel(m.id)"
             >
               {{ m.label }}
@@ -501,8 +501,8 @@ onUnmounted(() => document.removeEventListener('click', onDocClick, true));
         </div>
       </div>
 
-      <div class="zwf-toolbar-right">
-        <button class="zwf-tool-btn" title="语音模式" @click="emit('switch-voice')">
+      <div class="aib-toolbar-right">
+        <button class="aib-tool-btn" title="语音模式" @click="emit('switch-voice')">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
@@ -512,8 +512,8 @@ onUnmounted(() => document.removeEventListener('click', onDocClick, true));
           </svg>
         </button>
         <button
-          class="zwf-send-btn"
-          :class="{ 'zwf-send-btn-stop': isStreaming }"
+          class="aib-send-btn"
+          :class="{ 'aib-send-btn-stop': isStreaming }"
           :disabled="!isStreaming && !text.trim() && !attachments.length"
           :title="isStreaming ? '停止生成' : '发送'"
           @click="onSendOrAbort"

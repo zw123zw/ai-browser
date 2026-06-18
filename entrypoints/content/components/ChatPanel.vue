@@ -120,14 +120,14 @@ function scrollToBottom() {
 </script>
 
 <template>
-  <div class="zwf-centered-panel">
-    <div v-if="hasMessages" class="zwf-centered-body">
+  <div class="aib-centered-panel">
+    <div v-if="hasMessages" class="aib-centered-body">
       <MessageList ref="messageListRef" :conversation="convStore.conversation!" />
       <!-- 回到底部按钮 -->
-      <transition name="zwf-fade">
+      <transition name="aib-fade">
         <button
           v-if="showScrollBottom"
-          class="zwf-scroll-bottom-btn"
+          class="aib-scroll-bottom-btn"
           title="滚动到底部"
           @click="scrollToBottom"
         >
@@ -139,10 +139,10 @@ function scrollToBottom() {
         </button>
       </transition>
     </div>
-    <div v-else class="zwf-centered-welcome">
+    <div v-else class="aib-centered-welcome">
       <EmptyChat @pick="onPick" />
     </div>
-    <footer class="zwf-centered-footer">
+    <footer class="aib-centered-footer">
       <InputBar
         :conversation="convStore.conversation"
         :models="settingsStore.settings.models"

@@ -105,17 +105,17 @@ function triggerDownload(url: string, name: string) {
 </script>
 
 <template>
-  <div class="zwf-file-modal-mask" @mousedown.self="emit('close')">
-    <div class="zwf-file-modal">
-      <div class="zwf-file-modal-header">
-        <div class="zwf-file-modal-info">
-          <span class="zwf-file-modal-icon">{{ getFileTypeIcon(attachment.type) }}</span>
-          <div class="zwf-file-modal-text-wrap">
-            <span class="zwf-file-modal-name">{{ attachment.name }}</span>
-            <span class="zwf-file-modal-meta">{{ formatFileSize(attachment.size) }}</span>
+  <div class="aib-file-modal-mask" @mousedown.self="emit('close')">
+    <div class="aib-file-modal">
+      <div class="aib-file-modal-header">
+        <div class="aib-file-modal-info">
+          <span class="aib-file-modal-icon">{{ getFileTypeIcon(attachment.type) }}</span>
+          <div class="aib-file-modal-text-wrap">
+            <span class="aib-file-modal-name">{{ attachment.name }}</span>
+            <span class="aib-file-modal-meta">{{ formatFileSize(attachment.size) }}</span>
           </div>
         </div>
-        <button class="zwf-file-modal-download" @click="downloadFile" title="下载原始文件">
+        <button class="aib-file-modal-download" @click="downloadFile" title="下载原始文件">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
@@ -123,7 +123,7 @@ function triggerDownload(url: string, name: string) {
             <line x1="12" y1="15" x2="12" y2="3" />
           </svg>
         </button>
-        <button class="zwf-file-modal-close" @click="emit('close')" title="关闭 (Esc)">
+        <button class="aib-file-modal-close" @click="emit('close')" title="关闭 (Esc)">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <line x1="18" y1="6" x2="6" y2="18" />
@@ -132,11 +132,11 @@ function triggerDownload(url: string, name: string) {
         </button>
       </div>
 
-      <div class="zwf-file-modal-body">
-        <div v-if="isImagePreview" class="zwf-file-modal-image">
+      <div class="aib-file-modal-body">
+        <div v-if="isImagePreview" class="aib-file-modal-image">
           <img :src="attachment.dataUrl" :alt="attachment.name" />
         </div>
-        <div v-else-if="errorMessage" class="zwf-file-modal-error">
+        <div v-else-if="errorMessage" class="aib-file-modal-error">
           <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor"
             stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.4">
             <circle cx="12" cy="12" r="10" />
@@ -145,8 +145,8 @@ function triggerDownload(url: string, name: string) {
           </svg>
           <p>{{ errorMessage }}</p>
         </div>
-        <div v-else-if="isTextPreview" class="zwf-file-modal-text" v-html="highlightedContent" />
-        <div v-else class="zwf-file-modal-error">
+        <div v-else-if="isTextPreview" class="aib-file-modal-text" v-html="highlightedContent" />
+        <div v-else class="aib-file-modal-error">
           <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor"
             stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.4">
             <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
@@ -156,7 +156,7 @@ function triggerDownload(url: string, name: string) {
         </div>
       </div>
 
-      <div v-if="isTextPreview && attachment.truncated" class="zwf-file-modal-truncated">
+      <div v-if="isTextPreview && attachment.truncated" class="aib-file-modal-truncated">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
           stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />

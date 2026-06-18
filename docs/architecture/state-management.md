@@ -20,11 +20,11 @@ graph TB
     end
 
     subgraph Chrome Storage API
-        CS1[local:zwf-settings]
-        CS2[local:zwf-conversation]
-        CS3[local:zwf-fab-pos]
-        CS4[local:zwf-drawer-open]
-        CS5[local:zwf-input-history]
+        CS1[local:aib-settings]
+        CS2[local:aib-conversation]
+        CS3[local:aib-fab-pos]
+        CS4[local:aib-drawer-open]
+        CS5[local:aib-input-history]
     end
 
     S -->|defineStorageSync| SS
@@ -60,7 +60,7 @@ graph TB
 
 ### 3. 单一会话模型
 
-会话管理采用单一会话模式（不再支持多会话切换）。整个应用生命周期内只有一个 `Conversation` 对象，简化了状态管理复杂度。保留了旧的多会话存储键 `zwf-conversations` 用于数据迁移。
+会话管理采用单一会话模式（不再支持多会话切换）。整个应用生命周期内只有一个 `Conversation` 对象，简化了状态管理复杂度。保留了旧的多会话存储键 `aib-conversations` 用于数据迁移。
 
 ### 4. 设置安全合并机制
 
@@ -72,7 +72,7 @@ graph TB
 
 ### 5. 输入历史独立存储
 
-输入历史记录单独存储在 `zwf-input-history`，不与会话数据耦合。采用上限 100 条 + 连续去重策略，避免存储膨胀。
+输入历史记录单独存储在 `aib-input-history`，不与会话数据耦合。采用上限 100 条 + 连续去重策略，避免存储膨胀。
 
 ## 详细实现
 
@@ -332,17 +332,17 @@ function plain<T>(v: T): T
 
 ## 存储键定义
 
-所有存储键使用 `zwf-` 命名空间，存储在 `local:` 域（仅本设备同步）。
+所有存储键使用 `aib-` 命名空间，存储在 `local:` 域（仅本设备同步）。
 
 | 存储键 | 类型 | 说明 | 持久化 |
 |--------|------|------|--------|
-| `local:zwf-settings` | `AppSettings` | 全局设置 | 是 |
-| `local:zwf-conversation` | `Conversation \| null` | 当前会话 | 是 |
-| `local:zwf-conversations` | `Conversation[]` | 旧版多会话（已废弃，仅迁移用） | 是 |
-| `local:zwf-fab-pos` | `{ right: number, bottom: number }` | 悬浮按钮位置 | 是 |
-| `local:zwf-drawer-open` | `boolean` | 抽屉展开状态 | 是 |
-| `local:zwf-input-history` | `string[]` | 输入历史（上限 100 条） | 是 |
-| `local:zwf-active-id` | `string` | 旧版活跃会话 ID（已废弃） | - |
+| `local:aib-settings` | `AppSettings` | 全局设置 | 是 |
+| `local:aib-conversation` | `Conversation \| null` | 当前会话 | 是 |
+| `local:aib-conversations` | `Conversation[]` | 旧版多会话（已废弃，仅迁移用） | 是 |
+| `local:aib-fab-pos` | `{ right: number, bottom: number }` | 悬浮按钮位置 | 是 |
+| `local:aib-drawer-open` | `boolean` | 抽屉展开状态 | 是 |
+| `local:aib-input-history` | `string[]` | 输入历史（上限 100 条） | 是 |
+| `local:aib-active-id` | `string` | 旧版活跃会话 ID（已废弃） | - |
 
 ## 错误处理
 

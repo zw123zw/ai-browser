@@ -9,7 +9,7 @@ export default defineBackground(() => {
   // 工具栏图标点击
   chrome.action.onClicked.addListener(async (tab) => {
     if (tab.id) {
-      chrome.tabs.sendMessage(tab.id, { type: 'zwf-toggle' }).catch(() => {});
+      chrome.tabs.sendMessage(tab.id, { type: 'aib-toggle' }).catch(() => {});
     }
   });
 
@@ -18,7 +18,7 @@ export default defineBackground(() => {
     if (command !== 'toggle-chat') return;
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (tab?.id) {
-      chrome.tabs.sendMessage(tab.id, { type: 'zwf-toggle' }).catch(() => {});
+      chrome.tabs.sendMessage(tab.id, { type: 'aib-toggle' }).catch(() => {});
     }
   });
 
@@ -168,12 +168,12 @@ export default defineBackground(() => {
     }
 
     // 跨标签页同步抽屉状态
-    if (message.type === 'zwf-drawer-changed') {
+    if (message.type === 'aib-drawer-changed') {
       const { open } = message;
       chrome.tabs.query({}, (tabs) => {
         for (const tab of tabs) {
           if (tab.id && tab.id !== sender.tab?.id) {
-            chrome.tabs.sendMessage(tab.id, { type: 'zwf-drawer-sync', open }).catch(() => {});
+            chrome.tabs.sendMessage(tab.id, { type: 'aib-drawer-sync', open }).catch(() => {});
           }
         }
       });

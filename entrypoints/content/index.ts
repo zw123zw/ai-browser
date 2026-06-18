@@ -35,7 +35,7 @@ export default defineContentScript({
       if (!el) return false
       const node = el instanceof HTMLElement ? el : el.parentElement
       if (!node) return false
-      if (node.closest('.zwf-translate-popup')) return true
+      if (node.closest('.aib-translate-popup')) return true
       // getRootNode() 穿透 shadow 边界
       const root = node.getRootNode()
       if (root instanceof ShadowRoot) {

@@ -17,8 +17,8 @@
 
 - [ ] 「用户配置」tab 中显示「清除缓存」按钮
 - [ ] 点击按钮弹出确认对话框
-- [ ] 确认后清除 chrome.storage.local 中的：`zwf-conversation`、`logs:frontend`、`logs:api`、`zwf-input-history`
-- [ ] 不清除：`zwf-settings`、`zwf-fab-pos`、`zwf-drawer-open`
+- [ ] 确认后清除 chrome.storage.local 中的：`aib-conversation`、`logs:frontend`、`logs:api`、`aib-input-history`
+- [ ] 不清除：`aib-settings`、`aib-fab-pos`、`aib-drawer-open`
 - [ ] 清除完成后显示 toast 提示
 - [ ] 4MB 日志自动清除逻辑保留
 - [ ] prod 和 debug 环境都可见此按钮
@@ -29,13 +29,13 @@
 
 | 键 | 内容 | 操作 |
 |---|---|---|
-| `zwf-conversation` | 当前会话消息 | 清除 |
+| `aib-conversation` | 当前会话消息 | 清除 |
 | `logs:frontend` | 前端日志 | 清除 |
 | `logs:api` | API 日志 | 清除 |
-| `zwf-input-history` | 输入历史 | 清除 |
-| `zwf-settings` | 模型配置等 | 保留 |
-| `zwf-fab-pos` | 悬浮按钮位置 | 保留 |
-| `zwf-drawer-open` | 抽屉展开状态 | 保留 |
+| `aib-input-history` | 输入历史 | 清除 |
+| `aib-settings` | 模型配置等 | 保留 |
+| `aib-fab-pos` | 悬浮按钮位置 | 保留 |
+| `aib-drawer-open` | 抽屉展开状态 | 保留 |
 
 ### 实现方案
 
@@ -47,7 +47,7 @@
    - 移除 `logEnabled` 条件判断
    - 移除原有「日志管理」section
    - 新增「清除缓存」按钮，放在「激活码」下方
-   - 样式复用 `zwf-btn-icon` 类
+   - 样式复用 `aib-btn-icon` 类
 
 3. **保留 4MB 自动清除**
    - `log-storage.ts` 中的 `MAX_STORAGE_BYTES` 和 `doAppend()` 逻辑不变

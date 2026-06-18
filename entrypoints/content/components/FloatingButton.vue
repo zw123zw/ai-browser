@@ -88,14 +88,14 @@ onUnmounted(() => {
 
 <template>
   <div
-    class="zwf-fab"
-    :class="{ 'zwf-fab-dragging': dragging }"
+    class="aib-fab"
+    :class="{ 'aib-fab-dragging': dragging }"
     :style="{ right: pos.right + 'px', bottom: pos.bottom + 'px' }"
     @mousedown="onMouseDown"
   >
-    <span class="zwf-fab-tip">AI 语音助手 ({{ settingsStore.settings.shortcut || 'Ctrl+`' }})</span>
+    <span class="aib-fab-tip">AI 语音助手 ({{ settingsStore.settings.shortcut || 'Ctrl+`' }})</span>
     <!-- Logo - 科技芯片 -->
-    <svg class="zwf-fab-svg" width="24" height="24" viewBox="0 0 24 24" fill="none">
+    <svg class="aib-fab-svg" width="24" height="24" viewBox="0 0 24 24" fill="none">
       <!-- 外层八角科技框 -->
       <path d="M8 2H16L22 8V16L16 22H8L2 16V8L8 2Z"
         stroke="currentColor" stroke-width="1" stroke-linejoin="round" opacity="0.35" />

@@ -8,7 +8,7 @@
 - **构建**: WXT (Manifest V3)，`@/` 路径别名指向项目根目录
 - **状态管理**: Pinia，仅用 setup store（Composition API 写法）
 - **类型检查**: `vue-tsc --noEmit`（`npm run compile`）
-- **样式**: 纯 CSS，写在 `src/styles/global.css`，类名必须 `zwf-` 前缀
+- **样式**: 纯 CSS，写在 `src/styles/global.css`，类名必须 `aib-` 前缀
 - **日志**: 统一使用 Logger，写入 `chrome.storage.local`，禁止 console
 
 ## 命名规范
@@ -19,8 +19,8 @@
 | TS 文件 | kebab-case | `file-parsers.ts`, `storage-sync.ts` |
 | 函数/变量 | camelCase | `createAdapter`, `useSettingsStore` |
 | 类型/接口 | PascalCase | `ChatMessage`, `AppSettings` |
-| CSS 类名 | `zwf-` 前缀 | `zwf-fab`, `zwf-msg-row` |
-| Store ID | `zwf-` 前缀 | `zwf-settings`, `zwf-conversations` |
+| CSS 类名 | `aib-` 前缀 | `aib-fab`, `aib-msg-row` |
+| Store ID | `aib-` 前缀 | `aib-settings`, `aib-conversations` |
 
 ## 目录结构
 
@@ -74,7 +74,7 @@ const emit = defineEmits<{ ... }>();      // 泛型语法
 </script>
 
 <template>
-  <div class="zwf-xxx">...</div>
+  <div class="aib-xxx">...</div>
 </template>
 ```
 

@@ -72,7 +72,7 @@ graph TB
 
 ### settingsStorage — 应用设置
 
-- **键**：`local:zwf-settings`
+- **键**：`local:aib-settings`
 - **类型**：`AppSettings`
 - **默认值**：`DEFAULT_SETTINGS`（从 `local-config.json` 解析）
 
@@ -113,7 +113,7 @@ flowchart LR
 
 ### conversationStorage — 单会话
 
-- **键**：`local:zwf-conversation`
+- **键**：`local:aib-conversation`
 - **类型**：`Conversation | null`
 - **默认值**：`null`
 
@@ -146,14 +146,14 @@ interface ChatMessage {
 
 ### conversationsStorageOld — 旧多会话（已废弃）
 
-- **键**：`local:zwf-conversations`
+- **键**：`local:aib-conversations`
 - **类型**：`Conversation[]`
 - **默认值**：`[]`
 - **用途**：仅用于从旧版迁移，新代码不应使用
 
 ### fabPosStorage — 悬浮按钮位置
 
-- **键**：`local:zwf-fab-pos`
+- **键**：`local:aib-fab-pos`
 - **类型**：`FabPos`
 - **默认值**：`{ right: 24, bottom: 24 }`
 
@@ -166,13 +166,13 @@ interface FabPos {
 
 ### drawerOpenStorage — 抽屉展开状态
 
-- **键**：`local:zwf-drawer-open`
+- **键**：`local:aib-drawer-open`
 - **类型**：`boolean`
 - **默认值**：`false`
 
 ### inputHistoryStorage — 输入历史
 
-- **键**：`local:zwf-input-history`
+- **键**：`local:aib-input-history`
 - **类型**：`string[]`
 - **默认值**：`[]`
 - **上限**：100 条（FIFO 策略）
@@ -252,7 +252,7 @@ flowchart TD
     G --> H[迁移完成]
 ```
 
-迁移在首次加载时自动执行，旧数据保留在 `local:zwf-conversations` 中不删除，确保回退兼容。
+迁移在首次加载时自动执行，旧数据保留在 `local:aib-conversations` 中不删除，确保回退兼容。
 
 ## 关键类型与接口
 
@@ -279,12 +279,12 @@ interface SyncOptions<T> {
 
 // ========== 存储键映射 ==========
 
-// local:zwf-settings          → AppSettings
-// local:zwf-conversation      → Conversation | null
-// local:zwf-conversations     → Conversation[] (@deprecated)
-// local:zwf-fab-pos           → FabPos { right, bottom }
-// local:zwf-drawer-open       → boolean
-// local:zwf-input-history     → string[]
+// local:aib-settings          → AppSettings
+// local:aib-conversation      → Conversation | null
+// local:aib-conversations     → Conversation[] (@deprecated)
+// local:aib-fab-pos           → FabPos { right, bottom }
+// local:aib-drawer-open       → boolean
+// local:aib-input-history     → string[]
 ```
 
 ## 目录结构

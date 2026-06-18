@@ -228,7 +228,7 @@ npm run compile
 ### 组件开发规范
 
 - 使用 `<script setup lang="ts">` 语法
-- 样式使用 `scoped`，类名以 `zwf-` 前缀
+- 样式使用 `scoped`，类名以 `aib-` 前缀
 - 状态管理使用 Pinia，不使用 Options API
 - 工具函数放在 `src/utils/`，组合式函数放在 `src/composables/`
 

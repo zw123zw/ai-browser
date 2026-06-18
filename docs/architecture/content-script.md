@@ -111,13 +111,13 @@ sequenceDiagram
     participant BG as Background Script
     participant TabB as 标签页 B
 
-    TabA->>BG: chrome.runtime.sendMessage({ type: 'zwf-drawer-changed', open: true })
-    BG->>TabB: chrome.runtime.sendMessage({ type: 'zwf-drawer-sync', open: true })
+    TabA->>BG: chrome.runtime.sendMessage({ type: 'aib-drawer-changed', open: true })
+    BG->>TabB: chrome.runtime.sendMessage({ type: 'aib-drawer-sync', open: true })
     TabB->>TabB: syncingFromRemote = true → open.value = true → syncingFromRemote = false
 ```
 
 - 用户在一个标签页打开/关闭抽屉时，通过 `chrome.runtime.sendMessage` 广播状态
-- 其他标签页的 `onMessage` 监听器接收 `zwf-drawer-sync` 消息并同步
+- 其他标签页的 `onMessage` 监听器接收 `aib-drawer-sync` 消息并同步
 - 使用 `syncingFromRemote` 标志避免循环广播
 - 抽屉状态还持久化到 `drawerOpenStorage`，页面刷新后恢复
 
@@ -213,7 +213,7 @@ function toggle() {
 }
 ```
 
-通过 `chrome.runtime.onMessage` 监听 `zwf-toggle` 消息，支持从 popup 或其他地方触发抽屉开关。
+通过 `chrome.runtime.onMessage` 监听 `aib-toggle` 消息，支持从 popup 或其他地方触发抽屉开关。
 
 #### 键盘快捷键
 
@@ -255,7 +255,7 @@ function applyTheme() {
 }
 ```
 
-主题变量（如 `--zwf-primary`、`--zwf-bg` 等）设置在 shadow host 上，子组件通过 CSS 自定义属性继承。
+主题变量（如 `--aib-primary`、`--aib-bg` 等）设置在 shadow host 上，子组件通过 CSS 自定义属性继承。
 
 #### Store 初始化
 
