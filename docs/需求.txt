@@ -31,7 +31,7 @@
 生成多个文件时 用多个[FILE:xxx]包裹内容返回，支持预览与下载，预览和下载和上传后预览下载以及用户消息文件发送后预览与下载同一套逻辑用一个组件
 
 
-AI联读  可视化窗口 数据去重最小父级  页面骨架
+AI联读  首次加载 用户发送消息  总结这个页面的要点 每次跳转页面和hash跳转都发送 
 
 
 批量指令 跨页面指令  指令elementId位是数组支持多个elementId指令执行  [command]{"action":"click","elementId":"e3","description":"登录","done":0}[/command]
