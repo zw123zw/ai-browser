@@ -30,6 +30,8 @@ const toast = useToast();
 
 const fileInput = ref<HTMLInputElement | null>(null);
 const textarea = ref<HTMLTextAreaElement | null>(null);
+/** 本地附件列表（不依赖 conversation 对象的响应性） */
+const localAttachments = ref<Attachment[]>([]);
 const modelMenuOpen = ref(false);
 const modelMenuRef = ref<HTMLDivElement | null>(null);
 
@@ -69,7 +71,7 @@ const text = computed({
     }
   },
 });
-const attachments = computed(() => props.conversation?.draftAttachments || []);
+const attachments = computed(() => localAttachments.value);
 /** 图片附件（用于预览） */
 const imageAttachments = computed(() => attachments.value.filter(a => a.type === 'image'));
 /** 非图片附件（用于预览） */
@@ -97,8 +99,14 @@ function onSendOrAbort() {
 }
 
 function setDraftAttachments(arr: Attachment[]) {
+  localAttachments.value = arr;
   if (props.conversation) props.conversation.draftAttachments = arr;
 }
+
+// 初始化：从 conversation 加载已有附件
+watch(() => props.conversation?.draftAttachments, (val) => {
+  if (val) localAttachments.value = [...val];
+}, { immediate: true });
 
 function toggleReasoning() {
   if (props.conversation) props.conversation.reasoningEnabled = !reasoning.value;
@@ -117,8 +125,7 @@ function startOcr(attachment: Attachment) {
 
 /** 统一文件处理：解析 → 添加附件 → 异步 OCR */
 async function addFiles(files: File[]) {
-  // 上传新文件时，清除旧的非图片附件（用户期望新文件替换旧文件）
-  const newAttachments = attachments.value.filter(a => a.type === 'image');
+  const newAttachments = [...attachments.value];
   const ocrTargets: Attachment[] = [];
   let truncationCount = 0;
 
@@ -319,6 +326,7 @@ function send() {
   });
 
   // 发送后清空 draft
+  localAttachments.value = [];
   if (props.conversation) {
     props.conversation.draftText = '';
     props.conversation.draftAttachments = [];

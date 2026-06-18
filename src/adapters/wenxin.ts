@@ -20,9 +20,9 @@ export class WenxinAdapter extends BaseAdapter {
     return messages.map((m) => {
       // 将文件附件内容合并到文本（含图片 OCR 文字）
       let content = m.content;
-      if (m.attachments?.some(a => a.content && !a.content.startsWith('['))) {
+      if (m.attachments?.some(a => a.content)) {
         const fileTexts = m.attachments
-          .filter(a => a.content && !a.content.startsWith('['))
+          .filter(a => a.content)
           .map(a => {
             if (a.type === 'image') {
               return `[图片文字识别: ${a.name}]\n${a.content}`;

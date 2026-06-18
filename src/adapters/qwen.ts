@@ -28,9 +28,9 @@ export class QwenAdapter extends BaseAdapter {
       .filter(m => m.role !== 'system')
       .map((m) => {
         let content = m.content;
-        if (m.attachments?.some(a => a.content && !a.content.startsWith('['))) {
+        if (m.attachments?.some(a => a.content)) {
           const fileTexts = m.attachments
-            .filter(a => a.content && !a.content.startsWith('['))
+            .filter(a => a.content)
             .map(a => {
               if (a.type === 'image') {
                 return `[图片文字识别: ${a.name}]\n${a.content}`;

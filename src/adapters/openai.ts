@@ -21,7 +21,7 @@ export class OpenAIAdapter extends BaseAdapter {
   private collectFileTexts(m: ChatMessage): string {
     if (!m.attachments) return '';
     return m.attachments
-      .filter(a => a.content && !a.content.startsWith('['))
+      .filter(a => a.content)
       .map(a => {
         if (a.type === 'image') {
           return `[图片文字识别: ${a.name}]\n${a.content}`;
