@@ -43,10 +43,12 @@ export async function parseFile(file: File): Promise<Attachment> {
   let attachment: Attachment;
   switch (type) {
     case 'image':
+      log.info('→ parseImage', file.name);
       attachment = await parseImage(file);
       break;
     case 'text':
     case 'code':
+      log.info('→ parseText', { name: file.name, type });
       attachment = await parseText(file, type);
       break;
     case 'pdf':
@@ -60,17 +62,22 @@ export async function parseFile(file: File): Promise<Attachment> {
       break;
     case 'binary':
     default:
+      log.info('→ parseBinary', file.name);
       attachment = await parseBinary(file);
       break;
   }
 
-  // 专用解析器失败或内容为空时，尝试按文本读取作为兜底（parseBinary 内部已处理，跳过）
-  if (type !== 'binary' && (!attachment.content || attachment.content.startsWith('['))) {
+  // 专用解析器失败或内容为空时，尝试按文本读取作为兜底（parseBinary 内部已处理，跳过；image 的 content 为空是正常的，也跳过）
+  if (type !== 'binary' && type !== 'image' && (!attachment.content || attachment.content.startsWith('['))) {
+    log.info('兜底 tryReadAsText', { name: file.name, type, contentEmpty: !attachment.content, contentStart: attachment.content?.slice(0, 30) });
     const textFallback = await tryReadAsText(file);
     if (textFallback) {
+      log.info('兜底成功 → text', file.name);
       attachment = textFallback;
     }
   }
+
+  log.info('最终结果', { name: attachment.name, type: attachment.type, contentLen: attachment.content?.length, contentPreview: attachment.content?.slice(0, 50) });
 
   // 缓存原始 File 引用，供预览 modal 下载使用
   originalFileCache.set(attachment.id, file);
@@ -102,8 +109,13 @@ export async function ocrAttachment(
   attachment: Attachment,
   onProgress?: OcrProgressCallback
 ): Promise<void> {
-  if (attachment.type !== 'image' || !attachment.dataUrl) return;
+  if (attachment.type !== 'image' || !attachment.dataUrl) {
+    log.info('ocrAttachment skip', { type: attachment.type, hasDataUrl: !!attachment.dataUrl });
+    return;
+  }
+  log.info('ocrAttachment start', { name: attachment.name });
   const text = await recognizeImage(attachment.dataUrl, onProgress);
+  log.info('ocrAttachment done', { name: attachment.name, textLen: text.length, preview: text.slice(0, 50) });
   if (text) attachment.content = text;
 }
 

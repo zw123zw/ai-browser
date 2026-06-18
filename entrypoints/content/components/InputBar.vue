@@ -114,6 +114,7 @@ function toggleReasoning() {
 
 /** 启动异步 OCR（不阻塞 UI） */
 function startOcr(attachment: Attachment) {
+  log.info('startOcr', { name: attachment.name, type: attachment.type, hasDataUrl: !!attachment.dataUrl });
   ocrProgressMap.value[attachment.id] = 0;
   ocrAttachment(attachment, (progress) => {
     ocrProgressMap.value[attachment.id] = progress;
@@ -132,6 +133,7 @@ async function addFiles(files: File[]) {
   for (const f of files) {
     try {
       const attachment = await parseFile(f);
+      log.info('addFiles parsed', { name: f.name, detectedType: attachment.type, hasDataUrl: !!attachment.dataUrl, contentLen: attachment.content?.length });
       if (attachment.truncated) truncationCount++;
       newAttachments.push(attachment);
       if (attachment.type === 'image') ocrTargets.push(attachment);
@@ -145,6 +147,7 @@ async function addFiles(files: File[]) {
   }
 
   setDraftAttachments(newAttachments);
+  log.info('OCR targets', { count: ocrTargets.length, names: ocrTargets.map(a => a.name) });
   for (const att of ocrTargets) startOcr(att);
 }
 
@@ -152,6 +155,7 @@ async function addFiles(files: File[]) {
 async function pickFiles(e: Event) {
   const input = e.target as HTMLInputElement;
   if (!input.files) return;
+  log.info('pickFiles', { count: input.files.length, files: Array.from(input.files).map(f => ({ name: f.name, type: f.type, size: f.size })) });
   await addFiles(Array.from(input.files));
   input.value = '';
 }
@@ -165,12 +169,16 @@ async function onPaste(e: ClipboardEvent) {
   for (const it of Array.from(items)) {
     if (it.kind === 'file') {
       const f = it.getAsFile();
-      if (f) files.push(f);
+      if (f) {
+        log.info('onPaste file item', { name: f.name, type: f.type, size: f.size });
+        files.push(f);
+      }
     }
   }
 
   // 有文件 → 走统一的 addFiles 流程
   if (files.length) {
+    log.info('onPaste → addFiles', { count: files.length });
     e.preventDefault();
     await addFiles(files);
     return;
@@ -191,11 +199,13 @@ async function onPaste(e: ClipboardEvent) {
         const res = await fetch(fetchUrl, { mode: 'cors' });
         blob = await res.blob();
       }
+      log.info('onPaste URL fetched', { url: fetchUrl, blobType: blob.type, blobSize: blob.size });
       // 只有返回的是图片 → 拦截，不粘贴链接文本
       if (blob.type.startsWith('image/')) {
         const ext = blob.type.split('/')[1] || 'png';
         const fileName = pastedText!.split(/[\\/]/).pop()?.split('?')[0] || `image.${ext}`;
         const file = new File([blob], fileName, { type: blob.type });
+        log.info('onPaste URL → image file', { fileName, type: file.type });
         await addFiles([file]);
       } else {
         // 非图片 → 上传内容 + 粘贴链接文本（同时做两件事）
@@ -203,6 +213,7 @@ async function onPaste(e: ClipboardEvent) {
         const ext = blob.type.split('/')[1] || 'txt';
         const fileName = pastedText!.split(/[\\/]/).pop()?.split('?')[0] || `file.${ext}`;
         const file = new File([blob], fileName, { type: blob.type });
+        log.info('onPaste URL → non-image file', { fileName, type: file.type });
         await addFiles([file]);
       }
     } catch (err) {
@@ -248,6 +259,7 @@ function fetchLocalFile(fileUrl: string): Promise<Blob> {
       const binary = atob(response.data);
       const bytes = new Uint8Array(binary.length);
       for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      log.info('fetchLocalFile', { url: fileUrl, mimeType: response.mimeType, size: bytes.length });
       resolve(new Blob([bytes], { type: response.mimeType }));
     });
   });

@@ -2,6 +2,9 @@
  * 文件类型检测与分类工具
  */
 import type { AttachmentType } from '@/src/types';
+import { Logger } from './logger';
+
+const log = new Logger('FileType');
 
 /** 代码文件扩展名 → 语言标识映射 */
 const CODE_EXTENSIONS: Record<string, string> = {
@@ -116,6 +119,8 @@ export function detectFileType(file: File): AttachmentType {
   const ext = getExtension(file.name);
   const mime = file.type.toLowerCase();
   const filename = file.name.toLowerCase();
+
+  log.info('detectFileType', { name: file.name, ext, mime, size: file.size });
 
   // 图片：MIME 前缀优先
   if (mime.startsWith(IMAGE_MIME_PREFIX)) return 'image';

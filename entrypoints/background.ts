@@ -32,6 +32,7 @@ export default defineBackground(() => {
     // 读取本地文件（Content Script 无法直接 fetch file://）
     if (message.type === 'read-local-file') {
       const { url } = message;
+      log.info('read-local-file', { url });
       fetch(url)
         .then(async (res) => {
           if (!res.ok) {
@@ -42,10 +43,12 @@ export default defineBackground(() => {
           const base64 = btoa(
             new Uint8Array(buffer).reduce((data, byte) => data + String.fromCharCode(byte), '')
           );
+          const mimeType = res.headers.get('content-type') || 'application/octet-stream';
+          log.info('read-local-file result', { url, mimeType, size: buffer.byteLength });
           sendResponse({
             success: true,
             data: base64,
-            mimeType: res.headers.get('content-type') || 'application/octet-stream',
+            mimeType,
           });
         })
         .catch((err) => {
