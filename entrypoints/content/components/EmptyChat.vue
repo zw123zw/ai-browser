@@ -4,10 +4,10 @@ import { computed } from 'vue';
 defineEmits<{ (e: 'pick', text: string): void }>();
 
 const SUGGESTIONS = [
-  { icon: '✨', title: '帮我写代码', desc: '用 React 写一个 Todo 组件' },
-  { icon: '📚', title: '解释概念', desc: '用通俗的话解释一下闭包' },
-  { icon: '🌍', title: '翻译润色', desc: '把这段话翻成英文' },
-  { icon: '🧠', title: '深度分析', desc: '帮我分析这个问题' },
+  { icon: '🎙️', title: '语音助手', desc: '帮我打开百度，搜索 AI 新闻' },
+  { icon: '📄', title: '报告生成', desc: '给我输出一份 Vue3 的 Word 报告' },
+  { icon: '⚡', title: '网页操作', desc: '滚动到页面底部，点击提交按钮' },
+  { icon: '📊', title: '内容分析', desc: '总结这个页面的要点' },
 ];
 
 const greeting = computed(() => {
@@ -23,8 +23,8 @@ const greeting = computed(() => {
 <template>
   <div class="aib-chat-empty">
     <div class="aib-chat-empty-title">{{ greeting }}，今天聊点什么？</div>
-    <div class="aib-chat-empty-desc">
-      提问、写代码、分析图片、深度思考——直接输入或试试下面的提示
+    <div class="aib-chat-empty-tags">
+      语音对话 · 网页自动化 · 智能翻译 · AI 联读 · OCR 识别 · 报告生成
     </div>
     <div class="aib-suggestions">
       <button

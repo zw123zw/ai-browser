@@ -1114,16 +1114,16 @@ table {
   font-size: 22px;
   font-weight: 600;
   color: var(--aib-primary);
-  margin-bottom: 8px;
+  margin-bottom: 12px;
   letter-spacing: 0.3px;
 }
-.aib-chat-empty-desc {
+.aib-chat-empty-tags {
   color: var(--aib-text-soft);
-  font-size: 13.5px;
+  font-size: 13px;
   margin-bottom: 26px;
   text-align: center;
   max-width: 420px;
-  line-height: 1.6;
+  letter-spacing: 0.3px;
 }
 .aib-suggestions {
   display: flex;
@@ -2452,8 +2452,8 @@ table {
   .aib-chat-empty-title {
     font-size: 18px;
   }
-  .aib-chat-empty-desc {
-    font-size: 12.5px;
+  .aib-chat-empty-tags {
+    font-size: 11.5px;
   }
   .aib-suggestions {
     gap: 8px;
@@ -2643,8 +2643,12 @@ table {
     font-size: 18px;
     margin-bottom: 4px;
   }
-  .aib-chat-empty-desc {
-    font-size: 12.5px;
+  .aib-chat-empty-subtitle {
+    font-size: 13.5px;
+    margin-bottom: 4px;
+  }
+  .aib-chat-empty-tags {
+    font-size: 11.5px;
     margin-bottom: 14px;
   }
   .aib-suggestions {
