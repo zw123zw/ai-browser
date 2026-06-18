@@ -33,16 +33,23 @@
 │  src/input/intent-detector.ts                            │
 │                                                         │
 │  输入：用户文本（无骨架、无技能列表）                      │
-│  Prompt：只做二分类，聊天 or [action]                     │
+│  Prompt：三分类，聊天 / [action] / [command]              │
 │                                                         │
 │  AI 回复 "你好！" → isChat=true → 流式展示 → 结束        │
 │  AI 回复 "[action]" → 进入 Phase 2                       │
+│  AI 回复 "[command]{...}" → 直接执行 → 结束（快速通道）   │
 │                                                         │
-│  ⚠️ Phase 1 不允许输出 [command]/[skill]                  │
+│  快速通道指令（不需要页面骨架）：                          │
+│  navigate / scroll / newTab / closeTab /                 │
+│  nextTab / prevTab / switchTab / keyboard / wait         │
+│                                                         │
+│  ⚠️ Phase 1 不允许输出 [skill]                            │
 │     异常输出时强制进 Phase 2                               │
 └─────────────────────────────────────────────────────────┘
     │
     ├── 聊天 → 流式展示（打字机效果） → 结束
+    │
+    ├── [command] → 直接执行（跳过 Phase 2） → 结束
     │
     └── [action] ↓
 ┌─────────────────────────────────────────────────────────┐
@@ -327,6 +334,7 @@ export const PHASE1_SYSTEM_PROMPT = `\`\`\`
 Phase 1 支持流式输出（打字机效果）：
 - 聊天回复 → 流式展示，边生成边显示
 - `[action]` → 检测到后清除流式内容，显示"正在执行操作..."
+- `[command]` → 检测到后清除流式内容，直接执行
 
 ```typescript
 // src/input/intent-detector.ts
@@ -334,6 +342,61 @@ async detectPhase1(text, onChunk) {
   await this.callAI('Phase1', PHASE1_SYSTEM_PROMPT, text, onChunk)
   // onChunk 回调实现流式更新
 }
+```
+
+### 6.3 Phase 1 快速通道（无骨架指令直出）
+
+**设计动机**：部分浏览器指令不需要页面骨架（如打开网站、滚动、标签页操作），如果走完整 Phase 2 流程（提取骨架 + AI 调用），耗时 3-8 秒。将这类指令提前到 Phase 1 直接输出 `[command]`，只需 1 次 AI 调用，耗时 1-3 秒。
+
+**三分类输出**：
+
+| Phase 1 输出 | 含义 | 后续流程 |
+|-------------|------|---------|
+| 自然语言 | 纯聊天 | 流式展示 → 结束 |
+| `[action]` | 需要页面骨架的操作 | → Phase 2 |
+| `[command]{...}` | 不需要骨架的简单操作 | → 直接执行 → 结束 |
+
+**快速通道指令清单**（不需要页面骨架）：
+
+| 指令 | 原因 | 参数来源 |
+|------|------|---------|
+| `navigate` | 打开 URL，不依赖页面元素 | AI 自身知识（网站名→URL） |
+| `scroll` | 滚动页面，window.scrollBy | 方向词 → direction |
+| `newTab` | 空白标签页 | 无参数 |
+| `closeTab` | 关闭当前标签页 | 无参数 |
+| `nextTab` | 下一个标签页 | 无参数 |
+| `prevTab` | 上一个标签页 | 无参数 |
+| `switchTab` | 按关键词切标签 | tabQuery |
+| `keyboard` | 按键操作，作用于 activeElement | 按键名 → key |
+| `wait` | 纯等待 | 毫秒数 |
+
+**仍需 Phase 2 的指令**（需要页面骨架定位元素）：
+
+| 指令 | 原因 |
+|------|------|
+| `search` | 需要知道当前页面是否有搜索框（站内搜 vs 搜索引擎） |
+| `click` | 需要 elementId 定位目标元素 |
+| `type` | 需要 elementId 定位输入框 |
+| `clear` | 需要 elementId 定位输入框 |
+| `select` | 需要 elementId 定位下拉框 |
+| `focus` | 需要 elementId 定位元素 |
+| `hover` | 需要 elementId 定位元素 |
+
+**执行流程**：
+
+```
+Phase 1 AI 返回 [command]{"action":"navigate","url":"https://www.bilibili.com"}
+    │
+    ├── extractTags() 提取到 commands
+    │
+    ├── pipeline 判断 commands 非空
+    │   → callbacks.onActionDetected()
+    │   → callbacks.onCommandsParsed(commands)
+    │   → executor.execute(cmd)
+    │   → callbacks.onCommandResult()
+    │   → callbacks.onAllCommandsDone()
+    │
+    └── 结束（跳过 Phase 2）
 ```
 
 ---
@@ -663,8 +726,15 @@ Phase 2 首次请求
 
 ### Phase 1
 - [x] 聊天 → 流式展示纯文本回复（打字机效果）
-- [x] 操作 → [action]，不允许输出 [command]/[skill]
-- [x] 异常输出 [command]/[skill] 时强制进 Phase 2
+- [x] 操作 → [action]，进入 Phase 2
+- [x] 无骨架指令 → [command]{...}，直接执行（快速通道）
+- [x] 异常输出 [skill] 时强制进 Phase 2
+
+### Phase 1 快速通道
+- [ ] navigate/scroll/newTab/closeTab/nextTab/prevTab/switchTab/keyboard/wait → Phase 1 直出 [command]
+- [ ] Phase 1 返回 [command] 时跳过 Phase 2，直接执行
+- [ ] 执行结果正常展示（onCommandsParsed → onCommandResult → onAllCommandsDone）
+- [ ] search/click/type 等需要骨架的指令仍走 Phase 2
 
 ### Phase 2
 - [x] "打开B站" → [command]{"action":"navigate","url":"..."}

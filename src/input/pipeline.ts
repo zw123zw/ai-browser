@@ -126,10 +126,71 @@ export class InputPipeline {
       return
     }
 
+    // ★ Phase 1 快速通道：直接输出了 [command]，跳过 Phase 2
+    if (p1.commands?.length) {
+      log.info('[流程] Phase 1 → [command] 快速通道 → 直接执行', {
+        actions: p1.commands.map(c => c.action),
+      })
+      callbacks.onActionDetected()
+      await this.executePhase1Commands(p1.commands, ctx.text, callbacks)
+      return
+    }
+
     // 3. Phase 2 — 移除"思考中"消息，只展示解析后的执行结果
     log.info('[流程] Phase 1 → [action] → 进入 Phase 2')
     callbacks.onActionDetected()
     await this.processPhase2WithRetry(ctx.text, callbacks)
+  }
+
+  // ═══════════════════════════════════════════════
+  // Phase 1 快速通道 — 直接执行无骨架指令
+  // ═══════════════════════════════════════════════
+
+  /**
+   * 执行 Phase 1 直出的指令（快速通道）
+   *
+   * 这些指令不需要页面骨架，由 Phase 1 AI 直接生成。
+   * 逐条执行，和 Phase 2 共用相同的执行逻辑和 UI 回调。
+   */
+  private async executePhase1Commands(
+    commands: Command[],
+    userText: string,
+    callbacks: PipelineCallbacks,
+  ): Promise<void> {
+    log.info('[Phase 1 快速通道] ─── 开始执行 ───', { count: commands.length })
+
+    const completed: Command[] = []
+
+    for (let i = 0; i < commands.length; i++) {
+      const cmd = commands[i]
+      log.info(`[Phase 1 快速通道] ── 第 ${i + 1}/${commands.length} 条 ──`, {
+        action: cmd.action,
+        url: cmd.url,
+        direction: cmd.direction,
+        key: cmd.key,
+      })
+
+      callbacks.onCommandsParsed([cmd], i + 1)
+      const result = await this.executor.execute(cmd)
+      callbacks.onCommandResult(cmd.action, result.success, result.message)
+
+      if (result.success) {
+        completed.push(cmd)
+        if (cmd.action === 'navigate') {
+          this.skeletonManager.invalidate()
+        }
+      } else {
+        log.warn('[Phase 1 快速通道] 指令执行失败', { action: cmd.action, message: result.message })
+      }
+    }
+
+    if (completed.length > 0) {
+      log.info('[Phase 1 快速通道] ═══ 执行完成 ═══', {
+        total: commands.length,
+        success: completed.length,
+      })
+      callbacks.onAllCommandsDone?.(userText, completed)
+    }
   }
 
   // ═══════════════════════════════════════════════

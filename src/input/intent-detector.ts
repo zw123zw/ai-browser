@@ -31,6 +31,8 @@ export interface Phase1Detection {
   isChat: boolean
   responseText?: string
   rawText: string
+  /** Phase 1 直接生成的指令（快速通道，跳过 Phase 2） */
+  commands?: Command[]
 }
 
 export interface Phase2Result {
@@ -71,16 +73,23 @@ export class IntentDetector {
       hasChat: !!tags.chatText,
     })
 
+    // [command] → 快速通道：不需要页面骨架的指令，直接执行
+    if (tags.commands?.length && !tags.isAction) {
+      log.info('[Phase 1] → 快速通道：[command] 直出', {
+        actions: tags.commands.map(c => c.action),
+      })
+      return { isChat: false, rawText: aiOutput, commands: tags.commands }
+    }
+
     // [action] → 需要操作
     if (tags.isAction) {
       log.info('[Phase 1] → 结果：[action]，进入 Phase 2')
       return { isChat: false, rawText: aiOutput }
     }
 
-    // 异常：Phase 1 输出了 [command]/[skill]
-    if (tags.commands?.length || tags.skill) {
-      log.warn('[Phase 1] → 异常：输出了 [command]/[skill]，强制进 Phase 2', {
-        commands: tags.commands,
+    // 异常：Phase 1 输出了 [skill]
+    if (tags.skill) {
+      log.warn('[Phase 1] → 异常：输出了 [skill]，强制进 Phase 2', {
         skill: tags.skill,
       })
       return { isChat: false, rawText: aiOutput }
