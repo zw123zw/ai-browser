@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, reactive, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue';
 import { v4 as uuid } from 'uuid';
 import { useSettingsStore } from '@/src/stores/settings';
 import { useConversationsStore } from '@/src/stores/conversations';
@@ -18,6 +18,30 @@ const toast = useToast();
 const licenseKey = ref('');
 const logEnabled = !!import.meta.env.VITE_LOG_ENABLED;
 const showClearCacheConfirm = ref(false);
+
+const CACHE_LIMIT = 5 * 1024 * 1024; // 5MB
+const cacheUsed = ref(0);
+
+async function loadCacheSize() {
+  try {
+    cacheUsed.value = await chrome.storage.local.getBytesInUse();
+  } catch {
+    cacheUsed.value = 0;
+  }
+}
+
+const cacheSizeText = computed(() => {
+  const mb = cacheUsed.value / (1024 * 1024);
+  return mb < 0.01 ? '0MB' : mb.toFixed(1) + 'MB';
+});
+
+const cachePercent = computed(() => Math.min(100, (cacheUsed.value / CACHE_LIMIT) * 100));
+
+const cacheBarClass = computed(() => {
+  if (cachePercent.value >= 80) return 'aib-cache-bar--danger';
+  if (cachePercent.value >= 60) return 'aib-cache-bar--warn';
+  return '';
+});
 
 function activateLicense() {
   // TODO: 激活逻辑暂未实现
@@ -38,7 +62,10 @@ async function confirmClearCache() {
   const { clearCache } = await import('@/src/utils/cache');
   await clearCache();
   toast.success('缓存已清除');
+  await loadCacheSize();
 }
+
+onMounted(loadCacheSize);
 
 async function handleDownloadLogs() {
   const { downloadLogs } = await import('@/src/utils/log-storage');
@@ -860,7 +887,15 @@ function importModels(e: Event) {
                   </svg>
                   清除缓存
                 </button>
-                <span class="aib-text-faint">会话消息、日志、输入历史（设置不会丢失）</span>
+                <div class="aib-cache-info">
+                  <div class="aib-cache-size">
+                    <span>{{ cacheSizeText }} / 5MB</span>
+                    <div class="aib-cache-bar">
+                      <div class="aib-cache-bar-fill" :class="cacheBarClass" :style="{ width: cachePercent + '%' }" />
+                    </div>
+                  </div>
+                  <span class="aib-text-faint">清除会话消息、日志、输入历史，用户个性化设置不会丢失</span>
+                </div>
               </div>
             </div>
 
@@ -890,7 +925,7 @@ function importModels(e: Event) {
   <ConfirmDialog
     :visible="showClearCacheConfirm"
     title="清除缓存"
-    desc="将清除会话消息、日志和输入历史，设置不会丢失。"
+    desc="将清除会话消息、日志和输入历史，用户个性化设置不会丢失。"
     confirm-text="确认清除"
     variant="danger"
     @confirm="confirmClearCache"
@@ -1043,8 +1078,47 @@ function importModels(e: Event) {
 /* 缓存管理按钮组 */
 .aib-cache-actions {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 10px;
+}
+
+.aib-cache-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.aib-cache-size {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--aib-text-soft);
+  font-variant-numeric: tabular-nums;
+}
+
+.aib-cache-bar {
+  flex: 1;
+  height: 4px;
+  background: var(--aib-border);
+  border-radius: 2px;
+  overflow: hidden;
+  min-width: 60px;
+}
+
+.aib-cache-bar-fill {
+  height: 100%;
+  border-radius: 2px;
+  background: var(--aib-primary);
+  transition: width 0.3s ease;
+}
+
+.aib-cache-bar--warn {
+  background: #f59e0b;
+}
+
+.aib-cache-bar--danger {
+  background: #ef4444;
 }
 
 .aib-btn-icon {
