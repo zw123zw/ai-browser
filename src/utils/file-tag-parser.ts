@@ -399,7 +399,7 @@ export async function generateFileBlob(file: ParsedFile): Promise<Blob> {
       });
 
     case 'pdf':
-      return generatePdfFromMarkdown(file.content);
+      return await generatePdfFromMarkdown(file.content);
 
     case 'chart':
       // 图表默认下载为 JSON 配置

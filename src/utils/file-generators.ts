@@ -12,6 +12,7 @@
 import * as XLSX from 'xlsx';
 import { Document, Packer, Paragraph, TextRun } from 'docx';
 import { jsPDF } from 'jspdf';
+import html2canvas from 'html2canvas-pro';
 
 // ============ 核心生成函数 ============
 
@@ -83,94 +84,185 @@ export async function generateDocx(content: string): Promise<Blob> {
 }
 
 /**
- * 从文本内容生成 PDF Blob
- * @param content 文本内容
+ * Markdown 转 HTML（简易解析）
  */
-export function generatePdf(content: string): Blob {
-  const doc = new jsPDF();
-  const lines = doc.splitTextToSize(content, 180);
-  doc.text(lines, 10, 10);
-  return doc.output('blob');
-}
-
-/**
- * 从 Markdown 文本生成 PDF Blob（保留基本格式，支持中文）
- * @param markdown Markdown 文本
- */
-export function generatePdfFromMarkdown(markdown: string): Blob {
-  const doc = new jsPDF({
-    orientation: 'portrait',
-    unit: 'mm',
-    format: 'a4',
-  });
-
-  let y = 10;
-  const lineHeight = 7;
-  const pageHeight = 280;
-  const maxWidth = 180;
-
-  // 设置支持中文的字体（使用内置的 Helvetica 作为后备）
-  doc.setFont('helvetica');
-
+function markdownToHtml(markdown: string): string {
   const lines = markdown.split('\n');
+  const html: string[] = [];
+  let inCodeBlock = false;
 
   for (const line of lines) {
-    // 检查是否需要换页
-    if (y > pageHeight) {
-      doc.addPage();
-      y = 10;
+    // 代码块
+    if (line.startsWith('```')) {
+      if (inCodeBlock) {
+        html.push('</code></pre>');
+        inCodeBlock = false;
+      } else {
+        html.push('<pre><code>');
+        inCodeBlock = true;
+      }
+      continue;
     }
-
-    // 跳过 Markdown 格式符号，提取纯文本
-    let text = line;
-    let fontSize = 10;
-    let isBold = false;
-
-    // 标题处理
-    if (text.startsWith('### ')) {
-      text = text.replace(/^### /, '');
-      fontSize = 12;
-      isBold = true;
-    } else if (text.startsWith('## ')) {
-      text = text.replace(/^## /, '');
-      fontSize = 14;
-      isBold = true;
-    } else if (text.startsWith('# ')) {
-      text = text.replace(/^# /, '');
-      fontSize = 18;
-      isBold = true;
-    } else if (text.startsWith('- ') || text.startsWith('* ')) {
-      text = '  • ' + text.replace(/^[-*] /, '');
-    } else if (text.startsWith('---') || text.startsWith('***')) {
-      // 分隔线
-      doc.setDrawColor(200, 200, 200);
-      doc.line(10, y, 200, y);
-      y += lineHeight;
+    if (inCodeBlock) {
+      html.push(line.replace(/</g, '&lt;').replace(/>/g, '&gt;'));
       continue;
     }
 
-    // 移除 Markdown 格式符号
-    text = text
-      .replace(/\*\*(.*?)\*\*/g, '$1')  // 粗体
-      .replace(/\*(.*?)\*/g, '$1')      // 斜体
-      .replace(/`(.*?)`/g, '$1')        // 行内代码
-      .replace(/\[(.*?)\]\(.*?\)/g, '$1'); // 链接
-
-    doc.setFontSize(fontSize);
-    doc.setFont('helvetica', isBold ? 'bold' : 'normal');
-
-    // 使用 splitTextToSize 处理长文本自动换行
-    const splitText = doc.splitTextToSize(text, maxWidth);
-    doc.text(splitText, 10, y);
-    y += splitText.length * (lineHeight * fontSize / 10);
-
-    // 标题后额外间距
-    if (isBold) {
-      y += 3;
+    // 标题
+    if (line.startsWith('### ')) {
+      html.push(`<h3>${line.slice(4)}</h3>`);
+    } else if (line.startsWith('## ')) {
+      html.push(`<h2>${line.slice(3)}</h2>`);
+    } else if (line.startsWith('# ')) {
+      html.push(`<h1>${line.slice(2)}</h1>`);
+    } else if (line.startsWith('---') || line.startsWith('***')) {
+      html.push('<hr>');
+    } else if (line.startsWith('- ') || line.startsWith('* ')) {
+      html.push(`<li>${line.slice(2)}</li>`);
+    } else if (line.trim() === '') {
+      html.push('<br>');
+    } else {
+      html.push(`<p>${line}</p>`);
     }
   }
 
-  return doc.output('blob');
+  // 清理 markdown 标记
+  return html
+    .join('\n')
+    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.*?)\*/g, '<em>$1</em>')
+    .replace(/`(.*?)`/g, '<code>$1</code>')
+    .replace(/\[(.*?)\]\(.*?\)/g, '<a>$1</a>');
+}
+
+/**
+ * HTML 渲染为 canvas 并生成 PDF Blob
+ *
+ * 隔离策略：scoped 类名前缀 + !important，不污染主页面。
+ * 分页策略：一次性截完整 canvas，再按 A4 高度逐页切分写入 PDF。
+ *           自动降 scale 避免浏览器 canvas 高度上限(16384px)截断。
+ */
+async function htmlToPdf(htmlContent: string): Promise<Blob> {
+  const A4_W = 210;
+  const A4_H = 297;
+  const PAD = 8;
+  const WIDTH_PX = 794;
+  const A4_PAGE_PX = 1123; // A4 高度 @ 96dpi
+
+  // 注入 scoped 样式
+  const styleEl = document.createElement('style');
+  styleEl.textContent = `
+    .aib-pdf-root h1 { font-size: 24px; font-weight: bold; margin: 16px 0 12px; }
+    .aib-pdf-root h2 { font-size: 20px; font-weight: bold; margin: 14px 0 10px; }
+    .aib-pdf-root h3 { font-size: 17px; font-weight: bold; margin: 12px 0 8px; }
+    .aib-pdf-root p { margin: 6px 0; }
+    .aib-pdf-root li { margin: 4px 0; padding-left: 16px; list-style: disc; }
+    .aib-pdf-root pre { background: #f5f5f5; padding: 12px; border-radius: 6px; overflow-x: auto; margin: 8px 0; }
+    .aib-pdf-root code { background: #f0f0f0; padding: 2px 5px; border-radius: 3px; font-family: "Cascadia Code", "Fira Code", Consolas, monospace; font-size: 13px; }
+    .aib-pdf-root pre code { background: none; padding: 0; }
+    .aib-pdf-root hr { border: none; border-top: 1px solid #ddd; margin: 12px 0; }
+    .aib-pdf-root a { color: #2563eb; text-decoration: none; }
+    .aib-pdf-root strong { font-weight: bold; }
+    .aib-pdf-root em { font-style: italic; }
+  `;
+  document.head.appendChild(styleEl);
+
+  // 容器：absolute 正常文档流，不可见但在 DOM 中可渲染
+  const container = document.createElement('div');
+  container.className = 'aib-pdf-root';
+  container.style.cssText = `
+    position: absolute !important;
+    left: -9999px !important;
+    top: 0 !important;
+    display: block !important;
+    box-sizing: border-box !important;
+    width: ${WIDTH_PX}px;
+    padding: 40px;
+    font-family: system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif !important;
+    font-size: 14px !important;
+    line-height: 1.8 !important;
+    color: #1a1a1a !important;
+    background: #ffffff;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+  `;
+  container.innerHTML = htmlContent;
+  document.body.appendChild(container);
+
+  try {
+    // 等待 DOM 渲染完成
+    await new Promise(r => setTimeout(r, 300));
+    await new Promise<void>(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+
+    const totalHeight = container.scrollHeight;
+
+    // 自动选 scale：确保 canvas 高度不超过 16384px
+    const MAX_CANVAS = 16384;
+    let scale = 2;
+    if (totalHeight * scale > MAX_CANVAS) {
+      scale = Math.floor(MAX_CANVAS / totalHeight * 10) / 10; // 向下取整一位
+      scale = Math.max(1, scale); // 最低 1x
+    }
+
+    // 一次性截完整 canvas
+    const canvas = await html2canvas(container, {
+      scale,
+      useCORS: true,
+      backgroundColor: '#ffffff',
+    });
+
+    // 按 A4 高度逐页切分
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    const srcPageH = A4_PAGE_PX * scale; // canvas 中每页对应的高度(px)
+    const totalPages = Math.ceil(canvas.height / srcPageH);
+
+    for (let page = 0; page < totalPages; page++) {
+      if (page > 0) doc.addPage();
+
+      const sliceH = Math.min(srcPageH, canvas.height - page * srcPageH);
+      const pageCanvas = document.createElement('canvas');
+      pageCanvas.width = canvas.width;
+      pageCanvas.height = sliceH;
+
+      pageCanvas.getContext('2d')!.drawImage(
+        canvas,
+        0, page * srcPageH,
+        canvas.width, sliceH,
+        0, 0,
+        canvas.width, sliceH,
+      );
+
+      const imgW = A4_W - PAD * 2;
+      const imgH = (sliceH / srcPageH) * (A4_H - PAD * 2); // 按比例算 PDF 高度
+      doc.addImage(pageCanvas.toDataURL('image/jpeg', 0.92), 'JPEG', PAD, PAD, imgW, imgH);
+    }
+
+    return doc.output('blob');
+  } finally {
+    document.body.removeChild(container);
+    document.head.removeChild(styleEl);
+  }
+}
+
+/**
+ * 从文本内容生成 PDF Blob（canvas 截图）
+ * @param content 纯文本
+ */
+export async function generatePdf(content: string): Promise<Blob> {
+  const html = content
+    .split('\n')
+    .map(line => line.trim() === '' ? '<br>' : `<p>${line}</p>`)
+    .join('\n');
+  return htmlToPdf(html);
+}
+
+/**
+ * 从 Markdown 文本生成 PDF Blob（canvas 截图）
+ * @param markdown Markdown 文本
+ */
+export async function generatePdfFromMarkdown(markdown: string): Promise<Blob> {
+  const html = markdownToHtml(markdown);
+  return htmlToPdf(html);
 }
 
 /**

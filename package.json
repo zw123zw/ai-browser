@@ -29,9 +29,9 @@
   ],
   "scripts": {
     "dev": "wxt",
-    "build": "bash -c \"D=$(date +%Y%m%d-%H%M%S) && rm -rf .output && wxt build && mv .output/chrome-mv3 .output/ai-browser-prod-$D && cross-env VITE_LOG_ENABLED=true wxt build && mv .output/chrome-mv3 .output/ai-browser-test-$D\"",
-    "build:prod": "bash -c \"D=$(date +%Y%m%d-%H%M%S) && wxt build && mv .output/chrome-mv3 .output/ai-browser-prod-$D\"",
-    "build:debug": "bash -c \"D=$(date +%Y%m%d-%H%M%S) && cross-env VITE_LOG_ENABLED=true wxt build && mv .output/chrome-mv3 .output/ai-browser-test-$D\"",
+    "build": "bash -c \"D=$(date +%Y%m%d-%H%M%S) && bash scripts/build-check.sh && rm -rf .output && wxt build && mv .output/chrome-mv3 .output/ai-browser-prod-$D && cross-env VITE_LOG_ENABLED=true wxt build && mv .output/chrome-mv3 .output/ai-browser-test-$D\"",
+    "build:prod": "bash -c \"D=$(date +%Y%m%d-%H%M%S) && bash scripts/build-check.sh && wxt build && mv .output/chrome-mv3 .output/ai-browser-prod-$D\"",
+    "build:debug": "bash -c \"D=$(date +%Y%m%d-%H%M%S) && bash scripts/build-check.sh && cross-env VITE_LOG_ENABLED=true wxt build && mv .output/chrome-mv3 .output/ai-browser-test-$D\"",
     "compile": "vue-tsc --noEmit",
     "postinstall": "wxt prepare",
     "download-model": "bash scripts/download-model.sh"
@@ -42,6 +42,7 @@
     "docx": "^9.7.1",
     "echarts": "^6.1.0",
     "highlight.js": "^11.10.0",
+    "html2canvas-pro": "^2.0.4",
     "jspdf": "^4.2.1",
     "katex": "^0.16.11",
     "mammoth": "^1.12.0",
