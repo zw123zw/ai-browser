@@ -44,6 +44,15 @@ export const useConversationsStore = defineStore('aib-conversations', () => {
     const stored = await conversationStorage.getValue();
     if (stored && typeof stored === 'object' && Array.isArray((stored as any).messages)) {
       conversation.value = stored as Conversation;
+      // 清理残留的 streaming 消息（跨标签页导航时 JS 上下文被销毁，防抖写入未完成）
+      let cleaned = 0
+      for (const msg of conversation.value.messages) {
+        if (msg.status === 'streaming') {
+          msg.status = 'done'
+          cleaned++
+        }
+      }
+      if (cleaned) log.warn('清理残留 streaming 消息', { count: cleaned })
       log.info('从存储加载会话', { id: conversation.value.id });
     } else {
       // 没有会话，创建一个

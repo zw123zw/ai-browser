@@ -184,23 +184,58 @@ export class ActionExecutor {
       const href = el.getAttribute('href') || ''
       log.info('executeClick <a> 标签', { href })
       if (!href || href === '#' || href.startsWith('javascript:')) {
-        // javascript: / # / 空 href → 依赖 JS 事件处理器
+        // javascript: / # / 空 href → 依赖 JS 事件处理器，可能触发 window.open
         log.info('executeClick 调用 triggerClick（交互型链接）')
-        this.triggerClick(el)
+        const origOpen = window.open
+        let detectedNewTab = false
+        try {
+          window.open = (...args: Parameters<typeof window.open>) => {
+            detectedNewTab = true
+            return origOpen.apply(window, args)
+          }
+          this.triggerClick(el)
+        } finally {
+          window.open = origOpen
+        }
+        if (detectedNewTab) {
+          return { success: true, message: '点击成功，新标签页打开中', openedNewTab: true }
+        }
       } else if (el.href) {
         // 真实 URL → 根据 target 判断是否新开页面
         const target = el.target || '_self'  // 默认当前页面
         log.info('executeClick 真实 URL 跳转', { href: el.href, target })
-        if (target === '_self') {
-          window.location.href = el.href  // 当前页面跳转
+        // _self / _top / _parent 都是当前页（或父 frame）导航
+        if (!target || target === '_self' || target === '_top' || target === '_parent') {
+          window.location.href = el.href
+          return { success: true, message: '点击成功，页面跳转中' }
         } else {
+          // _blank 或命名 frame：新开标签
           const opened = window.open(el.href, target)
-          if (!opened) window.location.href = el.href
+          if (!opened) {
+            // popup blocker 拦截 → 回退到当前页跳转
+            window.location.href = el.href
+            return { success: true, message: '点击成功，页面跳转中' }
+          }
+          return { success: true, message: '点击成功，新标签页打开中', openedNewTab: true }
         }
       }
     } else {
       log.info('executeClick 非 <a> 标签，调用 triggerClick', { tag: el.tagName })
-      this.triggerClick(el)
+      // 临时 patch window.open，检测按钮事件处理器是否调用了 window.open
+      const origOpen = window.open
+      let detectedNewTab = false
+      try {
+        window.open = (...args: Parameters<typeof window.open>) => {
+          detectedNewTab = true
+          return origOpen.apply(window, args)
+        }
+        this.triggerClick(el)
+      } finally {
+        window.open = origOpen
+      }
+      if (detectedNewTab) {
+        return { success: true, message: '点击成功，新标签页打开中', openedNewTab: true }
+      }
     }
 
     log.info('executeClick 完成')
@@ -315,8 +350,7 @@ export class ActionExecutor {
         url,
       })
       if (response?.success) {
-        const tabId = response.tabId
-        return { success: true, message: `新标签页打开: ${url}`, tabId }
+        return { success: true, message: `新标签页打开: ${url}` }
       }
       return { success: false, message: response?.error || '导航失败' }
     } catch (error) {

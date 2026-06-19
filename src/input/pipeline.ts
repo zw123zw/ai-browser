@@ -265,7 +265,37 @@ export class InputPipeline {
 
         callbacks.onCommandsParsed([cmd], completed.length + 1)
 
+        // ★ click + done:0 → 先存 queued task，再执行 click
+        // 页面跳转 → JS 上下文销毁 → setTimeout callback 不执行 → queued task 留在 storage
+        // 页面没跳 → setTimeout 触发 → 删掉 queued task → 继续执行
+        const pendingTask: QueuedTask | null = (cmd.action === 'click' && cmd.done !== 1)
+          ? {
+              originalRequest: text,
+              completedSteps: [...completed, { action: cmd.action, elementId: cmd.elementId, description: cmd.description }],
+              timestamp: Date.now(),
+            }
+          : null
+        if (pendingTask) {
+          await queuedTaskStorage.setValue(pendingTask)
+          log.info('[Phase 2] ── click 前置保存 queued task ──')
+        }
+
         const result = await this.executor.execute(cmd)
+
+        // 延迟清除：页面跳了 → JS 销毁 → callback 不执行 → queued task 保留
+        // _blank 新开页 → 原页不销毁 → 跳过清除，让新页读到任务
+        if (pendingTask && !result.openedNewTab) {
+          setTimeout(() => {
+            queuedTaskStorage.setValue(null).catch(() => {})
+            log.info('[Phase 2] ── click 未跳转，清除 queued task ──')
+          }, 500)
+        } else if (pendingTask && result.openedNewTab) {
+          log.info('[Phase 2] ── _blank 新开页，保留 queued task 给新标签页 ──')
+          // 原标签页停止执行，由新标签页续接剩余步骤
+          completed.push({ action: cmd.action, elementId: cmd.elementId, description: cmd.description })
+          log.info('[Phase 2] ═══ _blank 新开页，原标签页停止，等待新页续接 ═══')
+          break
+        }
 
         log.info('[Phase 2] 指令结果', {
           action: cmd.action,
@@ -297,7 +327,6 @@ export class InputPipeline {
             const task: QueuedTask = {
               originalRequest: text,
               completedSteps: completed.map(c => ({ action: c.action, elementId: c.elementId, description: c.description })),
-              targetTabId: result.tabId || 0,
               timestamp: Date.now(),
             }
             await queuedTaskStorage.setValue(task)
@@ -305,7 +334,7 @@ export class InputPipeline {
             break
           }
 
-          // ★ 双重停止条件 2：AI 标记 done=1，最后一步
+          // ★ done:1，最后一步完成
           if (cmd.done === 1) {
             log.info('[Phase 2] ═══ done=1，最后一步完成，停止 ═══')
             break

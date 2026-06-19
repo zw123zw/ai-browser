@@ -13,6 +13,7 @@ import { Logger } from '@/src/utils/logger'
 import type { PipelineCallbacks } from '@/src/input/types'
 import type { Command, ActionResult, ChatMessage } from '@/src/types'
 import type { QueuedTask } from '@/src/storage'
+import { queuedTaskStorage } from '@/src/storage'
 import { v4 as uuid } from 'uuid'
 
 const log = new Logger('usePipeline')
@@ -359,6 +360,8 @@ export function usePipeline() {
   function abort(): Promise<void> {
     log.debug('中止 pipeline 请求')
     currentAborter?.abort()
+    // 清除跨标签页排队任务，阻止后续标签页继续执行
+    queuedTaskStorage.setValue(null).catch(() => {})
     // 如果 pipeline 正在运行，等它真正结束
     if (isProcessing.value) {
       return new Promise<void>(resolve => { stoppedResolve = resolve })

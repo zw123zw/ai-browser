@@ -46,7 +46,7 @@ export interface Command {
 export interface ActionResult {
   success: boolean
   message: string
-  /** navigate 操作返回的新标签页 ID（用于跨标签页续接） */
-  tabId?: number
+  /** click 操作是否新开标签页（_blank / window.open） */
+  openedNewTab?: boolean
 }
 

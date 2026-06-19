@@ -79,11 +79,10 @@ export const inputHistoryStorage = storage.defineItem<string[]>('local:ai-browse
   fallback: [],
 });
 
-/** 跨标签页排队任务（navigate 新开页后，新页自动恢复执行） */
+/** 跨标签页排队任务（navigate/click 导航后，新页自动恢复执行） */
 export interface QueuedTask {
   originalRequest: string
   completedSteps: Array<{ action: string; elementId?: string; description?: string }>
-  targetTabId: number
   timestamp: number
 }
 export const queuedTaskStorage = storage.defineItem<QueuedTask | null>(

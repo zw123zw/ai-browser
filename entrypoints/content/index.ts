@@ -273,25 +273,22 @@ export default defineContentScript({
     try {
       const queuedTask = await queuedTaskStorage.getValue()
       if (queuedTask) {
-        // 获取当前 tab ID，只有目标标签页才执行
-        const tabResponse = await chrome.runtime.sendMessage({ type: 'get-tab-id' }).catch(() => null)
-        const currentTabId = tabResponse?.tabId
-        if (currentTabId !== queuedTask.targetTabId) {
-          log.debug('[跨标签页续接] tabId 不匹配，跳过', { current: currentTabId, target: queuedTask.targetTabId })
+        // 过期保护：30 秒前的旧任务直接丢弃（新标签页可能已关闭或加载失败）
+        if (Date.now() - queuedTask.timestamp > 30_000) {
+          log.warn('[跨标签页续接] 任务已过期，丢弃', { age: Date.now() - queuedTask.timestamp })
+          await queuedTaskStorage.setValue(null)
         } else {
           log.info('[跨标签页续接] 检测到排队任务', { originalRequest: queuedTask.originalRequest, completedSteps: queuedTask.completedSteps.length })
           await queuedTaskStorage.setValue(null)
 
-          // 等页面稳定 + Vue/Pinia 初始化完成后恢复
-          setTimeout(async () => {
-            try {
-              const { usePipeline } = await import('@/src/composables/usePipeline')
-              const { resumeQueuedTask } = usePipeline()
-              await resumeQueuedTask(queuedTask)
-            } catch (err) {
-              log.error('[跨标签页续接] 恢复失败', err)
-            }
-          }, 1500)
+          // Vue 已 mount，直接恢复（pipeline 自带 sleep 等页面稳定）
+          try {
+            const { usePipeline } = await import('@/src/composables/usePipeline')
+            const { resumeQueuedTask } = usePipeline()
+            await resumeQueuedTask(queuedTask)
+          } catch (err) {
+            log.error('[跨标签页续接] 恢复失败', err)
+          }
         }
       }
     } catch (err) {
