@@ -38,3 +38,28 @@ export function renderMarkdown(text: string): string {
   if (!text) return '';
   return md.render(text);
 }
+
+/** 纯净版 markdown 渲染（无复制按钮、无下载按钮） */
+const mdPlain: MarkdownIt = new MarkdownIt({
+  html: false,
+  linkify: true,
+  breaks: true,
+  highlight(str: string, lang: string): string {
+    let highlighted: string;
+    if (lang && hljs.getLanguage(lang)) {
+      try {
+        highlighted = hljs.highlight(str, { language: lang, ignoreIllegals: true }).value;
+      } catch {
+        highlighted = mdPlain.utils.escapeHtml(str);
+      }
+    } else {
+      highlighted = mdPlain.utils.escapeHtml(str);
+    }
+    return `<pre class="aib-code"><code class="hljs${lang ? ` language-${lang}` : ''}">${highlighted}</code></pre>`;
+  },
+});
+
+export function renderMarkdownPlain(text: string): string {
+  if (!text) return '';
+  return mdPlain.render(text);
+}

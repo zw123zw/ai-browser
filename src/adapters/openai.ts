@@ -125,6 +125,8 @@ export class OpenAIAdapter extends BaseAdapter {
     }
 
     let chunkCount = 0;
+    let fullResponse = '';  // 收集完整响应
+    let fullReasoning = '';  // 收集完整推理内容
     let doneFired = false;
     const fireDone = () => {
       if (doneFired) return;
@@ -147,12 +149,14 @@ export class OpenAIAdapter extends BaseAdapter {
               // 文本增量
               if (json.delta?.type === 'text_delta' && json.delta.text) {
                 const chunk: StreamChunk = { delta: json.delta.text };
+                fullResponse += json.delta.text;  // 收集响应
                 chunkCount++;
                 onChunk(chunk);
               }
               // 思考增量（Claude 3.7+ 支持）
               if (json.delta?.type === 'thinking_delta' && json.delta.thinking) {
                 const chunk: StreamChunk = { reasoningDelta: json.delta.thinking };
+                fullReasoning += json.delta.thinking;  // 收集推理内容
                 chunkCount++;
                 onChunk(chunk);
               }
@@ -189,9 +193,13 @@ export class OpenAIAdapter extends BaseAdapter {
           const reasoning = delta.reasoning_content ?? delta.reasoning ?? delta.thinking;
           const content = delta.content ?? delta.text;
           const chunk: StreamChunk = {};
-          if (reasoning) chunk.reasoningDelta = reasoning;
+          if (reasoning) {
+            chunk.reasoningDelta = reasoning;
+            fullReasoning += reasoning;  // 收集推理内容
+          }
           if (content) {
             chunk.delta = content;
+            fullResponse += content;  // 收集响应
           }
           if (chunk.delta || chunk.reasoningDelta) {
             chunkCount++;
@@ -240,6 +248,17 @@ export class OpenAIAdapter extends BaseAdapter {
       fireDone();
       const duration = Date.now() - startTime;
       log.info('请求完成', { model: opts.modelName, chunks: chunkCount, duration: `${duration}ms` });
+      // 打印响应报文
+      log.info('═══ AI 响应报文 ═══', {
+        responseLength: fullResponse.length,
+        reasoningLength: fullReasoning.length,
+      });
+      if (fullResponse) {
+        log.info('AI 回复内容:', fullResponse);
+      }
+      if (fullReasoning) {
+        log.info('AI 推理内容:', fullReasoning);
+      }
       return;
     } catch (proxyError) {
       log.warn('代理请求失败，尝试直接请求:', proxyError);
@@ -281,5 +300,16 @@ export class OpenAIAdapter extends BaseAdapter {
     fireDone();
     const duration2 = Date.now() - startTime;
     log.info('请求完成', { model: opts.modelName, chunks: chunkCount, duration: `${duration2}ms` });
+    // 打印响应报文
+    log.info('═══ AI 响应报文 ═══', {
+      responseLength: fullResponse.length,
+      reasoningLength: fullReasoning.length,
+    });
+    if (fullResponse) {
+      log.info('AI 回复内容:', fullResponse);
+    }
+    if (fullReasoning) {
+      log.info('AI 推理内容:', fullReasoning);
+    }
   }
 }

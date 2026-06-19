@@ -8,10 +8,15 @@
  * - 处理文件下载
  */
 
+import { Logger } from './logger';
+
+const log = new Logger('FileTagParser');
+
 import type { ChartConfig } from './echart-renderer';
 import { parseChartConfig } from './echart-renderer';
 import {
   generateXlsxFromCsv,
+  generateDocx,
   generatePdfFromMarkdown,
   triggerDownload,
   formatBytes,
@@ -102,6 +107,9 @@ const EXTENSION_CATEGORY: Record<string, FileCategory> = {
   // PDF
   pdf: 'pdf',
 
+  // Word
+  docx: 'text', doc: 'text',
+
   // 图表
   chart: 'chart',
 };
@@ -123,6 +131,7 @@ const EXTENSION_ICONS: Record<string, string> = {
   py: '🐍', java: '☕', go: '🔵', rs: '🦀', rb: '💎',
   // 文档
   md: '📝', html: '🌐', css: '🎨',
+  docx: '📘', doc: '📘',
   // 数据
   json: '📋', yaml: '⚙️', yml: '⚙️',
   csv: '📊', xlsx: '📗', xls: '📗',
@@ -188,10 +197,25 @@ export function hasFileTags(text: string): boolean {
  * 获取文件扩展名（不含点号）
  *
  * @param filename 文件名
+ * 支持识别 .pdf.md、.docx.md 等 AI 可能输出的复合扩展名
  */
 function getExtension(filename: string): string {
   const parts = filename.split('.');
-  return parts.length > 1 ? parts.pop()!.toLowerCase() : '';
+  if (parts.length <= 1) return '';
+
+  const lastExt = parts.pop()!.toLowerCase();
+
+  // 如果最后扩展名是 md/txt，检查前面是否有目标格式扩展名
+  if (lastExt === 'md' || lastExt === 'txt') {
+    const targetExts = ['pdf', 'docx', 'doc', 'xlsx', 'xls', 'pptx', 'ppt'];
+    for (const ext of targetExts) {
+      if (parts.includes(ext)) {
+        return ext;
+      }
+    }
+  }
+
+  return lastExt;
 }
 
 /**
@@ -240,12 +264,15 @@ export function generateFileCardHtml(file: ParsedFile, options: FileCardOptions 
   const sizeStr = formatBytes(file.size);
   const cardClass = `aib-file-card ${className}`.trim();
 
+  // 下载按钮 SVG
+  const downloadIcon = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`;
+
   // 图表类型特殊处理
   if (file.category === 'chart') {
     return `
       <div class="${cardClass} aib-file-card--chart" data-file-index="${file.index}">
         <div class="aib-chart-preview" data-chart-index="${file.index}"></div>
-        <div class="aib-file-card-footer">
+        <div class="aib-file-card-body">
           <div class="aib-file-card-info">
             <span class="aib-file-card-icon">${icon}</span>
             <div class="aib-file-card-text">
@@ -253,29 +280,22 @@ export function generateFileCardHtml(file: ParsedFile, options: FileCardOptions 
               ${showSize ? `<div class="aib-file-card-size">${sizeStr}</div>` : ''}
             </div>
           </div>
-          <div class="aib-file-card-actions">
-            <button class="aib-file-card-btn aib-file-card-btn--primary"
-                    data-action="download-png"
-                    data-file-index="${file.index}"
-                    title="下载 PNG 图片">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                <polyline points="7 10 12 15 17 10"/>
-                <line x1="12" y1="15" x2="12" y2="3"/>
-              </svg>
-              <span>PNG</span>
-            </button>
-            <button class="aib-file-card-btn aib-file-card-btn--secondary"
-                    data-action="download-config"
-                    data-file-index="${file.index}"
-                    title="下载 JSON 配置">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                <polyline points="14 2 14 8 20 8"/>
-              </svg>
-              <span>JSON</span>
-            </button>
-          </div>
+        </div>
+        <div class="aib-file-card-actions">
+          <button class="aib-file-card-btn aib-file-card-btn--primary"
+                  data-action="download-png"
+                  data-file-index="${file.index}"
+                  title="下载 PNG 图片">
+            ${downloadIcon}
+            <span>下载 PNG</span>
+          </button>
+          <button class="aib-file-card-btn aib-file-card-btn--secondary"
+                  data-action="download-config"
+                  data-file-index="${file.index}"
+                  title="下载 JSON 配置">
+            ${downloadIcon}
+            <span>下载 JSON</span>
+          </button>
         </div>
       </div>
     `;
@@ -284,24 +304,24 @@ export function generateFileCardHtml(file: ParsedFile, options: FileCardOptions 
   // 普通文件卡片
   return `
     <div class="${cardClass}" data-file-index="${file.index}">
-      <div class="aib-file-card-info">
-        <span class="aib-file-card-icon">${icon}</span>
-        <div class="aib-file-card-text">
-          <div class="aib-file-card-name">${escapeHtml(file.filename)}</div>
-          ${showSize ? `<div class="aib-file-card-size">${sizeStr}</div>` : ''}
+      <div class="aib-file-card-body">
+        <div class="aib-file-card-info">
+          <span class="aib-file-card-icon">${icon}</span>
+          <div class="aib-file-card-text">
+            <div class="aib-file-card-name">${escapeHtml(file.filename)}</div>
+            ${showSize ? `<div class="aib-file-card-size">${sizeStr}</div>` : ''}
+          </div>
         </div>
       </div>
-      <button class="aib-file-card-btn aib-file-card-btn--primary"
-              data-action="download"
-              data-file-index="${file.index}"
-              title="下载文件">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-          <polyline points="7 10 12 15 17 10"/>
-          <line x1="12" y1="15" x2="12" y2="3"/>
-        </svg>
-        <span>下载</span>
-      </button>
+      <div class="aib-file-card-actions">
+        <button class="aib-file-card-btn aib-file-card-btn--primary"
+                data-action="download"
+                data-file-index="${file.index}"
+                title="下载文件">
+          ${downloadIcon}
+          <span>下载</span>
+        </button>
+      </div>
     </div>
   `;
 }
@@ -353,6 +373,11 @@ export function renderFileCards(
  * @returns Blob 对象
  */
 export async function generateFileBlob(file: ParsedFile): Promise<Blob> {
+  // docx 特殊处理
+  if (file.extension === 'docx' || file.extension === 'doc') {
+    return generateDocx(file.content);
+  }
+
   switch (file.category) {
     case 'text':
       return new Blob([file.content], {
@@ -458,7 +483,7 @@ export async function handleFileDownload(
 ): Promise<void> {
   const file = files[fileIndex];
   if (!file) {
-    console.warn(`文件索引 ${fileIndex} 不存在`);
+    log.warn(`文件索引 ${fileIndex} 不存在`);
     return;
   }
 
@@ -473,7 +498,7 @@ export async function handleFileDownload(
       downloadChartConfig(file);
       break;
     default:
-      console.warn(`未知的下载动作: ${action}`);
+      log.warn(`未知的下载动作: ${action}`);
   }
 }
 

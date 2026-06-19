@@ -2,7 +2,7 @@
 import { computed, onMounted, onUnmounted } from 'vue';
 import type { Attachment } from '@/src/types';
 import { getFileTypeIcon, formatFileSize, getExtension } from '@/src/utils/file-type';
-import { renderMarkdown } from '@/src/utils/markdown';
+import { renderMarkdownPlain } from '@/src/utils/markdown';
 import { getOriginalFile } from '@/src/utils/file-parsers';
 import hljs from 'highlight.js';
 import * as XLSX from 'xlsx';
@@ -13,16 +13,97 @@ const props = defineProps<{ attachment: Attachment }>();
 const emit = defineEmits<{ (e: 'close'): void }>();
 
 const isTextPreview = computed(() =>
-  ['text', 'code', 'pdf', 'word', 'excel'].includes(props.attachment.type) &&
+  ['text', 'code', 'word', 'excel'].includes(props.attachment.type) &&
   props.attachment.content
 );
+
+const isPdfPreview = computed(() =>
+  props.attachment.type === 'pdf' && props.attachment.content
+);
+
+/** PDF 预览 URL */
+const pdfPreviewUrl = computed(() => {
+  if (!isPdfPreview.value) return '';
+  const content = props.attachment.content!;
+  const blob = generatePdfBlob(content);
+  return URL.createObjectURL(blob);
+});
+
+/** 从 Markdown 生成 PDF Blob（支持中文） */
+function generatePdfBlob(markdown: string): Blob {
+  const doc = new jsPDF({
+    orientation: 'portrait',
+    unit: 'mm',
+    format: 'a4',
+  });
+
+  let y = 10;
+  const lineHeight = 7;
+  const pageHeight = 280;
+  const maxWidth = 180;
+
+  doc.setFont('helvetica');
+
+  const lines = markdown.split('\n');
+
+  for (const line of lines) {
+    if (y > pageHeight) {
+      doc.addPage();
+      y = 10;
+    }
+
+    let text = line;
+    let fontSize = 10;
+    let isBold = false;
+
+    if (text.startsWith('### ')) {
+      text = text.replace(/^### /, '');
+      fontSize = 12;
+      isBold = true;
+    } else if (text.startsWith('## ')) {
+      text = text.replace(/^## /, '');
+      fontSize = 14;
+      isBold = true;
+    } else if (text.startsWith('# ')) {
+      text = text.replace(/^# /, '');
+      fontSize = 18;
+      isBold = true;
+    } else if (text.startsWith('- ') || text.startsWith('* ')) {
+      text = '  • ' + text.replace(/^[-*] /, '');
+    } else if (text.startsWith('---') || text.startsWith('***')) {
+      doc.setDrawColor(200, 200, 200);
+      doc.line(10, y, 200, y);
+      y += lineHeight;
+      continue;
+    }
+
+    text = text
+      .replace(/\*\*(.*?)\*\*/g, '$1')
+      .replace(/\*(.*?)\*/g, '$1')
+      .replace(/`(.*?)`/g, '$1')
+      .replace(/\[(.*?)\]\(.*?\)/g, '$1');
+
+    doc.setFontSize(fontSize);
+    doc.setFont('helvetica', isBold ? 'bold' : 'normal');
+
+    const splitText = doc.splitTextToSize(text, maxWidth);
+    doc.text(splitText, 10, y);
+    y += splitText.length * (lineHeight * fontSize / 10);
+
+    if (isBold) {
+      y += 3;
+    }
+  }
+
+  return doc.output('blob');
+}
 
 const highlightedContent = computed(() => {
   const content = props.attachment.content;
   if (!content) return '';
 
   if (props.attachment.type === 'text' && !props.attachment.lang) {
-    return renderMarkdown('```\n' + content + '\n```');
+    return renderMarkdownPlain('```\n' + content + '\n```');
   }
 
   if (props.attachment.lang) {
@@ -39,7 +120,7 @@ const highlightedContent = computed(() => {
     }
   }
 
-  return renderMarkdown('```\n' + content + '\n```');
+  return renderMarkdownPlain('```\n' + content + '\n```');
 });
 
 const isImagePreview = computed(() =>
@@ -66,7 +147,13 @@ function onKeydown(e: KeyboardEvent) {
 }
 
 onMounted(() => document.addEventListener('keydown', onKeydown, true));
-onUnmounted(() => document.removeEventListener('keydown', onKeydown, true));
+onUnmounted(() => {
+  document.removeEventListener('keydown', onKeydown, true);
+  // 清理 PDF 预览 URL，避免内存泄漏
+  if (pdfPreviewUrl.value) {
+    URL.revokeObjectURL(pdfPreviewUrl.value);
+  }
+});
 
 function escapeHtml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -226,6 +313,9 @@ function triggerDownload(url: string, name: string) {
         <div v-if="isImagePreview" class="aib-file-modal-image">
           <img :src="attachment.dataUrl" :alt="attachment.name" />
         </div>
+        <div v-else-if="isPdfPreview" class="aib-file-modal-pdf">
+          <iframe :src="pdfPreviewUrl" frameborder="0" width="100%" height="100%"></iframe>
+        </div>
         <div v-else-if="errorMessage" class="aib-file-modal-error">
           <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor"
             stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.4">
@@ -235,7 +325,7 @@ function triggerDownload(url: string, name: string) {
           </svg>
           <p>{{ errorMessage }}</p>
         </div>
-        <div v-else-if="isTextPreview" class="aib-file-modal-text" v-html="highlightedContent" />
+        <div v-else-if="isTextPreview" class="aib-file-modal-text aib-msg-text" v-html="highlightedContent" />
         <div v-else class="aib-file-modal-error">
           <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor"
             stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.4">

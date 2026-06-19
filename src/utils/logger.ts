@@ -90,7 +90,8 @@ export class Logger {
 
     if (!logStorageLoaded) loadLogStorage()
 
-    if (this.module === 'API') {
+    // API 模块和 Adapter 模块都写入 api 日志
+    if (this.module === 'API' || this.module.startsWith('Adapter')) {
       cachedSaveApiLog?.(level, this.module, msg)
     } else {
       cachedSaveFrontendLog?.(level, this.module, msg)

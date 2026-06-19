@@ -28,6 +28,12 @@ export interface ExtractedTags {
   needFull?: boolean
   /** 是否包含 [FILE:xxx]...[/FILE] 文件标签 */
   hasFileTags: boolean
+  /** 文件标签详情（用于日志） */
+  fileTagDetails?: {
+    filename: string
+    hasClosingTag: boolean
+    contentLength: number
+  }
   /** 是否提取到了任何标签 */
   hasAnyTag: boolean
   /** 原始文本 */
@@ -49,9 +55,15 @@ export function extractTags(rawText: string): ExtractedTags {
   }
 
   // [FILE:xxx]...[/FILE] 文件标签检测（兼容大小写、可选空格、无闭合标签）
-  if (/\[FILE:\s*[^\]]+\]/i.test(rawText)) {
+  const fileMatch = rawText.match(/\[FILE:\s*([^\]]+)\]\r?\n?([\s\S]*?)(?:\[\/FILE\]|$)/i)
+  if (fileMatch) {
     result.hasFileTags = true
     result.hasAnyTag = true
+    result.fileTagDetails = {
+      filename: fileMatch[1].trim(),
+      hasClosingTag: rawText.includes('[/FILE]'),
+      contentLength: fileMatch[2].length,
+    }
   }
 
   // [chat] 提取 — 先匹配闭合标签，匹配不到则取 [chat] 后的整个内容

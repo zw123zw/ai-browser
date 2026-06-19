@@ -2097,6 +2097,19 @@ table {
   border-radius: var(--aib-radius);
   border: 1px solid var(--aib-border);
 }
+.aib-file-modal-pdf {
+  width: 100%;
+  height: 70vh;
+  min-height: 400px;
+  background: #fff;
+  border-radius: var(--aib-radius);
+  overflow: hidden;
+}
+.aib-file-modal-pdf iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+}
 .aib-file-modal-text {
   font-size: 13px;
   line-height: 1.65;
@@ -2356,46 +2369,22 @@ table {
 /* ============ AI 文件卡片（优化版） ============ */
 .aib-file-card {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 16px 18px;
+  flex-direction: column;
   margin: 12px 0;
-  background: linear-gradient(135deg, var(--aib-bg-card, #ffffff) 0%, var(--aib-bg-card-hover, #f8f9fb) 100%);
+  background: var(--aib-bg-card, #ffffff);
   border: 1px solid var(--aib-border, rgba(0, 0, 0, 0.08));
   border-radius: 14px;
   transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   overflow: hidden;
-  position: relative;
-}
-
-.aib-file-card::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 4px;
-  background: var(--aib-primary, #4A90D9);
-  opacity: 0;
-  transition: opacity 0.25s ease;
 }
 
 .aib-file-card:hover {
-  background: linear-gradient(135deg, var(--aib-bg-card-hover, #f0f2f5) 0%, var(--aib-bg-card, #f8f9fb) 100%);
   border-color: var(--aib-primary, #4A90D9);
-  box-shadow: 0 4px 20px rgba(74, 144, 217, 0.12), 0 1px 4px rgba(0, 0, 0, 0.05);
-  transform: translateY(-1px);
-}
-
-.aib-file-card:hover::before {
-  opacity: 1;
+  box-shadow: 0 4px 16px rgba(74, 144, 217, 0.1), 0 1px 4px rgba(0, 0, 0, 0.04);
 }
 
 /* 图表卡片特殊样式 */
 .aib-file-card--chart {
-  flex-direction: column;
-  align-items: stretch;
-  padding: 0;
   background: var(--aib-bg-card, #ffffff);
 }
 
@@ -2416,14 +2405,9 @@ table {
   height: auto;
 }
 
-.aib-file-card-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 14px 18px;
-  background: var(--aib-bg-card, #f8f9fa);
-  border-top: 1px solid var(--aib-border, rgba(0, 0, 0, 0.06));
-  gap: 12px;
+/* 卡片主体 */
+.aib-file-card-body {
+  padding: 16px 18px;
 }
 
 /* 信息区域 */
@@ -2431,8 +2415,6 @@ table {
   display: flex;
   align-items: center;
   gap: 14px;
-  flex: 1;
-  min-width: 0;
 }
 
 .aib-file-card-icon {
@@ -2443,7 +2425,7 @@ table {
   justify-content: center;
   font-size: 24px;
   flex-shrink: 0;
-  background: linear-gradient(135deg, var(--aib-primary-soft, rgba(74, 144, 217, 0.1)) 0%, var(--aib-primary-soft-hover, rgba(74, 144, 217, 0.15)) 100%);
+  background: var(--aib-primary-soft, rgba(74, 144, 217, 0.1));
   border-radius: 12px;
   line-height: 1;
 }
@@ -2461,7 +2443,6 @@ table {
   overflow: hidden;
   text-overflow: ellipsis;
   line-height: 1.5;
-  letter-spacing: -0.01em;
 }
 
 .aib-file-card-size {
@@ -2469,22 +2450,23 @@ table {
   color: var(--aib-text-secondary, #8e8ea0);
   margin-top: 3px;
   line-height: 1.3;
-  font-weight: 500;
 }
 
-/* 按钮区域 */
+/* 按钮区域（底部） */
 .aib-file-card-actions {
   display: flex;
   gap: 8px;
-  flex-shrink: 0;
+  padding: 12px 18px;
+  background: var(--aib-bg-card-hover, #f8f9fb);
+  border-top: 1px solid var(--aib-border, rgba(0, 0, 0, 0.06));
 }
 
 .aib-file-card-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 7px;
-  padding: 10px 18px;
+  gap: 8px;
+  padding: 10px 20px;
   font-size: 13px;
   font-weight: 600;
   border-radius: 10px;
@@ -2493,50 +2475,49 @@ table {
   white-space: nowrap;
   border: none;
   line-height: 1;
-  letter-spacing: 0.01em;
+  flex: 1;
 }
 
 .aib-file-card-btn svg {
   flex-shrink: 0;
-  width: 15px;
-  height: 15px;
+  width: 16px;
+  height: 16px;
 }
 
 /* 主按钮样式 */
 .aib-file-card-btn--primary {
-  background: linear-gradient(135deg, var(--aib-primary, #4A90D9) 0%, var(--aib-primary-hover, #357ABD) 100%);
+  background: var(--aib-primary, #4A90D9);
   color: #fff;
-  box-shadow: 0 2px 8px rgba(74, 144, 217, 0.25);
+  box-shadow: 0 2px 8px rgba(74, 144, 217, 0.2);
 }
 
 .aib-file-card-btn--primary:hover {
-  background: linear-gradient(135deg, var(--aib-primary-hover, #357ABD) 0%, var(--aib-primary, #4A90D9) 100%);
+  background: var(--aib-primary-hover, #357ABD);
+  box-shadow: 0 4px 12px rgba(74, 144, 217, 0.3);
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(74, 144, 217, 0.35);
 }
 
 .aib-file-card-btn--primary:active {
   transform: translateY(0);
-  box-shadow: 0 1px 4px rgba(74, 144, 217, 0.2);
+  box-shadow: 0 1px 4px rgba(74, 144, 217, 0.15);
 }
 
 /* 次要按钮样式 */
 .aib-file-card-btn--secondary {
   background: var(--aib-bg-card, #ffffff);
-  color: var(--aib-text-secondary, #6c757d);
-  border: 1.5px solid var(--aib-border, rgba(0, 0, 0, 0.1));
+  color: var(--aib-text-primary, #1a1a2e);
+  border: 1.5px solid var(--aib-border, rgba(0, 0, 0, 0.12));
 }
 
 .aib-file-card-btn--secondary:hover {
   background: var(--aib-bg-card-hover, #f0f2f5);
-  color: var(--aib-text-primary, #1a1a2e);
   border-color: var(--aib-primary, #4A90D9);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  color: var(--aib-primary, #4A90D9);
 }
 
 /* 图表卡片内的按钮样式 */
 .aib-file-card--chart .aib-file-card-btn {
-  padding: 8px 14px;
+  padding: 10px 16px;
   font-size: 12px;
 }
 
@@ -2546,7 +2527,7 @@ table {
 }
 
 /* 文件卡片容器（在消息中） */
-.aib-file-cards {
+.aib-msg-files {
   margin: 12px 0;
 }
 

@@ -2,17 +2,15 @@
 import { computed, ref, watch, nextTick, onBeforeUnmount } from 'vue';
 import type { ChatMessage, Attachment } from '@/src/types';
 import { renderMarkdown } from '@/src/utils/markdown';
-import { getFileTypeIcon, formatFileSize } from '@/src/utils/file-type';
 import { Logger } from '@/src/utils/logger';
 import {
   parseFileTags,
-  generateFileCardHtml,
-  handleFileDownload,
-  extractDownloadInfo,
+  downloadParsedFile,
   getFilesSummary,
   type ParsedFile,
 } from '@/src/utils/file-tag-parser';
 import { renderChartToElement, type ChartConfig } from '@/src/utils/echart-renderer';
+import FileCard from './FileCard.vue';
 import FilePreviewModal from './FilePreviewModal.vue';
 
 const log = new Logger('MessageItem');
@@ -40,6 +38,9 @@ const filesSummary = computed(() => getFilesSummary(parsedFiles.value));
 
 // ============ 内容渲染 ============
 
+/** 是否正在流式输出 */
+const isStreaming = computed(() => props.message.status === 'streaming');
+
 /** 去掉文件标签后的纯文本内容 */
 const textWithoutFiles = computed(() => {
   if (!hasFiles.value) return props.message.content;
@@ -47,9 +48,11 @@ const textWithoutFiles = computed(() => {
   return props.message.content.replace(/\[FILE:\s*[^\]]+\]\r?\n?[\s\S]*?(?:\[\/FILE\]|$)/gi, '').trim();
 });
 
-/** 渲染后的消息内容（纯文本部分） */
+/** 渲染后的消息内容 */
 const renderedContent = computed(() => {
-  return renderMarkdown(textWithoutFiles.value);
+  // 流式时显示原始内容（包括文件标签），完成后只显示纯文本
+  const content = isStreaming.value ? props.message.content : textWithoutFiles.value;
+  return renderMarkdown(content);
 });
 
 /** 渲染后的推理内容 */
@@ -78,13 +81,80 @@ const fileAttachments = computed(() => {
 /** 当前预览的附件 */
 const previewAttachment = ref<Attachment | null>(null);
 
+/** 打开用户上传文件的预览 */
 function openPreview(att: Attachment) {
-  log.info('打开预览', { name: att.name, type: att.type, hasDataUrl: !!att.dataUrl, hasContent: !!att.content });
+  log.info('打开预览', { name: att.name, type: att.type });
+  previewAttachment.value = att;
+}
+
+/** 打开 AI 生成文件的预览 */
+function openAiFilePreview(file: ParsedFile) {
+  // 根据扩展名判断类型
+  let type = 'text';
+  if (file.extension === 'pdf') {
+    type = 'pdf';
+  } else if (file.extension === 'xlsx' || file.extension === 'xls') {
+    type = 'excel';
+  } else if (file.extension === 'docx' || file.extension === 'doc') {
+    type = 'word';
+  }
+
+  const att: Attachment = {
+    id: `ai-file-${file.index}`,
+    name: file.filename,
+    size: file.size,
+    type: type as any,
+    content: file.content,
+    mimeType: getMimeType(file.extension),
+  };
+  log.info('打开 AI 文件预览', { name: file.filename, category: file.category, type });
   previewAttachment.value = att;
 }
 
 function closePreview() {
   previewAttachment.value = null;
+}
+
+/** 获取 MIME 类型 */
+function getMimeType(ext: string): string {
+  const mimeTypes: Record<string, string> = {
+    md: 'text/markdown', txt: 'text/plain', html: 'text/html',
+    json: 'application/json', csv: 'text/csv', pdf: 'application/pdf',
+    docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  };
+  return mimeTypes[ext] ?? 'text/plain';
+}
+
+/** 下载用户上传的文件 */
+function downloadAttachment(att: Attachment) {
+  log.info('下载用户文件', { name: att.name });
+  // 如果有 dataUrl（图片），直接下载
+  if (att.dataUrl) {
+    const a = document.createElement('a');
+    a.href = att.dataUrl;
+    a.download = att.name;
+    a.click();
+    return;
+  }
+  // 如果有 content（文本），创建 Blob 下载
+  if (att.content) {
+    const blob = new Blob([att.content], { type: att.mimeType || 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = att.name;
+    a.click();
+    URL.revokeObjectURL(url);
+    return;
+  }
+  log.warn('无法下载文件', { name: att.name, hasDataUrl: !!att.dataUrl, hasContent: !!att.content });
+}
+
+/** 下载 AI 生成的文件 */
+function handleAiFileDownload(file: ParsedFile) {
+  log.info('下载 AI 文件', { name: file.filename });
+  downloadParsedFile(file);
 }
 
 // ============ 右键菜单 ============
@@ -153,20 +223,6 @@ onBeforeUnmount(() => {
   disposeCharts();
 });
 
-// ============ 文件下载处理 ============
-
-/** 处理文件下载点击 */
-function onFileAction(e: MouseEvent) {
-  const info = extractDownloadInfo(e);
-  if (!info) return;
-
-  e.preventDefault();
-  e.stopPropagation();
-
-  log.info('文件下载', { action: info.action, fileIndex: info.fileIndex });
-  handleFileDownload(info.action, info.fileIndex, parsedFiles.value);
-}
-
 // ============ 旧版表格下载（保留兼容） ============
 
 /** 下载表格为 Excel */
@@ -233,7 +289,7 @@ function onCodeCopy(e: MouseEvent) {
 <template>
   <div
     :class="['aib-msg-row', isUser ? 'aib-row-user' : 'aib-row-ai']"
-    @click="(e) => { onTableDownload(e); onCodeCopy(e); onFileAction(e); }"
+    @click="(e) => { onTableDownload(e); onCodeCopy(e); }"
   >
     <div
       :class="['aib-msg', isUser ? 'aib-bubble-user' : 'aib-bubble-ai']"
@@ -258,31 +314,31 @@ function onCodeCopy(e: MouseEvent) {
 
       <!-- 文件附件（上传的文件） -->
       <div v-if="fileAttachments.length" class="aib-msg-files">
-        <div
+        <FileCard
           v-for="att in fileAttachments"
           :key="att.id"
-          class="aib-msg-file-chip"
-          @click="openPreview(att)"
-        >
-          <span class="aib-msg-file-icon">{{ getFileTypeIcon(att.type) }}</span>
-          <span class="aib-msg-file-name">{{ att.name }}</span>
-          <span v-if="att.truncated" class="aib-msg-file-truncated" title="内容已截断">⚠️</span>
-          <span class="aib-msg-file-size">{{ formatFileSize(att.size) }}</span>
-        </div>
+          :attachment="att"
+          @preview="() => openPreview(att)"
+          @download="() => downloadAttachment(att)"
+        />
       </div>
 
       <!-- 文本内容 -->
       <div
-        v-if="textWithoutFiles || !message.reasoning"
+        v-if="message.content || !message.reasoning"
         class="aib-msg-text"
         v-html="renderedContent"
       />
 
       <!-- AI 生成的文件卡片 -->
       <div v-if="hasFiles" class="aib-msg-files">
-        <template v-for="file in parsedFiles" :key="file.index">
-          <div v-html="generateFileCardHtml(file)" />
-        </template>
+        <FileCard
+          v-for="file in parsedFiles"
+          :key="file.index"
+          :parsed-file="file"
+          @preview="() => openAiFilePreview(file)"
+          @download="() => handleAiFileDownload(file)"
+        />
       </div>
 
       <!-- 状态 -->

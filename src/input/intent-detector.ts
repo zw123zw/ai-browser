@@ -72,6 +72,7 @@ export class IntentDetector {
       hasSkill: !!tags.skill,
       hasChat: !!tags.chatText,
       hasFileTags: tags.hasFileTags,
+      fileTagDetails: tags.fileTagDetails,
     })
 
     // [command] → 快速通道：不需要页面骨架的指令，直接执行

@@ -94,15 +94,23 @@ export function generatePdf(content: string): Blob {
 }
 
 /**
- * 从 Markdown 文本生成 PDF Blob（保留基本格式）
+ * 从 Markdown 文本生成 PDF Blob（保留基本格式，支持中文）
  * @param markdown Markdown 文本
  */
 export function generatePdfFromMarkdown(markdown: string): Blob {
-  const doc = new jsPDF();
+  const doc = new jsPDF({
+    orientation: 'portrait',
+    unit: 'mm',
+    format: 'a4',
+  });
+
   let y = 10;
   const lineHeight = 7;
   const pageHeight = 280;
   const maxWidth = 180;
+
+  // 设置支持中文的字体（使用内置的 Helvetica 作为后备）
+  doc.setFont('helvetica');
 
   const lines = markdown.split('\n');
 
@@ -113,46 +121,52 @@ export function generatePdfFromMarkdown(markdown: string): Blob {
       y = 10;
     }
 
+    // 跳过 Markdown 格式符号，提取纯文本
+    let text = line;
+    let fontSize = 10;
+    let isBold = false;
+
     // 标题处理
-    if (line.startsWith('# ')) {
-      doc.setFontSize(18);
-      doc.setFont('helvetica', 'bold');
-      const text = line.replace(/^# /, '');
-      const splitText = doc.splitTextToSize(text, maxWidth);
-      doc.text(splitText, 10, y);
-      y += splitText.length * 10 + 5;
-    } else if (line.startsWith('## ')) {
-      doc.setFontSize(14);
-      doc.setFont('helvetica', 'bold');
-      const text = line.replace(/^## /, '');
-      const splitText = doc.splitTextToSize(text, maxWidth);
-      doc.text(splitText, 10, y);
-      y += splitText.length * 8 + 4;
-    } else if (line.startsWith('### ')) {
-      doc.setFontSize(12);
-      doc.setFont('helvetica', 'bold');
-      const text = line.replace(/^### /, '');
-      const splitText = doc.splitTextToSize(text, maxWidth);
-      doc.text(splitText, 10, y);
-      y += splitText.length * 7 + 3;
-    } else if (line.startsWith('- ') || line.startsWith('* ')) {
-      // 列表项
-      doc.setFontSize(10);
-      doc.setFont('helvetica', 'normal');
-      const text = line.replace(/^[-*] /, '  • ');
-      const splitText = doc.splitTextToSize(text, maxWidth);
-      doc.text(splitText, 10, y);
-      y += splitText.length * lineHeight;
-    } else if (line.trim() === '') {
-      // 空行
+    if (text.startsWith('### ')) {
+      text = text.replace(/^### /, '');
+      fontSize = 12;
+      isBold = true;
+    } else if (text.startsWith('## ')) {
+      text = text.replace(/^## /, '');
+      fontSize = 14;
+      isBold = true;
+    } else if (text.startsWith('# ')) {
+      text = text.replace(/^# /, '');
+      fontSize = 18;
+      isBold = true;
+    } else if (text.startsWith('- ') || text.startsWith('* ')) {
+      text = '  • ' + text.replace(/^[-*] /, '');
+    } else if (text.startsWith('---') || text.startsWith('***')) {
+      // 分隔线
+      doc.setDrawColor(200, 200, 200);
+      doc.line(10, y, 200, y);
       y += lineHeight;
-    } else {
-      // 普通段落
-      doc.setFontSize(10);
-      doc.setFont('helvetica', 'normal');
-      const splitText = doc.splitTextToSize(line, maxWidth);
-      doc.text(splitText, 10, y);
-      y += splitText.length * lineHeight;
+      continue;
+    }
+
+    // 移除 Markdown 格式符号
+    text = text
+      .replace(/\*\*(.*?)\*\*/g, '$1')  // 粗体
+      .replace(/\*(.*?)\*/g, '$1')      // 斜体
+      .replace(/`(.*?)`/g, '$1')        // 行内代码
+      .replace(/\[(.*?)\]\(.*?\)/g, '$1'); // 链接
+
+    doc.setFontSize(fontSize);
+    doc.setFont('helvetica', isBold ? 'bold' : 'normal');
+
+    // 使用 splitTextToSize 处理长文本自动换行
+    const splitText = doc.splitTextToSize(text, maxWidth);
+    doc.text(splitText, 10, y);
+    y += splitText.length * (lineHeight * fontSize / 10);
+
+    // 标题后额外间距
+    if (isBold) {
+      y += 3;
     }
   }
 
