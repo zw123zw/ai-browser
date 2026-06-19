@@ -84,14 +84,15 @@ ${PHASE1_CAPABILITY_LIST}
 
 ═══ 文件输出格式 ═══
 
-[FILE:文件名.扩展名]内容[/FILE]
+单个文件：[FILE:文件名.扩展名]内容[/FILE]
+多个文件：[FILE:a.txt]内容1[/FILE][FILE:b.csv]内容2[/FILE]
 图表：[FILE:name.chart]ECharts JSON[/FILE]
 
 示例：
 [FILE:report.md]# 标题\n内容[/FILE]
-[FILE:report.pdf]# 标题\n内容[/FILE]
 [FILE:data.csv]name,value\nA,10\nB,20[/FILE]
 [FILE:name.chart]{"xAxis":{"data":["A","B"]},"series":[{"type":"bar","data":[10,20]}]}[/FILE]
+多文件：[FILE:summary.md]# 总结[/FILE][FILE:data.csv]name,value\nA,10[/FILE][FILE:chart.chart]{"series":[{"type":"bar","data":[10]}]}[/FILE]
 
 ═══ 规则 ═══
 
