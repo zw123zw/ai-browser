@@ -354,7 +354,8 @@ export function usePipeline() {
     log.debug('中止 pipeline 请求')
     currentAborter?.abort()
     currentAborter = null
-    isProcessing.value = false
+    // isProcessing 由 pipeline 的 finally 块设置为 false
+    // 不在这里设置，避免 pipeline 还在清理时 UI 就允许发送新消息
   }
 
   // 注册模块级 abort 引用

@@ -148,9 +148,14 @@ export async function proxyFetchStream(
       const endListener = (msg: any) => {
         if (msg.type === 'stream-end' && msg.requestId === requestId) {
           const duration = Date.now() - startTime
-          log.info(`← [stream] ${url} 完成 ${duration}ms`)
           cleanup();
-          resolve();
+          if (aborted) {
+            log.info(`⊘ [stream] ${url} 已中止 ${duration}ms`)
+            reject(new DOMException('The operation was aborted.', 'AbortError'));
+          } else {
+            log.info(`← [stream] ${url} 完成 ${duration}ms`)
+            resolve();
+          }
         }
       };
 
