@@ -26,6 +26,8 @@ export interface ExtractedTags {
   isAction: boolean
   /** 提取到的 [need_full] */
   needFull?: boolean
+  /** 是否包含 [FILE:xxx]...[/FILE] 文件标签 */
+  hasFileTags: boolean
   /** 是否提取到了任何标签 */
   hasAnyTag: boolean
   /** 原始文本 */
@@ -41,8 +43,15 @@ export interface ExtractedTags {
 export function extractTags(rawText: string): ExtractedTags {
   const result: ExtractedTags = {
     isAction: false,
+    hasFileTags: false,
     hasAnyTag: false,
     rawText,
+  }
+
+  // [FILE:xxx]...[/FILE] 文件标签检测（兼容大小写、可选空格、无闭合标签）
+  if (/\[FILE:\s*[^\]]+\]/i.test(rawText)) {
+    result.hasFileTags = true
+    result.hasAnyTag = true
   }
 
   // [chat] 提取 — 先匹配闭合标签，匹配不到则取 [chat] 后的整个内容
@@ -107,11 +116,11 @@ export function extractTags(rawText: string): ExtractedTags {
 /**
  * 判断 Phase 1 的回复是否是纯聊天（无任何操作标签）
  *
- * 纯聊天 = 有文本内容 + 没有 [action]/[command]/[skill]/[need_full] 标签
+ * 纯聊天 = 有文本内容 + 没有 [action]/[command]/[skill]/[need_full]/[FILE] 标签
  */
 export function isChatOnlyReply(tags: ExtractedTags): boolean {
-  // 有操作类标签 → 不是纯聊天
-  if (tags.isAction || tags.commands?.length || tags.skill || tags.needFull) {
+  // 有操作类标签或文件标签 → 不是纯聊天
+  if (tags.isAction || tags.commands?.length || tags.skill || tags.needFull || tags.hasFileTags) {
     return false
   }
   // 有 [chat] 标签 → 是纯聊天

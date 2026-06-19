@@ -32,7 +32,7 @@ export class OpenAIAdapter extends BaseAdapter {
 
   /** 把内部 ChatMessage 转成 OpenAI 协议消息（图片已 OCR 为文本，统一发文本） */
   private toOpenAIMessages(messages: ChatMessage[]) {
-    return messages.map((m) => {
+    const result = messages.map((m) => {
       const fileTexts = this.collectFileTexts(m);
       if (!fileTexts) return { role: m.role, content: m.content };
 
@@ -41,11 +41,13 @@ export class OpenAIAdapter extends BaseAdapter {
         : fileTexts;
       return { role: m.role, content: textContent };
     });
+
+    return result;
   }
 
   /** 把内部 ChatMessage 转成 Anthropic 协议消息（图片已 OCR 为文本，统一发文本） */
   private toAnthropicMessages(messages: ChatMessage[]) {
-    return messages.map((m) => {
+    const result = messages.map((m) => {
       const fileTexts = this.collectFileTexts(m);
       if (!fileTexts) return { role: m.role, content: m.content };
 
@@ -54,6 +56,8 @@ export class OpenAIAdapter extends BaseAdapter {
         : fileTexts;
       return { role: m.role, content: textContent };
     });
+
+    return result;
   }
 
   async chat(

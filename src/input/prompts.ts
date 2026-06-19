@@ -7,7 +7,7 @@
  * 提示词设计原则：
  * 1. 精简 — 只写核心规则，不列举所有情况
  * 2. 通用 — 用模板 + 占位符，运行时替换
- * 3. 最优 — 参照能力域列表和技能列表的格式
+ * 3. 最优 — 参照指令列表的格式
  */
 
 import type { SemanticSkeleton } from '@/src/browser/types'
@@ -16,24 +16,41 @@ import type { SemanticSkeleton } from '@/src/browser/types'
 // 能力域（所有 Prompt 共用）
 // ═══════════════════════════════════════════════════════════════
 
-export const CAPABILITY_DOMAIN = `\`\`\`
-navigate    — 打开URL（需url）
-search      — 全网搜索（需text）
-click       — 点击元素（需elementId或description）
-type        — 输入文字（需elementId+text）
-clear       — 清空输入框（需elementId）
-scroll      — 滚动页面（direction:up/down/top/bottom，amount:滚动像素，可选）
-select      — 选择下拉框（需elementId+text）
-keyboard    — 模拟按键（需key:Enter/Escape/Tab等，别名press）
-focus       — 聚焦元素（需elementId）
-hover       — 悬停元素（需elementId）
-wait        — 等待（需ms）
-newTab      — 打开新标签页
-closeTab    — 关闭当前标签页
-switchTab   — 切换到指定标签页（需tabQuery关键词，如"B站"、"淘宝"）
-nextTab     — 切换到下一个标签页
-prevTab     — 切换到上一个标签页
-\`\`\``
+export interface CapabilityItem {
+  id: string
+  desc: string
+  needSkeleton: boolean
+}
+
+export const CAPABILITY_DOMAIN_LIST: CapabilityItem[] = [
+  { id: 'navigate',  desc: '打开URL（需url）',                     needSkeleton: false },
+  { id: 'scroll',    desc: '滚动页面（direction:up/down/top/bottom）', needSkeleton: false },
+  { id: 'newTab',    desc: '打开新标签页',                          needSkeleton: false },
+  { id: 'closeTab',  desc: '关闭当前标签页',                        needSkeleton: false },
+  { id: 'nextTab',   desc: '切换下一个标签页',                      needSkeleton: false },
+  { id: 'prevTab',   desc: '切换上一个标签页',                      needSkeleton: false },
+  { id: 'switchTab', desc: '切换到指定标签页（需tabQuery）',          needSkeleton: false },
+  { id: 'keyboard',  desc: '模拟按键（需key:Enter/Escape/Tab）',     needSkeleton: false },
+  { id: 'wait',      desc: '等待（需ms）',                          needSkeleton: false },
+  { id: 'search',    desc: '全网搜索（需text）',                    needSkeleton: true },
+  { id: 'click',     desc: '点击元素（需elementId或description）',   needSkeleton: true },
+  { id: 'type',      desc: '输入文字（需elementId+text）',           needSkeleton: true },
+  { id: 'clear',     desc: '清空输入框（需elementId）',              needSkeleton: true },
+  { id: 'select',    desc: '选择下拉框（需elementId+text）',         needSkeleton: true },
+  { id: 'focus',     desc: '聚焦元素（需elementId）',                needSkeleton: true },
+  { id: 'hover',     desc: '悬停元素（需elementId）',                needSkeleton: true },
+]
+
+// 完整能力域列表（Phase2 用）
+const CAPABILITY_LIST = CAPABILITY_DOMAIN_LIST
+  .map(item => `${item.id.padEnd(12)}— ${item.desc}`)
+  .join('\n')
+
+// 可直出 [command] 的列表（Phase1 用）
+const PHASE1_CAPABILITY_LIST = CAPABILITY_DOMAIN_LIST
+  .filter(item => !item.needSkeleton)
+  .map(item => `${item.id.padEnd(12)}— ${item.desc}`)
+  .join('\n')
 
 // ═══════════════════════════════════════════════════════════════
 // Phase 1: 意图检测（轻量模型）
@@ -42,83 +59,104 @@ prevTab     — 切换到上一个标签页
 // ═══════════════════════════════════════════════════════════════
 
 export const PHASE1_SYSTEM_PROMPT = `\`\`\`
-你是浏览器扩展的 AI 助手，负责判断用户输入是否需要浏览器操作。
+你是浏览器扩展的 AI 助手，负责判断用户输入类型并输出对应标签。只输出标签或自然语言回复。
 
-输出格式（严格三选一）：
-1. [command]{...} — 不需要页面骨架的简单操作
-2. [action] — 需要操作页面元素（点击/输入/搜索等，需要骨架定位）
-3. 自然语言回复 — 纯聊天/问答
+═══ 输出格式（严格四选一）═══
 
-可直出 [command] 的操作：navigate / scroll / newTab / closeTab / nextTab / prevTab / switchTab / keyboard / wait
-必须输出 [action] 的操作：search / click / type / clear / select / focus / hover
+[command]{...} — 不需要页面骨架的简单操作，直接执行
+[action]        — 需要页面骨架定位元素的操作
+[FILE:xxx]...[/FILE] — 生成文件/图表/导出数据
+自然语言回复    — 纯聊天/问答
 
-[command] 格式示例：
+═══ [command] 格式 ═══
+
+[command]{"action":"操作类型（必填）","url":"目标地址（navigate需要）","direction":"滚动方向（scroll需要，up/down/top/bottom）","key":"按键名称（keyboard需要，如Enter/Escape/Tab）","description":"操作描述（必填）"}[/command]
+
+═══ [command] 列表 ═══
+
+${PHASE1_CAPABILITY_LIST}
+
+═══ [command] 示例 ═══
+
 [command]{"action":"navigate","url":"https://www.bilibili.com","description":"打开B站"}[/command]
 [command]{"action":"scroll","direction":"down","description":"向下滚动"}[/command]
 [command]{"action":"keyboard","key":"Enter","description":"按回车"}[/command]
 
-网站名转URL：B站→bilibili.com, 淘宝→taobao.com, 百度→baidu.com, 知乎→zhihu.com, github→github.com
-不确定"打开xxx"是网站还是页面元素时，输出 [action]
+═══ 文件输出格式 ═══
+
+[FILE:文件名.扩展名]内容[/FILE]
+类型：txt/md/csv/xlsx/json/pdf/chart
+图表：[FILE:name.chart]ECharts JSON[/FILE]（bar/line/pie/scatter/radar）
 
 示例：
-- "打开B站" → [command]{"action":"navigate","url":"https://www.bilibili.com","description":"打开B站"}
-- "搜索Vue教程" → [action]
-- "点击登录按钮" → [action]
-- "今天天气怎么样" → 直接回答
+[FILE:report.md]# 标题\n内容[/FILE]
+[FILE:chart.chart]{"xAxis":{"data":["A","B"]},"series":[{"type":"bar","data":[10,20]}]}[/FILE]
 
-禁止输出 [skill]、操作结果或分析说明。
+═══ 规则 ═══
+
+- 网站名转URL：B站→bilibili.com, 淘宝→taobao.com, 百度→baidu.com, 知乎→zhihu.com, github→github.com
+- 不确定"打开xxx"是网站还是页面元素时，输出 [action]
+
+═══ 禁止输出 ═══
+
+- [command] 和 [FILE] 标签必须闭合
+- 每次只能输出1条 [command]
+- 禁止输出自然语言（除了"自然语言回复"模式）
+- 禁止输出除上述四种格式外的任何内容
 \`\`\``
 
 // ═══════════════════════════════════════════════════════════════
 // Phase 2: 操作决策（主力模型）
 //
-// 模板：{skillList} 运行时替换为可用技能列表
-// 核心规则 + 能力域 + 定位策略 + 指令格式
+// 模板：{coreRule} 运行时替换为核心规则
+// 指令标签 + 指令列表 + 定位策略
 // ═══════════════════════════════════════════════════════════════
 
 export const PHASE2_SYSTEM_PROMPT = `\`\`\`
 你是浏览器操作助手。只输出指令标签，禁止分析/解释/说明。
 {coreRule}
 
-═══ 指令 ═══
+═══ 输出格式（严格二选一）═══
 
-[command] 执行浏览器操作：
+[command]{...} — 执行浏览器操作
+[need_full]    — 当前视口骨架找不到目标时，请求全页骨架
+
+═══ [command] 格式 ═══
+
+[command]{"action":"操作类型（必填）","elementId":"元素ID（骨架优先，找不到填null）","description":"操作描述（必填）","done":"1=最后一步 0=还有后续（必填）","url":"目标地址（navigate需要）","text":"输入文字（type/select需要）","direction":"滚动方向（scroll需要，up/down/top/bottom）","key":"按键名称（keyboard需要，如Enter/Escape/Tab）","tabQuery":"标签页关键词（switchTab需要）"}[/command]
+
+═══ [command] 列表 ═══
+
+${CAPABILITY_LIST}
+
+═══ [command] 示例 ═══
+
 [command]{"action":"click","elementId":"e3","description":"登录","done":0}[/command]
-- done: 1=这是最后一步，任务全部完成 0=还有后续步骤
-- 单步任务（打开网站、搜索、滚动等）必须 done:1，禁止拆成多步
-- 根据[已完成]指令判断：用户请求的操作已全部完成时，必须设置 done:1
-- 定位: elementId > fallbackSelector > description
-- elementId来自骨架，找不到时填null用description定位
+[command]{"action":"type","elementId":"e5","text":"hello","description":"输入文字","done":0}[/command]
+[command]{"action":"scroll","direction":"down","description":"向下滚动","done":1}[/command]
 
-[need_full] 当前视口骨架找不到目标时，输出此标签获取全页骨架：
+═══ [need_full] ═══
+
 [need_full]
 - 系统会返回全页面所有可交互元素的骨架（格式同上）
 - 收到全页骨架后，直接用 elementId 生成 [command]
 
-能力域：
-${CAPABILITY_DOMAIN}
-
-═══ 技能 ═══
-
-[skill] 调用匹配的用户技能：
-[skill]{"name":"技能名","userText":"文本"}[/skill]
-
-可用技能：
-{skillList}
-
 ═══ 规则 ═══
 
-- 标签必须闭合：[command]{...}[/command]、[skill]{...}[/skill]
 - [need_full] 不需要闭合，单独输出即可
 - 打开网站/搜索/滚动 → 直接[command]（不需要骨架）
 - 骨架中"(icon)"元素 → 检查aria-label/title判断功能
+- 定位优先级：elementId > fallbackSelector > description
+- 单步任务（打开网站、搜索、滚动等）必须 done:1，禁止拆成多步
+- 根据[已完成]指令判断：用户请求的操作已全部完成时，必须设置 done:1
 
 ═══ 禁止输出 ═══
 
-❌ 禁止输出分析/解释/说明/思考过程
-❌ 禁止一次输出多条[command]，每次只能1条
-❌ 禁止输出自然语言（如"好的，我来帮你..."、"让我分析一下..."）
-只输出 [command] / [skill] / [need_full] 标签，其他内容一律禁止。
+- [command] 标签必须闭合：[command]{...}[/command]
+- 每次只能输出1条 [command]
+- 禁止输出分析/解释/说明/思考过程
+- 禁止输出自然语言
+- 禁止输出除上述两种格式外的任何内容
 \`\`\``
 
 /** 首次进入模式说明 */
@@ -227,3 +265,4 @@ export function buildAutoTranslateMessage(
 输入：
 ${JSON.stringify(texts)}`
 }
+

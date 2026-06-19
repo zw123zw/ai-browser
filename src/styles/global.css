@@ -2353,6 +2353,219 @@ table {
   transition: transform 0.22s ease;
 }
 
+/* ============ AI 文件卡片（优化版） ============ */
+.aib-file-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 18px;
+  margin: 12px 0;
+  background: linear-gradient(135deg, var(--aib-bg-card, #ffffff) 0%, var(--aib-bg-card-hover, #f8f9fb) 100%);
+  border: 1px solid var(--aib-border, rgba(0, 0, 0, 0.08));
+  border-radius: 14px;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: hidden;
+  position: relative;
+}
+
+.aib-file-card::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: var(--aib-primary, #4A90D9);
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+
+.aib-file-card:hover {
+  background: linear-gradient(135deg, var(--aib-bg-card-hover, #f0f2f5) 0%, var(--aib-bg-card, #f8f9fb) 100%);
+  border-color: var(--aib-primary, #4A90D9);
+  box-shadow: 0 4px 20px rgba(74, 144, 217, 0.12), 0 1px 4px rgba(0, 0, 0, 0.05);
+  transform: translateY(-1px);
+}
+
+.aib-file-card:hover::before {
+  opacity: 1;
+}
+
+/* 图表卡片特殊样式 */
+.aib-file-card--chart {
+  flex-direction: column;
+  align-items: stretch;
+  padding: 0;
+  background: var(--aib-bg-card, #ffffff);
+}
+
+.aib-chart-preview {
+  width: 100%;
+  min-height: 300px;
+  max-height: 400px;
+  background: var(--aib-bg-card, #ffffff);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.aib-chart-preview canvas,
+.aib-chart-preview svg {
+  max-width: 100%;
+  height: auto;
+}
+
+.aib-file-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  background: var(--aib-bg-card, #f8f9fa);
+  border-top: 1px solid var(--aib-border, rgba(0, 0, 0, 0.06));
+  gap: 12px;
+}
+
+/* 信息区域 */
+.aib-file-card-info {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex: 1;
+  min-width: 0;
+}
+
+.aib-file-card-icon {
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  flex-shrink: 0;
+  background: linear-gradient(135deg, var(--aib-primary-soft, rgba(74, 144, 217, 0.1)) 0%, var(--aib-primary-soft-hover, rgba(74, 144, 217, 0.15)) 100%);
+  border-radius: 12px;
+  line-height: 1;
+}
+
+.aib-file-card-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.aib-file-card-name {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--aib-text-primary, #1a1a2e);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.5;
+  letter-spacing: -0.01em;
+}
+
+.aib-file-card-size {
+  font-size: 12px;
+  color: var(--aib-text-secondary, #8e8ea0);
+  margin-top: 3px;
+  line-height: 1.3;
+  font-weight: 500;
+}
+
+/* 按钮区域 */
+.aib-file-card-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.aib-file-card-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 10px 18px;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  white-space: nowrap;
+  border: none;
+  line-height: 1;
+  letter-spacing: 0.01em;
+}
+
+.aib-file-card-btn svg {
+  flex-shrink: 0;
+  width: 15px;
+  height: 15px;
+}
+
+/* 主按钮样式 */
+.aib-file-card-btn--primary {
+  background: linear-gradient(135deg, var(--aib-primary, #4A90D9) 0%, var(--aib-primary-hover, #357ABD) 100%);
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(74, 144, 217, 0.25);
+}
+
+.aib-file-card-btn--primary:hover {
+  background: linear-gradient(135deg, var(--aib-primary-hover, #357ABD) 0%, var(--aib-primary, #4A90D9) 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(74, 144, 217, 0.35);
+}
+
+.aib-file-card-btn--primary:active {
+  transform: translateY(0);
+  box-shadow: 0 1px 4px rgba(74, 144, 217, 0.2);
+}
+
+/* 次要按钮样式 */
+.aib-file-card-btn--secondary {
+  background: var(--aib-bg-card, #ffffff);
+  color: var(--aib-text-secondary, #6c757d);
+  border: 1.5px solid var(--aib-border, rgba(0, 0, 0, 0.1));
+}
+
+.aib-file-card-btn--secondary:hover {
+  background: var(--aib-bg-card-hover, #f0f2f5);
+  color: var(--aib-text-primary, #1a1a2e);
+  border-color: var(--aib-primary, #4A90D9);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+/* 图表卡片内的按钮样式 */
+.aib-file-card--chart .aib-file-card-btn {
+  padding: 8px 14px;
+  font-size: 12px;
+}
+
+/* 多个文件卡片间距 */
+.aib-file-card + .aib-file-card {
+  margin-top: 10px;
+}
+
+/* 文件卡片容器（在消息中） */
+.aib-file-cards {
+  margin: 12px 0;
+}
+
+/* 文件卡片入场动画 */
+@keyframes fileCardSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.aib-file-card {
+  animation: fileCardSlideIn 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
 /* ============ 小屏宽度适配（≤640px） ============ */
 @media (max-width: 640px) {
   /* ── 抽屉 ── */
@@ -2394,6 +2607,50 @@ table {
   .aib-msg-image {
     max-width: 160px;
     max-height: 160px;
+  }
+
+  /* ── 文件卡片 ── */
+  .aib-file-card {
+    padding: 10px 12px;
+    margin: 8px 0;
+  }
+
+  .aib-file-card--chart {
+    margin: 8px -12px;
+    border-radius: 0;
+  }
+
+  .aib-chart-preview {
+    min-height: 200px;
+    max-height: 300px;
+  }
+
+  .aib-file-card-footer {
+    flex-direction: column;
+    gap: 10px;
+    padding: 10px 12px;
+  }
+
+  .aib-file-card-actions {
+    width: 100%;
+  }
+
+  .aib-file-card-btn {
+    flex: 1;
+    justify-content: center;
+    padding: 10px 12px;
+  }
+
+  .aib-file-card-icon {
+    font-size: 24px;
+  }
+
+  .aib-file-card-name {
+    font-size: 13px;
+  }
+
+  .aib-file-card-size {
+    font-size: 11px;
   }
 
   /* ── 消息列表 ── */

@@ -71,6 +71,7 @@ export class IntentDetector {
       hasCommands: !!tags.commands?.length,
       hasSkill: !!tags.skill,
       hasChat: !!tags.chatText,
+      hasFileTags: tags.hasFileTags,
     })
 
     // [command] → 快速通道：不需要页面骨架的指令，直接执行
@@ -87,12 +88,10 @@ export class IntentDetector {
       return { isChat: false, rawText: aiOutput }
     }
 
-    // 异常：Phase 1 输出了 [skill]
-    if (tags.skill) {
-      log.warn('[Phase 1] → 异常：输出了 [skill]，强制进 Phase 2', {
-        skill: tags.skill,
-      })
-      return { isChat: false, rawText: aiOutput }
+    // [FILE:xxx]...[/FILE] → 文件标签，作为聊天回复返回（前端会渲染为文件卡片）
+    if (tags.hasFileTags) {
+      log.info('[Phase 1] → 结果：文件标签，作为聊天回复返回')
+      return { isChat: true, responseText: aiOutput, rawText: aiOutput }
     }
 
     // 纯聊天

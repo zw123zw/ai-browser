@@ -1,9 +1,18 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, ref, watch, nextTick, onBeforeUnmount } from 'vue';
 import type { ChatMessage, Attachment } from '@/src/types';
 import { renderMarkdown } from '@/src/utils/markdown';
 import { getFileTypeIcon, formatFileSize } from '@/src/utils/file-type';
 import { Logger } from '@/src/utils/logger';
+import {
+  parseFileTags,
+  generateFileCardHtml,
+  handleFileDownload,
+  extractDownloadInfo,
+  getFilesSummary,
+  type ParsedFile,
+} from '@/src/utils/file-tag-parser';
+import { renderChartToElement, type ChartConfig } from '@/src/utils/echart-renderer';
 import FilePreviewModal from './FilePreviewModal.vue';
 
 const log = new Logger('MessageItem');
@@ -15,10 +24,40 @@ const emit = defineEmits<{
 
 const isUser = computed(() => props.message.role === 'user');
 
-const renderedContent = computed(() => renderMarkdown(props.message.content));
+// ============ 文件标签解析 ============
+
+/** 解析 AI 回复中的文件标签 */
+const parsedFiles = computed<ParsedFile[]>(() => {
+  if (props.message.role !== 'assistant') return [];
+  return parseFileTags(props.message.content);
+});
+
+/** 是否包含文件标签 */
+const hasFiles = computed(() => parsedFiles.value.length > 0);
+
+/** 文件摘要信息 */
+const filesSummary = computed(() => getFilesSummary(parsedFiles.value));
+
+// ============ 内容渲染 ============
+
+/** 去掉文件标签后的纯文本内容 */
+const textWithoutFiles = computed(() => {
+  if (!hasFiles.value) return props.message.content;
+  // 移除所有 [FILE:xxx]...[/FILE] 标签（支持无闭合标签）
+  return props.message.content.replace(/\[FILE:\s*[^\]]+\]\r?\n?[\s\S]*?(?:\[\/FILE\]|$)/gi, '').trim();
+});
+
+/** 渲染后的消息内容（纯文本部分） */
+const renderedContent = computed(() => {
+  return renderMarkdown(textWithoutFiles.value);
+});
+
+/** 渲染后的推理内容 */
 const renderedReasoning = computed(() =>
   props.message.reasoning ? renderMarkdown(props.message.reasoning) : ''
 );
+
+// ============ 图片处理 ============
 
 /** 消息中的图片（从 attachments 获取） */
 const allImages = computed(() => {
@@ -34,6 +73,8 @@ const fileAttachments = computed(() => {
   return props.message.attachments.filter(a => a.type !== 'image');
 });
 
+// ============ 文件预览 ============
+
 /** 当前预览的附件 */
 const previewAttachment = ref<Attachment | null>(null);
 
@@ -46,11 +87,87 @@ function closePreview() {
   previewAttachment.value = null;
 }
 
+// ============ 右键菜单 ============
+
 function onContextMenu(e: MouseEvent) {
   e.preventDefault();
   e.stopPropagation();
   emit('context-menu', { message: props.message, x: e.clientX, y: e.clientY });
 }
+
+// ============ 图表渲染 ============
+
+/** 图表清理函数 Map */
+const chartDisposers = ref<Map<number, () => void>>(new Map());
+
+/** 渲染所有图表 */
+async function renderCharts() {
+  if (!hasFiles.value) return;
+
+  await nextTick();
+
+  for (const file of parsedFiles.value) {
+    if (file.category === 'chart' && file.chartConfig) {
+      const container = document.querySelector(
+        `[data-chart-index="${file.index}"]`
+      ) as HTMLElement;
+
+      if (container) {
+        try {
+          const result = await renderChartToElement(container, file.chartConfig);
+          if (result.success && result.dispose) {
+            chartDisposers.value.set(file.index, result.dispose);
+          } else {
+            log.error('图表渲染失败', { file: file.filename, error: result.error });
+            container.innerHTML = `<div class="aib-chart-error">图表渲染失败: ${result.error}</div>`;
+          }
+        } catch (error) {
+          log.error('图表渲染异常', { file: file.filename, error });
+          container.innerHTML = '<div class="aib-chart-error">图表渲染失败</div>';
+        }
+      }
+    }
+  }
+}
+
+/** 清理所有图表 */
+function disposeCharts() {
+  chartDisposers.value.forEach(dispose => dispose());
+  chartDisposers.value.clear();
+}
+
+// 监听内容变化，重新渲染图表
+watch(
+  () => props.message.content,
+  () => {
+    disposeCharts();
+    if (hasFiles.value) {
+      renderCharts();
+    }
+  },
+  { immediate: true }
+);
+
+// 组件卸载前清理图表
+onBeforeUnmount(() => {
+  disposeCharts();
+});
+
+// ============ 文件下载处理 ============
+
+/** 处理文件下载点击 */
+function onFileAction(e: MouseEvent) {
+  const info = extractDownloadInfo(e);
+  if (!info) return;
+
+  e.preventDefault();
+  e.stopPropagation();
+
+  log.info('文件下载', { action: info.action, fileIndex: info.fileIndex });
+  handleFileDownload(info.action, info.fileIndex, parsedFiles.value);
+}
+
+// ============ 旧版表格下载（保留兼容） ============
 
 /** 下载表格为 Excel */
 async function onTableDownload(e: MouseEvent) {
@@ -114,7 +231,10 @@ function onCodeCopy(e: MouseEvent) {
 </script>
 
 <template>
-  <div :class="['aib-msg-row', isUser ? 'aib-row-user' : 'aib-row-ai']" @click="(e) => { onTableDownload(e); onCodeCopy(e) }">
+  <div
+    :class="['aib-msg-row', isUser ? 'aib-row-user' : 'aib-row-ai']"
+    @click="(e) => { onTableDownload(e); onCodeCopy(e); onFileAction(e); }"
+  >
     <div
       :class="['aib-msg', isUser ? 'aib-bubble-user' : 'aib-bubble-ai']"
       @contextmenu="onContextMenu"
@@ -136,7 +256,7 @@ function onCodeCopy(e: MouseEvent) {
         />
       </div>
 
-      <!-- 文件附件 -->
+      <!-- 文件附件（上传的文件） -->
       <div v-if="fileAttachments.length" class="aib-msg-files">
         <div
           v-for="att in fileAttachments"
@@ -153,10 +273,17 @@ function onCodeCopy(e: MouseEvent) {
 
       <!-- 文本内容 -->
       <div
-        v-if="message.content || !message.reasoning"
+        v-if="textWithoutFiles || !message.reasoning"
         class="aib-msg-text"
         v-html="renderedContent"
       />
+
+      <!-- AI 生成的文件卡片 -->
+      <div v-if="hasFiles" class="aib-msg-files">
+        <template v-for="file in parsedFiles" :key="file.index">
+          <div v-html="generateFileCardHtml(file)" />
+        </template>
+      </div>
 
       <!-- 状态 -->
       <div v-if="message.status === 'streaming'" class="aib-typing">
@@ -187,3 +314,17 @@ function onCodeCopy(e: MouseEvent) {
     />
   </div>
 </template>
+
+<style scoped>
+/* 图表错误提示 */
+.aib-chart-error {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100px;
+  padding: 16px;
+  color: var(--aib-text-secondary, #6c757d);
+  font-size: 13px;
+  text-align: center;
+}
+</style>
