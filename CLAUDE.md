@@ -37,7 +37,6 @@ src/
   browser/                   # 浏览器命令执行引擎
   composables/               # Vue 组合式函数
   input/                     # 统一输入处理管线
-  skills/                    # 技能系统（/命令）
   storage/                   # Chrome storage 抽象层
   stores/                    # Pinia 状态管理
   styles/                    # 全局 CSS
@@ -60,7 +59,7 @@ src/
 - 序列化前用 `plain()` 剥离 Vue 代理
 
 ### 输入管线（src/input/）
-- 路由：`/` 前缀 → 内置命令或技能激活，其他 → AI 意图检测
+- 路由：`/` 前缀 → 内置命令，其他 → AI 意图检测
 - 两阶段：AI 流式对话/动作检测 → 迭代命令执行（最多 5 次重试）
 
 ### 组件规范
@@ -129,4 +128,3 @@ Logger 构造参数是模块标识，用于日志分类和过滤：
 - `README.md` — 架构总览（Mermaid 图）
 - `DEVELOPMENT.md` — 开发指南与约定
 - `docs/architecture/` — 11 篇架构文档（适配器、管线、存储、翻译等）
-- `src/skills/workflows/README.md` — 技能系统开发指南

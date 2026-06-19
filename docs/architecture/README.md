@@ -152,7 +152,7 @@ sequenceDiagram
     Pipeline->>Router: route(ctx)
 
     alt /命令
-        Router-->>Pipeline: builtin/skill
+        Router-->>Pipeline: builtin
     else AI 处理
         Router-->>Pipeline: { type: 'ai' }
         Pipeline->>Detector: detectPhase1(text)

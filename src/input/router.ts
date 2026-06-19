@@ -30,9 +30,9 @@ export class InputRouter {
         log.info('内置命令', { command: parsed.command, args: parsed.args })
         return { type: 'builtin', command: parsed.command, args: parsed.args }
       }
-      // 非内置 → 当作技能触发（零 AI）
-      log.info('技能命令', { command: parsed.command, args: parsed.args })
-      return { type: 'skill', skillName: parsed.command, skillUserText: parsed.args }
+      // 非内置 → 未知命令
+      log.info('未知命令', { command: parsed.command })
+      return { type: 'builtin', command: 'unknown', args: parsed.command }
     }
 
     // 其余 → AI 意图检测

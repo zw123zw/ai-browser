@@ -370,7 +370,7 @@ sequenceDiagram
 
 `usePipeline` 是聊天面板与输入处理管线之间的桥梁：
 
-- **职责**：将用户输入路由到 `InputPipeline`，处理指令/技能/普通聊天的分发
+- **职责**：将用户输入路由到 `InputPipeline`，处理指令/普通聊天的分发
 - **回调驱动**：通过 `PipelineCallbacks` 接口将管线事件（`onChatStart`、`onChatDelta`、`onChatEnd`、`onCommandsParsed` 等）转化为 Pinia store 更新
 - **流式消息**：使用 `reactive()` 包装的 `ChatMessage` 实现打字机效果
 - **中止支持**：通过 `AbortController` 支持用户中途停止

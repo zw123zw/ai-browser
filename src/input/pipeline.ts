@@ -45,10 +45,8 @@ export interface PipelineOptions {
   getSettings: () => AppSettings
   /** 获取当前使用的模型 ID（优先会话级，回退全局默认） */
   getModelId?: () => string
-  getSkillList?: () => string
   getRecentMessages?: () => Array<{ role: 'user' | 'assistant'; content: string }>
   getSignal?: () => AbortSignal | undefined
-  onSkillActivate?: (name: string, userText: string) => Promise<{ success: boolean; message: string }>
   onBuiltinCommand?: (command: string, args: string) => void
 }
 
@@ -65,7 +63,6 @@ export class InputPipeline {
     this.detector = new IntentDetector({
       getSettings: options.getSettings,
       getModelId: options.getModelId,
-      getSkillList: options.getSkillList,
       getRecentMessages: options.getRecentMessages,
       getSignal: options.getSignal,
     })
@@ -91,12 +88,6 @@ export class InputPipeline {
       return
     }
 
-    if (routeResult.type === 'skill') {
-      log.info('[路由] → 技能触发（零 AI）', { name: routeResult.skillName, userText: routeResult.skillUserText })
-      this.options.onSkillActivate?.(routeResult.skillName, routeResult.skillUserText)
-      return
-    }
-
     // 2. Phase 1 — 流式输出，但检测到操作标签时清掉内容，用户只看到"思考中"
     callbacks.onChatStart()
     let phase1StreamedContent = ''
@@ -109,7 +100,7 @@ export class InputPipeline {
           callbacks.onChatDelta(delta)
           // 检测到操作标签 → 清掉流式内容，只保留"思考中"
           // 关键词必须带 [ 或 ]，防止聊天中提到 "action" 等词误触发
-          if (/\[(?:action|command|skill)|(?:action|command|skill)\]/.test(phase1StreamedContent)) {
+          if (/\[(?:action|command)|(?:action|command)\]/.test(phase1StreamedContent)) {
             phase1ActionTagDetected = true
             callbacks.onChatDelta('', undefined, true)
           }
@@ -230,7 +221,7 @@ export class InputPipeline {
       const phase2Result = await this.callStreamingAI(text, skeleton, completed, lastError, lastFailedCommand, lastFullSkeleton, coreRule)
 
       // ── 无标签 → AI 无输出，任务完成 ──
-      if (!phase2Result.commands?.length && !phase2Result.skill && !phase2Result.needFull) {
+      if (!phase2Result.commands?.length && !phase2Result.needFull) {
         log.info('[Phase 2] ═══ AI 无更多指令，任务完成 ═══')
         break
       }
@@ -290,7 +281,7 @@ export class InputPipeline {
             break
           }
 
-          // command 成功 → 跳过同响应的 need_full/skill，等骨架刷新后下一轮处理
+          // command 成功 → 跳过同响应的 need_full，等骨架刷新后下一轮处理
           if (phase2Result.needFull) {
             log.info('[Phase 2] → 跳过 need_full（指令执行成功，等待骨架刷新）')
           }
@@ -304,7 +295,7 @@ export class InputPipeline {
           consecutiveErrors++
           log.warn('[Phase 2] 指令执行失败', { action: cmd.action, error: lastError })
           callbacks.onRetryMessage(`🔄 正在重试... (${consecutiveErrors}/${MAX_RETRY})`, completed.length + 1, lastFailedCommand)
-          // command 失败 → 继续检查 need_full/skill
+          // command 失败 → 继续检查 need_full
         }
       }
 
@@ -316,30 +307,6 @@ export class InputPipeline {
         lastError = '当前视口骨架未找到目标元素，已提取全页骨架'
         lastFailedCommand = null
         lastFullSkeleton = fullSkeleton
-        consecutiveErrors++
-        callbacks.onRetryMessage(`🔄 正在重试... (${consecutiveErrors}/${MAX_RETRY})`, completed.length + 1, lastFailedCommand)
-        continue
-      }
-
-      // ── skill → 执行 ──
-      if (phase2Result.skill) {
-        const { name, userText } = phase2Result.skill
-        log.info('[Phase 2] → 技能触发', { name, userText })
-        callbacks.onSkillParsed(name, userText)
-
-        try {
-          const result = await this.options.onSkillActivate?.(name, userText)
-          if (result && result.success) {
-            completed.push({ action: 'skill', elementId: name })
-            consecutiveErrors = 0
-            lastError = ''
-            continue
-          }
-          lastError = result?.message || `技能 "${name}" 执行失败`
-        } catch (error) {
-          lastError = `技能异常: ${error instanceof Error ? error.message : String(error)}`
-          log.error('[Phase 2] 技能执行异常', error)
-        }
         consecutiveErrors++
         callbacks.onRetryMessage(`🔄 正在重试... (${consecutiveErrors}/${MAX_RETRY})`, completed.length + 1, lastFailedCommand)
         continue
@@ -379,10 +346,8 @@ export class InputPipeline {
     const { createAdapter } = await import('@/src/adapters')
     const adapter = createAdapter(model.provider || settings.provider)
 
-    const skillList = this.options.getSkillList?.() || '（暂无可用技能）'
     const systemPrompt = PHASE2_SYSTEM_PROMPT
       .replace('{coreRule}', coreRule)
-      .replace('{skillList}', skillList)
     const userContent = buildStreamingUserMessage(text, skeleton, completed, lastError || undefined, lastFailedCommand || undefined, lastFullSkeleton || undefined)
 
     log.info('[流式] ═══ AI 请求 ═══', {
@@ -431,13 +396,11 @@ export class InputPipeline {
       elementId: firstCommand?.[0]?.elementId,
       description: firstCommand?.[0]?.description,
       done: firstCommand?.[0]?.done,
-      hasSkill: !!tags.skill,
       hasNeedFull: !!tags.needFull,
     })
 
     return {
       commands: firstCommand,
-      skill: tags.skill,
       needFull: tags.needFull,
       rawAiOutput: fullResponse,
     }

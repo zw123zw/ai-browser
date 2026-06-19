@@ -2,7 +2,7 @@
  * 输入流水线 Composable
  *
  * 将 InputPipeline 集成到 Vue 组件中。
- * 指令/技能解析后用特殊消息展示在聊天中。
+ * 指令解析后用特殊消息展示在聊天中。
  */
 
 import { ref, reactive } from 'vue'
@@ -56,13 +56,8 @@ export function usePipeline() {
       pipeline = new InputPipeline({
         getSettings: () => settingsStore.settings,
         getModelId: () => convStore.conversation?.modelId || settingsStore.settings.defaultModelId,
-        getSkillList: () => '（暂无可用技能）',
         getRecentMessages,
         getSignal: () => currentAborter?.signal,
-        onSkillActivate: async (name, userText) => {
-          log.info('技能触发', { name, userText })
-          return { success: false, message: `技能 "${name}" 暂未实现` }
-        },
         onBuiltinCommand: (command, args) => {
           log.info('内置命令', { command, args })
           if (command === 'stop') {
@@ -70,6 +65,8 @@ export function usePipeline() {
             addSystemMessage('已停止当前操作')
           } else if (command === 'help') {
             addSystemMessage('可用命令：/stop（停止）、/help（帮助）')
+          } else if (command === 'unknown') {
+            addSystemMessage(`未知命令 /${args}，可用：/stop、/help`)
           } else {
             addSystemMessage(`命令 /${command} 暂未实现`)
           }
@@ -184,17 +181,6 @@ export function usePipeline() {
           const step = currentStep || 1
           const cmdDetail = formatCommandDetail(commands[0])
           addSystemMessage(`🔧 **正在执行第 ${step} 条指令：**\n${step}. ${cmdDetail}`)
-        },
-
-        // 解析到技能 → 替换"执行中"消息为技能信息
-        onSkillParsed: (name, userText) => {
-          log.info('[回调] onSkillParsed', { name, userText })
-          if (currentStreamingMsg && convStore.conversation) {
-            const idx = convStore.conversation.messages.findIndex(m => m.id === currentStreamingMsg!.id)
-            if (idx !== -1) convStore.conversation.messages.splice(idx, 1)
-            currentStreamingMsg = null
-          }
-          addSystemMessage(`⚡ **正在执行技能：** ${name}${userText ? ` — ${userText}` : ''}`)
         },
 
         // 单条指令执行结果

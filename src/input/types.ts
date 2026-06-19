@@ -12,7 +12,6 @@ export interface InputContext {
 
 /** 输入路由结果 */
 export type InputResult =
-  | { type: 'skill'; skillName: string; skillUserText: string }
   | { type: 'builtin'; command: string; args: string }
   | { type: 'ai' }
 
@@ -35,9 +34,6 @@ export interface PipelineCallbacks {
 
   /** 即将执行的指令列表（解析完成后、执行前展示） */
   onCommandsParsed: (commands: Command[], currentStep?: number) => void
-
-  /** 即将执行的技能（解析完成后、执行前展示） */
-  onSkillParsed: (name: string, userText: string) => void
 
   /** 单条指令执行结果 */
   onCommandResult: (action: string, success: boolean, message: string) => void

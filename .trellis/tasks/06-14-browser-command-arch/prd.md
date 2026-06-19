@@ -586,7 +586,7 @@ Background 处理逻辑（`entrypoints/background.ts`）：
 │  src/input/router.ts → route(ctx)                        │
 │                                                         │
 │  /stop → { type: 'builtin', command, args }              │
-│  /翻译 中文 → { type: 'skill', skillName, skillUserText }│
+│  /翻译 中文 → { type: 'builtin', command: 'unknown' }    │
 │  其余 → { type: 'ai' }                                   │
 └─────────────────────────────────────────────────────────┘
     │
@@ -595,16 +595,15 @@ Background 处理逻辑（`entrypoints/background.ts`）：
 │  Phase 1: 意图检测（流式输出 + 标签检测）                 │
 │  src/input/intent-detector.ts → detectPhase1()           │
 │                                                         │
-│  输入：用户文本（无骨架、无技能列表）                      │
+│  输入：用户文本（无骨架）                                  │
 │  消息构建：历史上下文（最近6条，去重数据）+ system prompt  │
 │  Prompt：二分类                                          │
 │    - 需要操作 → [action]                                  │
 │    - 聊天 → 自然语言回复                                  │
-│  禁止输出 [command]、[skill]                              │
+│  禁止输出 [command]                                      │
 │                                                         │
 │  流式输出时检测操作标签：                                 │
-│    正则: /\[(?:action|command|skill)|(?:action|command|  │
-│          skill)\]/                                       │
+│    正则: /\[(?:action|command)|(?:action|command)\]/     │
 │    检测到 → clearContent=true，清掉流式内容               │
 │    用户只看到"正在执行操作..."                             │
 │                                                         │
@@ -628,13 +627,12 @@ Background 处理逻辑（`entrypoints/background.ts`）：
 │    4. 调用 AI 生成 1 条指令（callStreamingAI）            │
 │    5. 解析标签 → 分支处理                                │
 │                                                         │
-│  分支处理（优先级：command > need_full > skill）：        │
+│  分支处理（优先级：command > need_full）：                 │
 │    [command] → 指令去重检查 → ActionExecutor.execute()    │
 │      成功 → completedKeys.add, consecutiveErrors=0       │
 │           → done=1? break : wait 500ms → 下一轮          │
 │      失败 → consecutiveErrors++, 记录 lastError → 重试   │
 │    [need_full] → extractFullPageSkeleton() → 重试        │
-│    [skill] → onSkillActivate() → consecutiveErrors++     │
 │    无标签 → break（所有步骤完成）                         │
 │                                                         │
 │  超过 5 次连续错误 → "未找到对应元素，请准确说出您的需求" │
@@ -665,7 +663,7 @@ const p1 = await this.detector.detectPhase1(ctx.text, (delta, reasoningDelta) =>
 
       // 检测操作标签 → 清掉内容
       // 关键词必须带 [ 或 ]，防止聊天中提到 "action" 等词误触发
-      if (/\[(?:action|command|skill)|(?:action|command|skill)\]/.test(phase1StreamedContent)) {
+      if (/\[(?:action|command)|(?:action|command)\]/.test(phase1StreamedContent)) {
         phase1ActionTagDetected = true
         callbacks.onChatDelta('', undefined, true)  // clearContent=true
       }
@@ -751,7 +749,7 @@ private async processPhase2WithRetry(text: string, callbacks: PipelineCallbacks)
     const phase2Result = await this.callStreamingAI(text, skeleton, completed, lastError, lastFailedCommand, lastFullSkeleton, coreRule)
 
     // ── 无标签 → AI 无输出，任务完成 ──
-    if (!phase2Result.commands?.length && !phase2Result.skill && !phase2Result.needHtml) break
+    if (!phase2Result.commands?.length && !phase2Result.needFull) break
 
     // ── command → 执行单条指令（优先于 need_full） ──
     if (phase2Result.commands?.length) {
@@ -781,7 +779,7 @@ private async processPhase2WithRetry(text: string, callbacks: PipelineCallbacks)
         // ★ done=1 → 最后一步完成，停止
         if (cmd.done === 1) break
 
-        // command 成功 → 跳过同响应的 need_full/skill，等骨架刷新后下一轮处理
+        // command 成功 → 跳过同响应的 need_full，等骨架刷新后下一轮处理
         await new Promise(resolve => setTimeout(resolve, 500))
         continue
       } else {
@@ -789,7 +787,7 @@ private async processPhase2WithRetry(text: string, callbacks: PipelineCallbacks)
         lastFailedCommand = { action: cmd.action, elementId: cmd.elementId, description: cmd.description, text: cmd.text, url: cmd.url }
         consecutiveErrors++
         callbacks.onRetryMessage(...)
-        // command 失败 → 继续检查 need_full/skill
+        // command 失败 → 继续检查 need_full
       }
     }
 
@@ -799,19 +797,6 @@ private async processPhase2WithRetry(text: string, callbacks: PipelineCallbacks)
       lastError = '当前视口骨架未找到目标元素，已提取全页骨架'
       lastFailedCommand = null
       lastFullSkeleton = fullSkeleton
-      consecutiveErrors++
-      continue
-    }
-
-    // ── skill → 执行 ──
-    if (phase2Result.skill) {
-      const result = await this.options.onSkillActivate?.(name, userText)
-      if (result?.success) {
-        completed.push({ action: 'skill', elementId: name })
-        consecutiveErrors = 0
-        continue
-      }
-      lastError = result?.message || `技能 "${name}" 执行失败`
       consecutiveErrors++
       continue
     }
@@ -843,7 +828,6 @@ private async callStreamingAI(
 
   const systemPrompt = PHASE2_SYSTEM_PROMPT
     .replace('{coreRule}', coreRule)
-    .replace('{skillList}', skillList)
   const userContent = buildStreamingUserMessage(text, skeleton, completed, lastError || undefined, lastFailedCommand || undefined, lastFullSkeleton || undefined)
 
   let fullResponse = ''
@@ -859,8 +843,7 @@ private async callStreamingAI(
 
   return {
     commands: firstCommand,
-    skill: tags.skill,
-    needHtml: tags.needHtml,
+    needFull: tags.needFull,
     rawAiOutput: fullResponse,
   }
 }
@@ -934,7 +917,6 @@ if (completedKeys.has(cmdKey)) {
 | `onChatEnd` | `status: 'streaming'` → `'done'` | assistant |
 | `onActionDetected` | `content = '正在执行操作...'`, `status = 'done'` | assistant |
 | `onCommandsParsed` | 移除占位消息，添加 `🔧 **正在执行第 N 条指令：**\n1. **action** — description` | system |
-| `onSkillParsed` | 移除占位消息，添加 `⚡ **正在执行技能：** 名称 — 描述` | system |
 | `onCommandResult` | `✅ **action** — message` 或 `❌ **action** — message` | system |
 | `onAllCommandsDone` | 存为 assistant 消息 `已执行: action(desc); action(url)` | assistant |
 | `onRetryMessage` | 移除占位消息，添加 `🔄 **正在重试第 N 条指令：**\n1. **action** — description` | system |
@@ -981,7 +963,6 @@ onChatDelta(delta)  ←── Phase 1 流式回调
 interface ExtractedTags {
   chatText?: string                              // [chat] 内的文本
   commands?: Command[]                           // [command] 列表
-  skill?: { name: string; userText: string }     // [skill]
   isAction: boolean                              // 是否包含 [action]
   needFull?: boolean                              // [need_full]
   hasAnyTag: boolean                             // 是否提取到了任何标签
@@ -989,7 +970,7 @@ interface ExtractedTags {
 }
 
 function extractTags(rawText: string): ExtractedTags
-  // 正则匹配 [chat], [command](多条), [skill], [action], [need_full]
+  // 正则匹配 [chat], [command](多条), [action], [need_full]
   // 支持闭合标签 [tag]...[/tag] 和非闭合 fallback [tag]{...}
   // [need_full] 无需 JSON 解析，检测到标签即触发
 
@@ -1006,7 +987,6 @@ function getChatText(tags: ExtractedTags): string
 [chat]      → 纯聊天回复
 [action]    → 需要操作（Phase 1 输出）
 [command]   → 浏览器指令（支持多条，流式模式只取第一条）
-[skill]     → 技能触发
 [need_full] → 需要全页骨架兜底
 ```
 
@@ -1067,13 +1047,13 @@ export const PHASE1_SYSTEM_PROMPT = `\`\`\`
 1. [action]（单独输出，无其他内容）
 2. 自然语言回复（纯聊天内容）
 
-禁止输出 [command]、[skill]、操作结果（"已执行"等）或分析说明。
+禁止输出 [command]、操作结果（"已执行"等）或分析说明。
 \`\`\``
 ```
 
 ### 8.3 Phase 2 提示词（操作决策 — 统一模板）
 
-**设计原则**：一套 system prompt 模板，通过 `{coreRule}` / `{skillList}` 两个占位符运行时替换，适配三种进入模式。user message 只放数据，不含指令说明。
+**设计原则**：一套 system prompt 模板，通过 `{coreRule}` 占位符运行时替换，适配三种进入模式。user message 只放数据，不含指令说明。
 
 ```typescript
 export const PHASE2_SYSTEM_PROMPT = `\`\`\`
@@ -1098,17 +1078,9 @@ export const PHASE2_SYSTEM_PROMPT = `\`\`\`
 能力域：
 ${CAPABILITY_DOMAIN}
 
-═══ 技能 ═══
-
-[skill] 调用匹配的用户技能：
-[skill]{"name":"技能名","userText":"文本"}[/skill]
-
-可用技能：
-{skillList}
-
 ═══ 规则 ═══
 
-- 标签必须闭合：[command]{...}[/command]、[skill]{...}[/skill]
+- 标签必须闭合：[command]{...}[/command]
 - [need_full] 不需要闭合，单独输出即可
 - 打开网站/搜索/滚动 → 直接[command]（不需要骨架）
 - 骨架中"(icon)"元素 → 检查aria-label/title判断功能
@@ -1118,7 +1090,7 @@ ${CAPABILITY_DOMAIN}
 ❌ 禁止输出分析/解释/说明/思考过程
 ❌ 禁止一次输出多条[command]，每次只能1条
 ❌ 禁止输出自然语言（如"好的，我来帮你..."、"让我分析一下..."）
-只输出 [command] / [skill] / [need_full] 标签，其他内容一律禁止。
+只输出 [command] / [need_full] 标签，其他内容一律禁止。
 \`\`\``
 ```
 
@@ -1139,7 +1111,6 @@ const coreRule = isFirstEntry ? MODE_FIRST : (lastError ? MODE_RETRY : MODE_STRE
 
 const systemPrompt = PHASE2_SYSTEM_PROMPT
   .replace('{coreRule}', coreRule)
-  .replace('{skillList}', skillList)
 ```
 
 ### 8.4 用户消息构建（buildStreamingUserMessage）
@@ -1211,17 +1182,9 @@ switchTab   — 切换到指定标签页（需tabQuery关键词，如"B站"、"�
 nextTab     — 切换到下一个标签页
 prevTab     — 切换到上一个标签页
 
-═══ 技能 ═══
-
-[skill] 调用匹配的用户技能：
-[skill]{"name":"技能名","userText":"文本"}[/skill]
-
-可用技能：
-（暂无可用技能）
-
 ═══ 规则 ═══
 
-- 标签必须闭合：[command]{...}[/command]、[skill]{...}[/skill]
+- 标签必须闭合：[command]{...}[/command]
 - [need_full] 不需要闭合，单独输出即可
 - 打开网站/搜索/滚动 → 直接[command]（不需要骨架）
 - 骨架中"(icon)"元素 → 检查aria-label/title判断功能
@@ -1231,7 +1194,7 @@ prevTab     — 切换到上一个标签页
 ❌ 禁止输出分析/解释/说明/思考过程
 ❌ 禁止一次输出多条[command]，每次只能1条
 ❌ 禁止输出自然语言（如"好的，我来帮你..."、"让我分析一下..."）
-只输出 [command] / [skill] / [need_full] 标签，其他内容一律禁止。
+只输出 [command] / [need_full] 标签，其他内容一律禁止。
 
 ────────────────────────────────────
 
@@ -1342,7 +1305,6 @@ prevTab     — 切换到上一个标签页
 | 字段 | 首次进入 | 流式执行 | 错误重试 |
 |------|:-------:|:-------:|:-------:|
 | `{coreRule}` | 每次只生成1条指令，系统执行后反馈结果再生成下一条。 | 按照以下信息和格式，生成下一条指令。 | 上次指令执行失败。根据以下失败指令、错误信息、最新页面骨架，调整策略，重新生成一条指令。 |
-| `{skillList}` | 技能列表 | 技能列表 | 技能列表 |
 | `[原始请求]` | ✅ | ✅ | ✅ |
 | `[已完成]` | ❌ | ✅ | ✅ |
 | `[上次错误]` | ❌ | ❌ | ✅ |
@@ -1419,7 +1381,7 @@ class IntentDetector {
     // 返回: { isChat, responseText?, rawText }
 
   async detectPhase2(text: string, skeleton: SemanticSkeleton): Promise<Phase2Result>
-    // 返回: { commands?, skill?, needHtml?, rawAiOutput }
+    // 返回: { commands?, needFull?, rawAiOutput }
     // 保留接口，流式模式下由 pipeline.callStreamingAI() 替代
 
   private async callAI(scene, systemPrompt, userContent, onChunk?): Promise<string>
@@ -1560,7 +1522,7 @@ src/
 │   └── index.ts
 ├── input/
 │   ├── types.ts                    # InputContext, InputResult, PipelineCallbacks
-│   ├── router.ts                   # InputRouter → builtin/skill/ai 分流（/ 前缀解析）
+│   ├── router.ts                   # InputRouter → builtin/ai 分流（/ 前缀解析）
 │   ├── intent-detector.ts          # IntentDetector（Phase 1 二分类 + Phase 2 保留接口 + 历史消息清洗）
 │   ├── pipeline.ts                 # InputPipeline（流式单条执行 + 连续错误重试 + 指令去重 + abort 支持）
 │   ├── tag-parser.ts               # extractTags() + isChatOnlyReply() + getChatText() + need_full 检测
@@ -1680,7 +1642,6 @@ entrypoints/
 | 元素未找到 | `findElement()` 返回 null | `lastError = "[action] 未找到目标元素"` → consecutiveErrors++ → 重试 |
 | 执行异常 | `execute()` 抛出异常 | `lastError = "[action] 执行异常: ..."` → consecutiveErrors++ → 重试 |
 | need_full | AI 输出 `[need_full]` 标签 | `extractFullPageSkeleton()` → consecutiveErrors++ → 重试 |
-| 技能失败 | `onSkillActivate()` 返回失败 | `lastError = "技能 xxx 执行失败"` → consecutiveErrors++ → 重试 |
 | AI 无输出 | adapter 返回空字符串 | `break`（视为任务完成） |
 | 无有效标签 | extractTags 未提取到任何标签 | `break`（视为任务完成） |
 | AI 请求失败 | adapter.chat() 抛出异常 | 返回空结果 → `break` |
@@ -1706,16 +1667,11 @@ while (consecutiveErrors < 5):
     成功 → completed.push, completedKeys.add, consecutiveErrors=0
          → done=1? break : wait 500ms → 下一轮
     失败 → lastError, lastFailedCommand, consecutiveErrors++
-         → 继续检查 need_full/skill
+         → 继续检查 need_full
 
   need_full:
     extractFullPageSkeleton() → lastFullSkeleton
     consecutiveErrors++ → 继续循环
-
-  skill:
-    执行技能
-    成功 → completed.push, consecutiveErrors=0
-    失败 → lastError, consecutiveErrors++
 
 if (consecutiveErrors >= 5):
   "未找到对应元素，请准确说出您的需求"
@@ -1773,13 +1729,12 @@ AI 根据这些信息：
 - [x] 连续错误计数重试（最多 5 次，中间成功重置计数）
 - [x] abort 支持（AbortController + signal 检查）
 - [x] `[need_full]` 全页骨架兜底（全页面 DOM + iframe + 同格式骨架 + 无元素上限）
-- [x] 流式标签检测（Phase 1 流式输出时正则检测 [action]/[command]/[skill]）
+- [x] 流式标签检测（Phase 1 流式输出时正则检测 [action]/[command]）
 - [x] 提示词集中在 prompts.ts（模板 + 占位符运行时替换）
 - [x] Background CORS 代理（proxy-fetch-stream + 流转发 + 中止支持）
 - [x] Background 标签页操作（newTab/closeTab/switchTab 关键词/next/prev）
 - [x] usePipeline Vue 集成（流式消息生命周期 + 回调 → 消息映射 + abort 支持）
 - [x] 失败提示 "未找到对应元素，请准确说出您的需求"
-- [ ] 技能系统实现（目前 onSkillActivate 返回 "暂未实现"）
 
 ---
 
@@ -1790,5 +1745,4 @@ AI 根据这些信息：
 - 拖拽操作
 - 文件上传/下载
 - 跨页面连续指令队列
-- 技能系统实现（scaffolded at `src/skills/workflows/`）
 - `[steps]` 步骤预告标签（已从代码中移除，仅靠 `done=1` 停止）

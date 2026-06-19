@@ -68,8 +68,7 @@
 │                                                         │
 │  解析器从自然回复中提取标签：                              │
 │    [command] → 展示"正在执行xxx指令" → 执行               │
-│    [skill]   → 展示"正在执行xxx技能" → 执行               │
-│    [need_html] → 用 description 重试，二次放弃            │
+│    [need_full] → 提取全页骨架后重试                       │
 │    提取不到 → 重试（最多 5 次）                           │
 └─────────────────────────────────────────────────────────┘
     │
@@ -414,9 +413,7 @@ export const PHASE2_SYSTEM_PROMPT = `\`\`\`
 指令格式（标签可出现在回复任意位置）：
 [command]{"action":"click","elementId":"e3","description":"登录"}[/command]
 [command]{"action":"navigate","url":"https://..."}[/command]
-[skill]{"name":"翻译","userText":"这个页面"}[/skill]
-[need_html]{"query":"下载","reason":"骨架未找到","contextId":"e3"}[/need_html]
-contextId 是离目标最近的骨架元素ID（如按钮所在的卡片、容器），用于提取周围HTML。
+[need_full]
 
 能力域：
 navigate / search / click / type / clear / scroll / select / keyboard / focus / hover / wait / newTab / closeTab / switchTab / nextTab / prevTab
@@ -430,9 +427,8 @@ navigate / search / click / type / clear / scroll / select / keyboard / focus / 
 1. 只处理当前用户请求，对话历史仅用于理解指代（如"第一个"指什么），不要重复执行之前的操作
 2. 打开网站/搜索/滚动 → 直接返回[command]（不需要骨架）
 3. 操作页面元素 → 用骨架elementId定位
-4. 有匹配技能 → 返回[skill]
-5. 找不到目标 → 返回[need_html]
-6. 多步操作按顺序输出多个[command]
+4. 找不到目标 → 返回[need_full]
+5. 多步操作按顺序输出多个[command]
 
 图标按钮识别：
 - 很多按钮没有文字，只有SVG图标
@@ -493,7 +489,7 @@ Phase 2 首次请求
     │   ├── 成功 → 结束
     │   └── 失败 → 重试（带最新骨架 + 失败原因）
     │
-    ├── [need_html] → 首次用 description 重试 → 二次放弃
+    ├── [need_full] → 提取全页骨架后重试
     │
     └── 未提取到标签 → 重试（带上次回复 + 错误原因）
         │
@@ -510,7 +506,7 @@ Phase 2 首次请求
 用户: "点击登录按钮"
 页面骨架: { url, title, elements: [...] }
 你上次的回复: <原始 AI 回复>
-错误: 未找到有效指令标签 [command]、[skill] 或 [need_html]
+错误: 未找到有效指令标签 [command] 或 [need_full]
 请在回复中包含有效指令标签。
 ```
 
@@ -523,14 +519,12 @@ Phase 2 首次请求
 骨架已更新，请根据新骨架重新定位。
 ```
 
-### 8.3 `[need_html]` 处理
+### 8.3 `[need_full]` 处理
 
 ```
-AI 返回 [need_html]
+AI 返回 [need_full]
     │
-    ├── 首次 → 用 description 重试（要求 AI 用文本描述定位，禁止再用 need_html）
-    │
-    └── 二次 → 放弃，提示用户 "请尝试更具体的描述"
+    └── 提取全页骨架后重试（最多 5 次）
 ```
 
 ### 8.4 关键实现细节
@@ -576,8 +570,8 @@ export function buildPhase2UserMessage(text, skeleton): string { ... }
 /** 构建重试用户消息（骨架 + 上次回复 + 错误原因） */
 export function buildRetryUserMessage(text, skeleton, lastAiOutput, lastError, errorType, recentMessages): string { ... }
 
-/** 构建 need_html 兜底消息（用户描述 + 局部 HTML） */
-export function buildNeedHtmlUserMessage(text, needHtml, localHtml): string { ... }
+/** 构建流式执行用户消息 */
+export function buildStreamingUserMessage(text, skeleton, completed, lastError?, lastFailedCommand?, fullSkeleton?): string { ... }
 ```
 
 ---
@@ -588,14 +582,14 @@ export function buildNeedHtmlUserMessage(text, needHtml, localHtml): string { ..
 src/
 ├── input/                          # 统一输入处理层（语音/文字共用）
 │   ├── types.ts                    # 类型定义（InputContext, PipelineCallbacks, InputResult）
-│   ├── router.ts                   # 输入路由器（/命令解析 → builtin/skill/ai 分流）
-│   ├── intent-detector.ts          # Phase 1 + Phase 2 AI 调用 + need_html 兜底
+│   ├── router.ts                   # 输入路由器（/命令解析 → builtin/ai 分流）
+│   ├── intent-detector.ts          # Phase 1 + Phase 2 AI 调用
 │   ├── pipeline.ts                 # 统一处理流水线（路由 → Phase1 → Phase2 → 重试 → 执行）
-│   ├── tag-parser.ts               # 标签提取器（从自然回复中提取 [command]/[skill]/[need_html]）
+│   ├── tag-parser.ts               # 标签提取器（从自然回复中提取 [command]/[need_full]）
 │   ├── prompts.ts                  # 所有 AI 提示词（集中管理）
 │   └── index.ts                    # 统一导出
 ├── browser/                        # 浏览器命令执行层
-│   ├── types.ts                    # 类型定义（SkeletonElement, Command, ActionResult, NeedHtmlRequest）
+│   ├── types.ts                    # 类型定义（SkeletonElement, Command, ActionResult）
 │   ├── skeleton.ts                 # 语义骨架提取 + SkeletonManager（URL 缓存）
 │   ├── action-executor.ts          # 执行引擎（15 种操作 + 三重定位 + 标签页代理）
 │   ├── local-html.ts               # 局部 HTML 提取（contextId + 文本搜索 + 简化查询）
@@ -706,9 +700,8 @@ Phase 2 首次请求
     │   → SkeletonManager.invalidate()（navigate 后）
     │   → 重发最新骨架 + 失败指令 + 错误原因
     │
-    ├── AI 返回 [need_html]
-    │   → 首次：要求 AI 用 description 重试
-    │   → 二次：放弃，展示错误
+    ├── AI 返回 [need_full]
+    │   → 提取全页骨架后重试
     │
     └── 5 次重试后仍失败
         → 展示 "❌ 多次尝试后仍无法完成操作（5 次），请重新描述"
@@ -759,11 +752,10 @@ Phase 2 首次请求
 ### 重试
 - [x] 重试 5 次，重试过程在聊天中展示
 - [x] 重试时发送错误信息 + 最新骨架给 AI
-- [x] [need_html] 首次用 description 重试，二次放弃
+- [x] [need_full] 提取全页骨架后重试
 
 ### Prompt 管理
 - [x] 所有 prompt 集中在 prompts.ts 管理
-- [x] Phase 2 Prompt 含 {skillList} 占位符，运行时替换
 
 ### 语音/文字统一
 - [x] 语音和文字输入走同一个 InputPipeline

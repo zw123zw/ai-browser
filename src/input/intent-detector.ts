@@ -2,7 +2,7 @@
  * 意图检测器
  *
  * Phase 1: 意图检测（轻量模型）— 只做二分类：聊天 or [action]
- * Phase 2: 操作决策（主力模型）— 从 AI 自然回复中提取 [command]/[skill]/[need_full]
+ * Phase 2: 操作决策（主力模型）— 从 AI 自然回复中提取 [command]/[need_full]
  */
 
 import { Logger } from '@/src/utils/logger'
@@ -22,7 +22,6 @@ export interface IntentDetectorOptions {
   getSettings: () => AppSettings
   /** 获取当前使用的模型 ID（优先会话级，回退全局默认） */
   getModelId?: () => string
-  getSkillList?: () => string
   getRecentMessages?: () => Array<{ role: 'user' | 'assistant'; content: string }>
   getSignal?: () => AbortSignal | undefined
 }
@@ -37,7 +36,6 @@ export interface Phase1Detection {
 
 export interface Phase2Result {
   commands?: Command[]
-  skill?: { name: string; userText: string }
   needFull?: boolean
   rawAiOutput: string
 }
@@ -69,7 +67,6 @@ export class IntentDetector {
     log.info('[Phase 1] 标签提取结果', {
       isAction: tags.isAction,
       hasCommands: !!tags.commands?.length,
-      hasSkill: !!tags.skill,
       hasChat: !!tags.chatText,
       hasFileTags: tags.hasFileTags,
       fileTagDetails: tags.fileTagDetails,
@@ -112,14 +109,12 @@ export class IntentDetector {
   async detectPhase2(text: string, skeleton: SemanticSkeleton): Promise<Phase2Result> {
     log.info('[Phase 2] ─── 开始操作决策 ───', { text: text.slice(0, 100) })
 
-    const skillList = this.options.getSkillList?.() || '（暂无可用技能）'
-    const systemPrompt = PHASE2_SYSTEM_PROMPT.replace('{skillList}', skillList)
+    const systemPrompt = PHASE2_SYSTEM_PROMPT
     const userContent = buildPhase2UserMessage(text, skeleton)
 
     log.info('[Phase 2] 请求参数', {
       skeletonUrl: skeleton.url,
       skeletonElements: skeleton.elements.length,
-      skillList: skillList.slice(0, 50),
     })
 
     const aiOutput = await this.callAI('Phase2', systemPrompt, userContent)
@@ -133,14 +128,13 @@ export class IntentDetector {
     log.info('[Phase 2] 标签提取结果', {
       commandsCount: tags.commands?.length || 0,
       commands: tags.commands?.map(c => ({ action: c.action, elementId: c.elementId, description: c.description })),
-      skill: tags.skill,
       needFull: tags.needFull,
     })
 
     // 提取到有效标签（need_full 由 pipeline 统一处理）
-    if (tags.commands?.length || tags.skill || tags.needFull) {
+    if (tags.commands?.length || tags.needFull) {
       log.info('[Phase 2] ─── 提取成功 ───')
-      return { commands: tags.commands, skill: tags.skill, needFull: tags.needFull, rawAiOutput: aiOutput }
+      return { commands: tags.commands, needFull: tags.needFull, rawAiOutput: aiOutput }
     }
 
     log.warn('[Phase 2] ─── 未提取到有效标签 ───')

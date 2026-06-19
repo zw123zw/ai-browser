@@ -15,7 +15,6 @@
 └──────┬──────┘
        │
        ├─ builtin → 内置命令（stop/pause/resume/list/help）
-       ├─ skill   → 技能触发（零 AI）
        └─ ai      ──┐
                      ▼
           ┌──────────────────┐
@@ -48,7 +47,6 @@ flowchart TD
     B -->|普通文本| D[IntentDetector.detectPhase1]
 
     C -->|builtin| E[内置命令处理]
-    C -->|skill| F[技能激活]
 
     D -->|isChat=true| G[返回聊天回复]
     D -->|Phase1 直出 [command]| FP[快速通道: executePhase1Commands]
@@ -60,7 +58,6 @@ flowchart TD
     I --> J{标签提取}
     J -->|[command]| K[ActionExecutor.execute]
     J -->|[need_full]| L[提取全页骨架]
-    J -->|[skill]| M[技能激活]
     J -->|无标签| N[任务完成]
 
     K -->|成功| O{done=1?}
@@ -73,7 +70,6 @@ flowchart TD
     P -->|否| Q[报错: 超过重试上限]
 
     L --> I
-    M --> I
 ```
 
 ## 核心设计决策
@@ -85,14 +81,13 @@ flowchart TD
 | 阶段 | 模型 | 职责 | 输出 |
 |------|------|------|------|
 | Phase 1 | 轻量模型 | 聊天 vs 操作 二分类 + 简单指令直出 | `[action]` / `[command]` / 自然语言回复 |
-| Phase 2 | 主力模型 | 从 AI 自然回复中提取结构化指令 | `[command]` / `[skill]` / `[need_full]` 标签 |
+| Phase 2 | 主力模型 | 从 AI 自然回复中提取结构化指令 | `[command]` / `[need_full]` 标签 |
 
 **Phase 1 设计考量：**
 - 使用轻量模型做意图分类，降低延迟和成本
 - 系统提示词 (`PHASE1_SYSTEM_PROMPT`) 要求严格三选一输出：`[command]` / `[action]` / 自然语言
 - **快速通道（Fast Path）：** Phase 1 直出 `[command]` 时跳过 Phase 2，直接执行。适用于不需要页面骨架的简单操作（navigate/scroll/keyboard 等）
 - 流式输出期间实时检测 `[action]` 标签，一旦检测到立即清除流式内容，用户只看到"思考中"
-- 若 Phase 1 异常输出了 `[skill]` 标签，强制进入 Phase 2
 
 **Phase 2 设计考量：**
 - 使用主力模型生成操作指令
@@ -166,7 +161,7 @@ if (completedKeys.has(cmdKey)) {
   ├─ 以 / 开头 ──→ 正则匹配 /^\/(\S+)\s*(.*)/
   │     │
   │     ├─ 命令名在 BUILTIN_COMMANDS 中 → { type: 'builtin' }
-  │     └─ 否则 → { type: 'skill' }
+  │     └─ 否则 → { type: 'builtin', command: 'unknown' }
   │
   └─ 其余 → { type: 'ai' }
 ```
@@ -182,7 +177,7 @@ class InputRouter {
 ```
 
 - `InputContext`: `{ text: string; mode: 'text' | 'voice' }`
-- `InputResult`: `{ type: 'skill' }` | `{ type: 'builtin' }` | `{ type: 'ai' }`
+- `InputResult`: `{ type: 'builtin' }` | `{ type: 'ai' }`
 
 ### IntentDetector
 
@@ -212,8 +207,7 @@ async detectPhase1(
 - 判断逻辑：
   1. 提取标签 → 有 `[command]` 且无 `[action]` → **快速通道**：`{ isChat: false, commands: [...] }`
   2. 有 `[action]` → `isChat: false`，进入 Phase 2
-  3. 有 `[skill]`（异常情况）→ `isChat: false`，强制进 Phase 2
-  4. 有 `[chat]` 标签或纯文本 → `isChat: true`
+  3. 有 `[chat]` 标签或纯文本 → `isChat: true`
 
 **Phase 2 — `detectPhase2()`**
 
@@ -221,9 +215,9 @@ async detectPhase1(
 async detectPhase2(text: string, skeleton: SemanticSkeleton): Promise<Phase2Result>
 ```
 
-- 使用 `PHASE2_SYSTEM_PROMPT` 系统提示词，运行时替换 `{coreRule}` 和 `{skillList}` 占位符
+- 使用 `PHASE2_SYSTEM_PROMPT` 系统提示词，运行时替换 `{coreRule}` 占位符
 - 用户消息通过 `buildPhase2UserMessage()` 构建，包含当前请求和页面骨架
-- 返回 `{ commands?: Command[]; skill?: {...}; needFull?: boolean; rawAiOutput: string }`
+- 返回 `{ commands?: Command[]; needFull?: boolean; rawAiOutput: string }`
 
 **AI 调用细节：**
 - 消息构建：最近 6 条历史消息（过滤重数据）+ 系统提示词拼接到用户消息前（兼容不支持 system role 的 API）
@@ -248,7 +242,6 @@ class InputPipeline {
 
 1. `router.route(ctx)` 路由
    - `builtin` → `onBuiltinCommand()` 回调
-   - `skill` → `onSkillActivate()` 回调
    - `ai` → 继续
 2. Phase 1 流式检测
    - `onChatStart()` 创建占位消息
@@ -291,9 +284,6 @@ while (consecutiveErrors < MAX_RETRY):
   7. [need_full]:
      - extractFullPageSkeleton() 提取全页骨架
      - 记录错误和全页骨架、consecutiveErrors++、continue
-  8. [skill]:
-     - onSkillActivate() 回调
-     - 成功/失败处理、continue
 ```
 
 **`callStreamingAI()` 方法：**
@@ -310,7 +300,7 @@ private async callStreamingAI(
 ): Promise<Phase2Result>
 ```
 
-- 构建系统提示词：`PHASE2_SYSTEM_PROMPT` 替换 `{coreRule}` 和 `{skillList}`
+- 构建系统提示词：`PHASE2_SYSTEM_PROMPT` 替换 `{coreRule}`
 - 构建用户消息：`buildStreamingUserMessage()` 包含原始请求、已完成列表、错误信息、全页骨架、当前骨架
 - 只取 `tags.commands` 的第一条：`tags.commands?.slice(0, 1)`
 
@@ -333,7 +323,6 @@ function extractTags(rawText: string): ExtractedTags
 | `[action]` | `[action]`（无内容） | Phase 1 操作意图标记 |
 | `[chat]` | `[chat]{"text":"..."}[/chat]` 或 `[chat]文本[/chat]` | Phase 1 聊天回复 |
 | `[command]` | `[command]{"action":"click","elementId":"e3"}[/command]` | 浏览器操作指令 |
-| `[skill]` | `[skill]{"name":"翻译","userText":"..."}[/skill]` | 技能调用 |
 | `[need_full]` | `[need_full]`（无内容） | 请求全页骨架 |
 
 **提取策略：**
@@ -360,7 +349,7 @@ function getChatText(tags: ExtractedTags): string
 **系统提示词：**
 
 - `PHASE1_SYSTEM_PROMPT`: Phase 1 意图分类，要求严格三选一输出：`[command]` / `[action]` / 自然语言
-- `PHASE2_SYSTEM_PROMPT`: Phase 2 操作决策模板，运行时替换 `{coreRule}`（模式说明）和 `{skillList}`（可用技能列表）
+- `PHASE2_SYSTEM_PROMPT`: Phase 2 操作决策模板，运行时替换 `{coreRule}`（模式说明）
 - `CAPABILITY_DOMAIN`: 所有能力域定义（navigate/search/click/type/scroll/keyboard 等）
 
 **模式说明（注入 `{coreRule}` 占位符）：**
@@ -394,8 +383,8 @@ sequenceDiagram
     P->>R: route(ctx)
 
     alt / 前缀命令
-        R-->>P: { type: 'builtin' | 'skill' }
-        P-->>U: 执行内置命令或技能
+        R-->>P: { type: 'builtin' }
+        P-->>U: 执行内置命令
     else 普通文本
         R-->>P: { type: 'ai' }
 
@@ -436,8 +425,6 @@ sequenceDiagram
                 else [need_full]
                     P->>P: extractFullPageSkeleton()
                     P->>P: consecutiveErrors++
-                else [skill]
-                    P->>P: onSkillActivate(name, userText)
                 else 无标签
                     Note over P: 任务完成，退出循环
                 end
@@ -467,7 +454,6 @@ interface InputContext {
 
 ```typescript
 type InputResult =
-  | { type: 'skill'; skillName: string; skillUserText: string }
   | { type: 'builtin'; command: string; args: string }
   | { type: 'ai' }
 ```
@@ -482,7 +468,6 @@ interface PipelineCallbacks {
   onActionDetected: () => void
   onChatMessage: (text: string) => void
   onCommandsParsed: (commands: Command[], currentStep?: number) => void
-  onSkillParsed: (name: string, userText: string) => void
   onCommandResult: (action: string, success: boolean, message: string) => void
   onAllCommandsDone?: (userText: string, commands: Command[]) => void
   onRetryMessage: (message: string, currentStep?: number, failedCommand?: {...} | null) => void
@@ -496,7 +481,6 @@ interface PipelineCallbacks {
 interface ExtractedTags {
   chatText?: string
   commands?: Command[]
-  skill?: { name: string; userText: string }
   isAction: boolean
   needFull?: boolean
   hasAnyTag: boolean
