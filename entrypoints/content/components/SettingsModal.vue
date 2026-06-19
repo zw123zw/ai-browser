@@ -55,7 +55,7 @@ async function handleClearCache() {
 async function confirmClearCache() {
   showClearCacheConfirm.value = false;
   // 先中断所有进行中的请求
-  abortPipeline();
+  await abortPipeline();
   const convStore = useConversationsStore();
   convStore.abort();
   await convStore.resetConversation();

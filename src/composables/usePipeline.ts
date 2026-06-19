@@ -20,11 +20,11 @@ const log = new Logger('usePipeline')
 const isProcessing = ref(false)
 
 /** 模块级别的 abort 引用，供外部（清除会话/缓存）调用 */
-let _abortFn: (() => void) | null = null
+let _abortFn: (() => Promise<void>) | null = null
 
-/** 中止 pipeline（模块级函数，供清除会话/缓存时调用） */
-export function abortPipeline() {
-  _abortFn?.()
+/** 中止 pipeline 并等待结束（模块级函数，供清除会话/缓存时调用） */
+export async function abortPipeline(): Promise<void> {
+  await _abortFn?.()
 }
 
 export function usePipeline() {
@@ -36,6 +36,8 @@ export function usePipeline() {
   let currentStreamingMsg: ChatMessage | null = null
   /** 当前请求的 AbortController */
   let currentAborter: AbortController | null = null
+  /** pipeline 停止后的回调（供 abort() 等待） */
+  let stoppedResolve: (() => void) | null = null
 
   function getRecentMessages(): Array<{ role: 'user' | 'assistant'; content: string }> {
     const conv = convStore.conversation
@@ -247,6 +249,8 @@ export function usePipeline() {
       currentStreamingMsg = null
       if (currentAborter === ac) currentAborter = null
       isProcessing.value = false
+      stoppedResolve?.()
+      stoppedResolve = null
       log.info('═══ processInput 结束 ═══')
     }
   }
@@ -341,6 +345,8 @@ export function usePipeline() {
       currentStreamingMsg = null
       if (currentAborter === ac) currentAborter = null
       isProcessing.value = false
+      stoppedResolve?.()
+      stoppedResolve = null
       log.info('═══ resumeQueuedTask 结束 ═══')
     }
   }
@@ -350,12 +356,14 @@ export function usePipeline() {
     return new ActionExecutor().execute(cmd)
   }
 
-  function abort() {
+  function abort(): Promise<void> {
     log.debug('中止 pipeline 请求')
     currentAborter?.abort()
-    currentAborter = null
-    // isProcessing 由 pipeline 的 finally 块设置为 false
-    // 不在这里设置，避免 pipeline 还在清理时 UI 就允许发送新消息
+    // 如果 pipeline 正在运行，等它真正结束
+    if (isProcessing.value) {
+      return new Promise<void>(resolve => { stoppedResolve = resolve })
+    }
+    return Promise.resolve()
   }
 
   // 注册模块级 abort 引用

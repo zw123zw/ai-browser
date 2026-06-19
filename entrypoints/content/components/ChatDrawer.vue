@@ -84,7 +84,7 @@ function askClear() {
 }
 
 async function doClear() {
-  abortPipeline();
+  await abortPipeline();
   store.abort();
   await store.clearCurrent();
   showConfirm.value = false;
