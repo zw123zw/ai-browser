@@ -48,6 +48,13 @@ async function onSend(payload: { text: string; attachments: import('@/src/types'
   // 先滚动到底部
   messageListRef.value?.jumpToBottom();
 
+  // AI 正在等待用户输入 → 提供输入继续执行
+  if (pipeline.waitingInputPrompt.value && !payload.attachments.length && !payload.reasoning) {
+    log.info('提供 AI 请求的输入', { text: payload.text.slice(0, 50) });
+    pipeline.provideInput(payload.text);
+    return;
+  }
+
   // 纯文本（无附件、无深度思考）→ 走流水线（指令检测）
   if (!payload.attachments.length && !payload.reasoning) {
     log.info('走流水线处理', { text: payload.text.slice(0, 50) });
@@ -147,6 +154,7 @@ function scrollToBottom() {
         :conversation="convStore.conversation"
         :models="settingsStore.settings.models"
         :is-processing="pipeline.isProcessing.value"
+        :waiting-input-prompt="pipeline.waitingInputPrompt.value"
         @send="onSend"
         @abort="onAbort"
         @switch-voice="emit('switch-voice')"

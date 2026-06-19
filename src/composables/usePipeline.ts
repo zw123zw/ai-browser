@@ -19,6 +19,10 @@ import { v4 as uuid } from 'uuid'
 const log = new Logger('usePipeline')
 
 const isProcessing = ref(false)
+/** AI 等待用户输入时的提示文本（null = 不在等待状态） */
+const waitingInputPrompt = ref<string | null>(null)
+/** 等待用户输入的 Promise resolve 函数 */
+let waitingInputResolve: ((value: string) => void) | null = null
 
 /** 模块级别的 abort 引用，供外部（清除会话/缓存）调用 */
 let _abortFn: (() => Promise<void>) | null = null
@@ -231,6 +235,16 @@ export function usePipeline() {
           log.warn('[回调] onError', { message })
           addSystemMessage(`❌ ${message}`)
         },
+
+        // AI 请求用户输入
+        onNeedInput: (prompt) => {
+          log.info('[回调] onNeedInput', { prompt })
+          addSystemMessage(`💬 **AI 需要您的输入：** ${prompt}`)
+          waitingInputPrompt.value = prompt
+          return new Promise<string>((resolve) => {
+            waitingInputResolve = resolve
+          })
+        },
       }
 
       await getPipeline().process({ text, mode: 'text' }, callbacks)
@@ -249,6 +263,11 @@ export function usePipeline() {
       }
       currentStreamingMsg = null
       if (currentAborter === ac) currentAborter = null
+      // 清理等待输入状态（pipeline 结束时如果还在等待，说明被取消了）
+      if (waitingInputResolve) {
+        waitingInputResolve = null
+        waitingInputPrompt.value = null
+      }
       isProcessing.value = false
       stoppedResolve?.()
       stoppedResolve = null
@@ -328,6 +347,15 @@ export function usePipeline() {
           log.warn('[恢复] onError', { message })
           addSystemMessage(`❌ ${message}`)
         },
+
+        onNeedInput: (prompt) => {
+          log.info('[恢复] onNeedInput', { prompt })
+          addSystemMessage(`💬 **AI 需要您的输入：** ${prompt}`)
+          waitingInputPrompt.value = prompt
+          return new Promise<string>((resolve) => {
+            waitingInputResolve = resolve
+          })
+        },
       }
 
       await getPipeline().resumeQueuedTask(task, callbacks)
@@ -345,6 +373,10 @@ export function usePipeline() {
       }
       currentStreamingMsg = null
       if (currentAborter === ac) currentAborter = null
+      if (waitingInputResolve) {
+        waitingInputResolve = null
+        waitingInputPrompt.value = null
+      }
       isProcessing.value = false
       stoppedResolve?.()
       stoppedResolve = null
@@ -359,6 +391,11 @@ export function usePipeline() {
 
   function abort(): Promise<void> {
     log.debug('中止 pipeline 请求')
+    // 如果正在等待用户输入，先取消等待
+    if (waitingInputResolve) {
+      waitingInputResolve = null
+      waitingInputPrompt.value = null
+    }
     currentAborter?.abort()
     // 清除跨标签页排队任务，阻止后续标签页继续执行
     queuedTaskStorage.setValue(null).catch(() => {})
@@ -369,8 +406,23 @@ export function usePipeline() {
     return Promise.resolve()
   }
 
+  /** 用户提供了 AI 请求的输入，继续执行 pipeline */
+  function provideInput(text: string) {
+    if (!waitingInputResolve) {
+      log.warn('provideInput 调用但无等待中的 Promise')
+      return
+    }
+    log.info('用户提供输入', { text: text.slice(0, 50) })
+    const resolve = waitingInputResolve
+    waitingInputResolve = null
+    waitingInputPrompt.value = null
+    // 添加用户输入消息到对话
+    addSystemMessage(`📝 **您的输入：** ${text}`)
+    resolve(text)
+  }
+
   // 注册模块级 abort 引用
   _abortFn = abort
 
-  return { isProcessing, processInput, resumeQueuedTask, executeCommand, addSystemMessage, abort }
+  return { isProcessing, waitingInputPrompt, processInput, resumeQueuedTask, executeCommand, addSystemMessage, provideInput, abort }
 }

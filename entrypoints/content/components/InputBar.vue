@@ -17,6 +17,7 @@ const props = defineProps<{
   conversation: Conversation | null | undefined;
   models: ModelConfig[];
   isProcessing?: boolean;
+  waitingInputPrompt?: string | null;
 }>();
 
 const emit = defineEmits<{
@@ -85,12 +86,23 @@ const currentModel = computed(
 
 /** 当前会话是否处于流式响应或指令执行中 */
 const isStreaming = computed(() => {
-  if (props.isProcessing) return true;
+  if (props.isProcessing && !props.waitingInputPrompt) return true;
   const last = props.conversation?.messages[props.conversation.messages.length - 1];
   return last?.status === 'streaming';
 });
 
+/** 输入框 placeholder */
+const placeholder = computed(() => {
+  if (props.waitingInputPrompt) return `💬 ${props.waitingInputPrompt}`;
+  return '输入消息... (Enter 发送，Shift+Enter 换行)';
+});
+
 function onSendOrAbort() {
+  // 等待用户输入状态 → 发送到 provideInput（ChatPanel 路由）
+  if (props.waitingInputPrompt) {
+    send();
+    return;
+  }
   if (isStreaming.value) {
     emit('abort');
   } else {
@@ -456,7 +468,7 @@ onUnmounted(() => document.removeEventListener('click', onDocClick, true));
       ref="textarea"
       v-model="text"
       class="aib-input-area"
-      placeholder="输入消息... (Enter 发送，Shift+Enter 换行)"
+      :placeholder="placeholder"
       rows="1"
       @input="autoResize"
       @keydown="onKeydown"

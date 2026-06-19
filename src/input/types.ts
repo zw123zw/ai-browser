@@ -46,4 +46,7 @@ export interface PipelineCallbacks {
 
   /** 错误（超过重试上限后） */
   onError: (message: string) => void
+
+  /** AI 请求用户输入（返回用户输入的文本，pipeline 暂停等待） */
+  onNeedInput: (prompt: string) => Promise<string>
 }

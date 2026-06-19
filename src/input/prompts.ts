@@ -123,10 +123,11 @@ export const PHASE2_SYSTEM_PROMPT = `\`\`\`
 你是浏览器操作助手。只输出指令标签，禁止分析/解释/说明。
 {coreRule}
 
-═══ 输出格式（严格二选一）═══
+═══ 输出格式（严格三选一）═══
 
 [command]{...} — 执行浏览器操作
 [need_full]    — 当前视口骨架找不到目标时，请求全页骨架
+[need_input]   — 需要用户输入信息（凭据、验证码等），暂停等待用户
 
 ═══ [command] 格式 ═══
 
@@ -159,12 +160,22 @@ ${CAPABILITY_LIST}
 - 系统会返回全页面所有可交互元素的骨架（格式同上）
 - 收到全页骨架后，直接用 elementId 生成 [command]
 
+═══ [need_input] ═══
+
+[need_input]{"message":"提示用户的文字","type":"类型"}[/need_input]
+
+type 可选值：credentials（账号密码）、verification_code（验证码）、confirm（确认操作）、other（其他）
+- 遇到需要用户私有信息的场景（手机号、密码、验证码、身份证等），不要编造，输出 [need_input]
+- 遇到协议/隐私政策/Cookie 弹窗 → 先尝试点击同意按钮，不需要 [need_input]
+- 遇到无法自动处理的验证码（图形验证码、滑块验证等）→ 输出 [need_input]
+
 ═══ 规则 ═══
 
 - [need_full] 不需要闭合，单独输出即可
 - 打开网站/搜索/滚动 → 直接[command]（不需要骨架）
 - 骨架中"(icon)"元素 → 检查aria-label/title判断功能
 - 定位优先级：elementId > fallbackSelector > description
+- ★ 协议弹窗最高优先级：骨架中出现"同意"/"同意并继续"/"Accept"/"我已阅读并同意"等按钮时，必须先 click 同意按钮，再执行其他任何操作。禁止跳过弹窗直接输出 [need_input] 或其他指令。
 - 单步任务（打开网站、搜索、滚动等）必须 done:1，禁止拆成多步
 - done 判定：根据用户请求的操作数量设置。例：
   · "点击登录" → done:1
@@ -174,9 +185,11 @@ ${CAPABILITY_LIST}
 ═══ 禁止输出 ═══
 
 - [command] 标签必须闭合：[command]{...}[/command]
+- [need_input] 标签必须闭合：[need_input]{...}[/need_input]
 - 每次只能输出1条 [command]
 - 禁止输出分析/解释/说明/思考过程
-- 禁止输出除上述两种格式外的任何内容
+- 禁止编造用户私有信息（手机号、密码、验证码等）
+- 禁止输出除上述三种格式外的任何内容
 \`\`\``
 
 /** 首次进入模式说明 */
@@ -219,6 +232,7 @@ export function buildStreamingUserMessage(
   lastError?: string,
   lastFailedCommand?: { action: string; elementId?: string; description?: string; text?: string; url?: string } | null,
   fullSkeleton?: string,
+  userInputContext?: string,
 ): string {
   const parts: string[] = []
 
@@ -245,6 +259,10 @@ export function buildStreamingUserMessage(
     parts.push(`[全页骨架]\n${fullSkeleton}`)
   } else {
     parts.push(`[当前页面骨架]\n${JSON.stringify(skeleton)}`)
+  }
+
+  if (userInputContext) {
+    parts.push(`[用户补充信息] ${userInputContext}`)
   }
 
   return parts.join('\n\n')

@@ -210,6 +210,7 @@ export class InputPipeline {
     let lastError = ''
     let lastFailedCommand: { action: string; elementId?: string; description?: string; text?: string; url?: string } | null = null
     let lastFullSkeleton: string | null = null
+    let userInputContext: string | undefined = undefined
 
     while (consecutiveErrors < MAX_RETRY && completed.length < MAX_TOTAL_STEPS) {
       // ★ 检查 abort signal，支持用户中途停止
@@ -231,12 +232,30 @@ export class InputPipeline {
       // AI 生成 1 条指令（根据进入模式选择提示词）
       const isFirstEntry = completed.length === 0 && !lastError
       const coreRule = isFirstEntry ? MODE_FIRST : (lastError ? MODE_RETRY : MODE_STREAMING)
-      const phase2Result = await this.callStreamingAI(text, skeleton, completed, lastError, lastFailedCommand, lastFullSkeleton, coreRule)
+      const phase2Result = await this.callStreamingAI(text, skeleton, completed, lastError, lastFailedCommand, lastFullSkeleton, coreRule, userInputContext)
 
       // ── 无标签 → AI 无输出，任务完成 ──
-      if (!phase2Result.commands?.length && !phase2Result.needFull) {
+      if (!phase2Result.commands?.length && !phase2Result.needFull && !phase2Result.needInput) {
         log.info('[Phase 2] ═══ AI 无更多指令，任务完成 ═══')
         break
+      }
+
+      // ── need_input → 暂停，等待用户输入 ──
+      if (phase2Result.needInput) {
+        log.info('[Phase 2] → need_input', { message: phase2Result.needInput.message })
+        try {
+          userInputContext = await callbacks.onNeedInput(phase2Result.needInput.message)
+          log.info('[Phase 2] ← 用户已提供输入，继续执行')
+          // 清除错误状态，用新上下文重试
+          lastError = ''
+          lastFailedCommand = null
+          consecutiveErrors = 0
+          continue
+        } catch (err) {
+          // 用户取消（abort）
+          log.info('[Phase 2] ═══ need_input 被取消 ═══')
+          throw err
+        }
       }
 
       // ── command → 执行单条指令（优先于 need_full） ──
@@ -427,7 +446,8 @@ export class InputPipeline {
     lastFailedCommand?: { action: string; elementId?: string; description?: string; text?: string; url?: string } | null,
     lastFullSkeleton?: string | null,
     coreRule = MODE_STREAMING,
-  ): Promise<import('./intent-detector').Phase2Result> {
+    userInputContext?: string,
+  ): Promise<import('./intent-detector').Phase2Result & { needInput?: { message: string } }> {
     const settings = this.options.getSettings()
     const modelId = this.options.getModelId?.() || settings.defaultModelId
     const model = settings.models.find(m => m.id === modelId) || settings.models[0]
@@ -441,7 +461,7 @@ export class InputPipeline {
 
     const systemPrompt = PHASE2_SYSTEM_PROMPT
       .replace('{coreRule}', coreRule)
-    const userContent = buildStreamingUserMessage(text, skeleton, completed, lastError || undefined, lastFailedCommand || undefined, lastFullSkeleton || undefined)
+    const userContent = buildStreamingUserMessage(text, skeleton, completed, lastError || undefined, lastFailedCommand || undefined, lastFullSkeleton || undefined, userInputContext)
 
     log.info('[流式] ═══ AI 请求 ═══', {
       skeletonElements: skeleton.elements.length,
@@ -502,11 +522,13 @@ export class InputPipeline {
       description: firstCommand?.[0]?.description,
       done: firstCommand?.[0]?.done,
       hasNeedFull: !!tags.needFull,
+      hasNeedInput: !!tags.needInput,
     })
 
     return {
       commands: firstCommand,
       needFull: tags.needFull,
+      needInput: tags.needInput,
       rawAiOutput: fullResponse,
     }
   }

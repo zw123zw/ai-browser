@@ -24,6 +24,8 @@ export interface ExtractedTags {
   isAction: boolean
   /** 提取到的 [need_full] */
   needFull?: boolean
+  /** 提取到的 [need_input]（AI 需要用户输入信息） */
+  needInput?: { message: string; type?: string }
   /** 是否包含 [FILE:xxx]...[/FILE] 文件标签 */
   hasFileTags: boolean
   /** 文件标签详情（用于日志） */
@@ -107,6 +109,19 @@ export function extractTags(rawText: string): ExtractedTags {
     result.hasAnyTag = true
   }
 
+  // [need_input] 提取 — JSON 内容标签，AI 需要用户输入信息（凭据、验证码等）
+  const needInputMatch = rawText.match(/\[need_input\]([\s\S]*?)\[\/need_input\]/)
+    || rawText.match(/\[need_input\](\{[\s\S]*\})/)
+  if (needInputMatch) {
+    try {
+      const parsed = JSON.parse(needInputMatch[1].trim())
+      result.needInput = { message: parsed.message || '需要您的输入', type: parsed.type }
+    } catch {
+      result.needInput = { message: needInputMatch[1].trim() }
+    }
+    result.hasAnyTag = true
+  }
+
   return result
 }
 
@@ -117,7 +132,7 @@ export function extractTags(rawText: string): ExtractedTags {
  */
 export function isChatOnlyReply(tags: ExtractedTags): boolean {
   // 有操作类标签或文件标签 → 不是纯聊天
-  if (tags.isAction || tags.commands?.length || tags.needFull || tags.hasFileTags) {
+  if (tags.isAction || tags.commands?.length || tags.needFull || tags.needInput || tags.hasFileTags) {
     return false
   }
   // 有 [chat] 标签 → 是纯聊天
