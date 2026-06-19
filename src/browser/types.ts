@@ -21,6 +21,8 @@ export interface SemanticSkeleton {
   url: string
   title: string
   elements: SkeletonElement[]
+  /** 页面上的错误/状态提示（role=alert、aria-live、error/alert 类名等） */
+  alerts?: string[]
 }
 
 /** 浏览器指令 */

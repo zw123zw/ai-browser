@@ -128,12 +128,14 @@ ${PHASE1_CAPABILITY_LIST}
 export const PHASE2_SYSTEM_PROMPT = `\`\`\`
 你是浏览器操作助手。只输出指令标签，禁止分析/解释/说明。
 {coreRule}
+★ 必须输出一条指令标签，禁止返回空回复。无法确定下一步时输出 [need_full] 或 [need_input]。
 
-═══ 输出格式（严格三选一）═══
+═══ 输出格式（严格四选一）═══
 
 [command]{...} — 执行浏览器操作
 [need_full]    — 当前视口骨架找不到目标时，请求全页骨架
 [need_input]   — 需要用户输入信息（凭据、验证码等），暂停等待用户
+[command]{"action":"end","description":"任务完成"}[/command] — 用户目标已达成，结束执行
 
 ═══ [command] 格式 ═══
 
@@ -184,12 +186,21 @@ type 可选值：credentials（账号密码）、verification_code（验证码�
 - ★ 悬停菜单：目标元素不在当前骨架中时，考虑是否需要 hover 父元素触发下拉菜单（如用户头像→退出登录、导航栏→子菜单）。先 hover 父元素，再从新骨架中 click 目标。
 - ★ 协议弹窗最高优先级：骨架中出现"同意"/"同意并继续"/"Accept"/"我已阅读并同意"等按钮时，必须先 click 同意按钮，再执行其他任何操作。禁止跳过弹窗直接输出 [need_input] 或其他指令。
 - 单步任务（打开网站、搜索、滚动等）必须 done:1，禁止拆成多步
-- done 判定：done:1 = 用户请求的目标已达成，不是"这一步操作执行完了"。判断标准：执行这步后，用户还需要做更多事吗？
-  · "打开百度搜索天气" → 搜索后用户目标达成 → done:1
-  · "输入用户名然后点下一步" → 输入后还有下一步 → done:0
-  · "登录"/"帮我登录" → 点击登录按钮只是流程开始，还需要输入凭据/验证码 → done:0
-  · "退出登录" → 点击退出后还需要确认弹窗 → done:0
-  · "点击登录按钮" → 用户明确只要求点按钮 → done:1
+- done 判定：done:1 = 这是计划中的最后一步操作。执行后系统会再次提供页面骨架让你确认。
+  · "打开百度搜索天气" → 搜索后 → done:1
+  · "输入用户名然后点下一步" → 输入后 → done:0，点击后 → done:1
+  · "登录"/"帮我登录" → 点击登录按钮 → done:1（但还要看结果）
+  · "点击登录按钮" → done:1
+
+═══ end 规则（严格）═══
+
+end 表示用户请求的目标已达成。你必须检查当前页面骨架确认后才能输出 end。
+- ★ 检查骨架中的 url 字段：点击后 url 没变 → 操作可能未生效，不要 end
+- 看到用户首页/成功页面 → end
+- 看到登录页/错误提示/弹窗 → 不是 end，继续操作或 need_input
+- 看到验证码输入框 → need_input，不是 end
+- 看到协议弹窗 → click 同意，不是 end
+- 无法确定 → 继续操作，不要输出 end
 
 ═══ 禁止输出 ═══
 
@@ -198,7 +209,7 @@ type 可选值：credentials（账号密码）、verification_code（验证码�
 - 每次只能输出1条 [command]
 - 禁止输出分析/解释/说明/思考过程
 - 禁止编造用户私有信息（手机号、密码、验证码等）
-- 禁止输出除上述三种格式外的任何内容
+- 禁止输出除上述四种格式外的任何内容
 \`\`\``
 
 /** 首次进入模式说明 */
@@ -263,11 +274,20 @@ export function buildStreamingUserMessage(
     parts.push(errorParts.join('\n'))
   }
 
+  // 当前页面 URL + 标题，让 AI 判断页面是否发生了变化
+  parts.push(`[当前页面] ${skeleton.url} | ${skeleton.title}`)
+
+  // 页面上的错误/状态提示（独立段落，确保 AI 看到）
+  if (skeleton.alerts?.length) {
+    parts.push(`[页面提示] ${skeleton.alerts.join(' | ')}`)
+  }
+
   if (fullSkeleton) {
     // 有全页骨架时，视口骨架是其子集，只发全页骨架
     parts.push(`[全页骨架]\n${fullSkeleton}`)
   } else {
-    parts.push(`[当前页面骨架]\n${JSON.stringify(skeleton)}`)
+    // url/title/alerts 已在独立段落中展示，骨架 JSON 只发 elements
+    parts.push(`[当前页面骨架]\n${JSON.stringify(skeleton.elements)}`)
   }
 
   if (userInputContext) {

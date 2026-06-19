@@ -208,18 +208,22 @@ export function extractSkeleton(doc: Document, scope: SkeletonScope = 'viewport'
     ? filtered.slice(0, MAX_SKELETON_ELEMENTS)
     : filtered
 
+  // 提取页面上的错误/状态提示文本（非交互元素，但对 AI 决策很重要）
+  const alerts = extractAlerts(doc)
+
   log.info('骨架提取完成', {
     scannedCount,
     rawCount: elements.length,
     filteredCount: filtered.length,
     finalCount: final.length,
     truncated: filtered.length > MAX_SKELETON_ELEMENTS,
+    alerts: alerts.length,
     url: doc.location.href,
     viewport: `${window.innerWidth}x${window.innerHeight}`,
     scrollY: window.scrollY,
   })
 
-  return { url: doc.location.href, title: doc.title, elements: final }
+  return { url: doc.location.href, title: doc.title, elements: final, alerts: alerts.length > 0 ? alerts : undefined }
 }
 
 
@@ -316,6 +320,50 @@ function isElementVisible(el: HTMLElement): boolean {
   if (style.display === 'none' || style.visibility === 'hidden') return false
   // offsetParent 非 null 或 fixed 定位 → 可见
   return el.offsetParent !== null || style.position === 'fixed'
+}
+
+/**
+ * 提取页面上的错误/状态提示文本
+ *
+ * 识别方式：
+ * - role="alert" 或 aria-live="assertive/polite"
+ * - class/id 含 error/alert/toast/notice/warning/tip/message 等关键词
+ * - 限制：可见、有文本、长度合理（<200 字符）
+ */
+function extractAlerts(doc: Document): string[] {
+  const ALERT_SELECTORS = [
+    '[role="alert"]',
+    '[aria-live="assertive"]',
+    '[aria-live="polite"]',
+  ]
+  const ALERT_CLASS_RE = /error|alert|toast|notice|warning|tip|message|hint|validate|invalid/i
+
+  const results: string[] = []
+  const seen = new Set<string>()
+
+  // 1. 语义标记（role=alert, aria-live）
+  for (const sel of ALERT_SELECTORS) {
+    for (const el of doc.querySelectorAll(sel)) {
+      const text = (el as HTMLElement).innerText?.trim()
+      if (text && text.length > 0 && text.length < 200 && !seen.has(text)) {
+        seen.add(text)
+        results.push(text)
+      }
+    }
+  }
+
+  // 2. class/id 含关键词的可见元素
+  for (const el of doc.querySelectorAll('[class*="error"], [class*="alert"], [class*="toast"], [class*="notice"], [class*="warning"], [class*="tip"], [id*="error"], [id*="alert"], [id*="toast"]')) {
+    const htmlEl = el as HTMLElement
+    if (!isElementVisible(htmlEl)) continue
+    const text = htmlEl.innerText?.trim()
+    if (text && text.length > 2 && text.length < 200 && !seen.has(text)) {
+      seen.add(text)
+      results.push(text)
+    }
+  }
+
+  return results.slice(0, 5) // 最多 5 条，避免 token 膨胀
 }
 
 function getDirectText(el: HTMLElement): string {
