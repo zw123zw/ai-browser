@@ -1,15 +1,15 @@
 <script setup lang="ts">
-import { computed, ref, watch, nextTick, onBeforeUnmount } from 'vue';
+import { computed, ref } from 'vue';
 import type { ChatMessage, Attachment } from '@/src/types';
 import { renderMarkdown } from '@/src/utils/markdown';
 import { Logger } from '@/src/utils/logger';
 import {
   parseFileTags,
   downloadParsedFile,
+  downloadChartConfig,
   getFilesSummary,
   type ParsedFile,
 } from '@/src/utils/file-tag-parser';
-import { renderChartToElement, type ChartConfig } from '@/src/utils/echart-renderer';
 import FileCard from './FileCard.vue';
 import FilePreviewModal from './FilePreviewModal.vue';
 
@@ -32,6 +32,9 @@ const parsedFiles = computed<ParsedFile[]>(() => {
 
 /** 是否包含文件标签 */
 const hasFiles = computed(() => parsedFiles.value.length > 0);
+
+/** 是否包含图表文件 */
+const hasChart = computed(() => parsedFiles.value.some(f => f.category === 'chart'));
 
 /** 文件摘要信息 */
 const filesSummary = computed(() => getFilesSummary(parsedFiles.value));
@@ -157,6 +160,12 @@ function handleAiFileDownload(file: ParsedFile) {
   downloadParsedFile(file);
 }
 
+/** 下载图表配置 */
+function handleChartDownloadConfig(file: ParsedFile) {
+  log.info('下载图表配置', { name: file.filename });
+  downloadChartConfig(file);
+}
+
 // ============ 右键菜单 ============
 
 function onContextMenu(e: MouseEvent) {
@@ -164,64 +173,6 @@ function onContextMenu(e: MouseEvent) {
   e.stopPropagation();
   emit('context-menu', { message: props.message, x: e.clientX, y: e.clientY });
 }
-
-// ============ 图表渲染 ============
-
-/** 图表清理函数 Map */
-const chartDisposers = ref<Map<number, () => void>>(new Map());
-
-/** 渲染所有图表 */
-async function renderCharts() {
-  if (!hasFiles.value) return;
-
-  await nextTick();
-
-  for (const file of parsedFiles.value) {
-    if (file.category === 'chart' && file.chartConfig) {
-      const container = document.querySelector(
-        `[data-chart-index="${file.index}"]`
-      ) as HTMLElement;
-
-      if (container) {
-        try {
-          const result = await renderChartToElement(container, file.chartConfig);
-          if (result.success && result.dispose) {
-            chartDisposers.value.set(file.index, result.dispose);
-          } else {
-            log.error('图表渲染失败', { file: file.filename, error: result.error });
-            container.innerHTML = `<div class="aib-chart-error">图表渲染失败: ${result.error}</div>`;
-          }
-        } catch (error) {
-          log.error('图表渲染异常', { file: file.filename, error });
-          container.innerHTML = '<div class="aib-chart-error">图表渲染失败</div>';
-        }
-      }
-    }
-  }
-}
-
-/** 清理所有图表 */
-function disposeCharts() {
-  chartDisposers.value.forEach(dispose => dispose());
-  chartDisposers.value.clear();
-}
-
-// 监听内容变化，重新渲染图表
-watch(
-  () => props.message.content,
-  () => {
-    disposeCharts();
-    if (hasFiles.value) {
-      renderCharts();
-    }
-  },
-  { immediate: true }
-);
-
-// 组件卸载前清理图表
-onBeforeUnmount(() => {
-  disposeCharts();
-});
 
 // ============ 旧版表格下载（保留兼容） ============
 
@@ -292,7 +243,7 @@ function onCodeCopy(e: MouseEvent) {
     @click="(e) => { onTableDownload(e); onCodeCopy(e); }"
   >
     <div
-      :class="['aib-msg', isUser ? 'aib-bubble-user' : 'aib-bubble-ai']"
+      :class="['aib-msg', isUser ? 'aib-bubble-user' : 'aib-bubble-ai', { 'aib-msg--has-files': hasChart }]"
       @contextmenu="onContextMenu"
     >
       <!-- 思考块（仅在用户开启深度思考时展示） -->
@@ -338,6 +289,7 @@ function onCodeCopy(e: MouseEvent) {
           :parsed-file="file"
           @preview="() => openAiFilePreview(file)"
           @download="() => handleAiFileDownload(file)"
+          @download-config="() => handleChartDownloadConfig(file)"
         />
       </div>
 
@@ -372,15 +324,4 @@ function onCodeCopy(e: MouseEvent) {
 </template>
 
 <style scoped>
-/* 图表错误提示 */
-.aib-chart-error {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 100px;
-  padding: 16px;
-  color: var(--aib-text-secondary, #6c757d);
-  font-size: 13px;
-  text-align: center;
-}
 </style>

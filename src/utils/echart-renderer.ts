@@ -32,6 +32,8 @@ export interface ChartRenderResult {
   error?: string;
   /** 清理函数 */
   dispose?: () => void;
+  /** ECharts 实例 */
+  chart?: any;
 }
 
 // ============ ECharts 动态加载 ============
@@ -159,35 +161,20 @@ export async function renderChartToElement(
   try {
     const echarts = await loadECharts();
 
-    // 设置容器尺寸
-    const width = config.width || 800;
-    const height = config.height || 500;
-    container.style.width = `${width}px`;
-    container.style.height = `${height}px`;
-
-    // 初始化图表
+    // 初始化图表，不传固定尺寸，让 ECharts 自动使用容器尺寸
     const chart = echarts.init(container, config.theme, {
       renderer: 'canvas',
-      width,
-      height,
     });
 
     // 设置配置项
     chart.setOption(config.option, true);
 
-    // 响应式处理
-    const resizeObserver = new ResizeObserver(() => {
-      chart.resize();
-    });
-    resizeObserver.observe(container);
-
     // 返回清理函数
     const dispose = () => {
-      resizeObserver.disconnect();
       chart.dispose();
     };
 
-    return { success: true, dispose };
+    return { success: true, dispose, chart };
   } catch (error) {
     return {
       success: false,

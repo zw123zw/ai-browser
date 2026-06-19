@@ -717,7 +717,7 @@ table {
 }
 .aib-centered-body .aib-msg-list-wrap {
   width: 100%;
-  max-width: 720px;
+  max-width: 1000px;
   margin: 0 auto;
   padding: 20px 10px 16px;
 }
@@ -755,7 +755,7 @@ table {
 }
 .aib-centered-footer .aib-input-card {
   width: 100%;
-  max-width: 720px;
+  max-width: 1000px;
 }
 
 /* 左侧会话列表 */
@@ -1189,7 +1189,7 @@ table {
 }
 
 .aib-msg {
-  max-width: 92%;
+  max-width: 95%;
   padding: 12px 16px;
   border-radius: 18px;
   word-wrap: break-word;
@@ -1211,6 +1211,11 @@ table {
   color: var(--aib-text);
   border: 1px solid var(--aib-border);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+/* 包含文件的消息填满父容器 */
+.aib-msg--has-files {
+  width: 100%;
+  max-width: 100%;
 }
 .aib-bubble-user :deep(a) {
   color: #fff;
@@ -1544,8 +1549,8 @@ table {
 /* 消息气泡中的文件附件 */
 .aib-msg-files {
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+  flex-direction: column;
+  gap: 10px;
   margin-bottom: 10px;
 }
 .aib-msg-file-chip {

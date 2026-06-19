@@ -26,7 +26,7 @@ const activeMode = ref<'chat' | 'voice'>('chat');
 const savedWidth = settingsStore.settings.drawerWidth;
 const drawerWidth = ref(savedWidth && savedWidth >= 60 ? savedWidth : 480);
 const MIN_WIDTH = 60;
-const MAX_WIDTH = typeof window !== 'undefined' ? window.innerWidth : 1920;
+const MAX_WIDTH = typeof window !== 'undefined' ? Math.floor(window.innerWidth * 0.95) : 1920;
 let dragging = false;
 
 function onDragStart(e: MouseEvent) {

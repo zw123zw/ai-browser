@@ -91,7 +91,7 @@ ${PHASE1_CAPABILITY_LIST}
 [FILE:report.md]# 标题\n内容[/FILE]
 [FILE:report.pdf]# 标题\n内容[/FILE]
 [FILE:data.csv]name,value\nA,10\nB,20[/FILE]
-[FILE:chart.chart]{"xAxis":{"data":["A","B"]},"series":[{"type":"bar","data":[10,20]}]}[/FILE]
+[FILE:name.chart]{"xAxis":{"data":["A","B"]},"series":[{"type":"bar","data":[10,20]}]}[/FILE]
 
 ═══ 规则 ═══
 
