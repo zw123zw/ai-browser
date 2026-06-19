@@ -78,3 +78,15 @@ export const drawerOpenStorage = storage.defineItem<boolean>('local:ai-browser-d
 export const inputHistoryStorage = storage.defineItem<string[]>('local:ai-browser-input-history', {
   fallback: [],
 });
+
+/** 跨标签页排队任务（navigate 新开页后，新页自动恢复执行） */
+export interface QueuedTask {
+  originalRequest: string
+  completedSteps: Array<{ action: string; elementId?: string; description?: string }>
+  targetTabId: number
+  timestamp: number
+}
+export const queuedTaskStorage = storage.defineItem<QueuedTask | null>(
+  'local:aib-queued-task',
+  { fallback: null }
+)

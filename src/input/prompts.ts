@@ -94,19 +94,22 @@ ${PHASE1_CAPABILITY_LIST}
 [FILE:name.chart]{"xAxis":{"data":["A","B"]},"series":[{"type":"bar","data":[10,20]}]}[/FILE]
 多文件：[FILE:summary.md]# 总结[/FILE][FILE:data.csv]name,value\nA,10[/FILE][FILE:chart.chart]{"series":[{"type":"bar","data":[10]}]}[/FILE]
 
-═══ 规则 ═══
+═══ [command] 规则 ═══
 
 - 网站名转URL：B站→bilibili.com, 淘宝→taobao.com, 百度→baidu.com, 知乎→zhihu.com, github→github.com
 - 不确定"打开xxx"是网站还是页面元素时，输出 [action]
-- 文件扩展名必须与用户要求一致（如"生成pdf"→.pdf，"生成word"→.docx）
-- 文件名只能有一个扩展名（如 report.pdf，不能是 report.pdf.md）
+- 用户请求包含多个操作时（如"打开A然后点B"），输出 [action]，由系统分步执行
+
+═══ [FILE] 规则 ═══
+
+- 文件扩展名必须与用户要求一致（"生成pdf"→.pdf，"生成word"→.docx）
+- 文件名只能有一个扩展名（report.pdf ✓，report.pdf.md ✗）
 
 ═══ 禁止输出 ═══
 
 - [command] 和 [FILE] 标签必须闭合（必须有 [/command] 和 [/FILE]）
 - 每次只能输出1条 [command]
 - 禁止输出除上述四种格式外的任何内容
-- 禁止文件名有多个扩展名（如 report.pdf.md）
 \`\`\``
 
 // ═══════════════════════════════════════════════════════════════
@@ -127,7 +130,18 @@ export const PHASE2_SYSTEM_PROMPT = `\`\`\`
 
 ═══ [command] 格式 ═══
 
-[command]{"action":"操作类型（必填）","elementId":"元素ID（骨架优先，找不到填null）","description":"操作描述（必填）","done":"1=最后一步 0=还有后续（必填）","url":"目标地址（navigate需要）","text":"输入文字（type/select需要）","direction":"滚动方向（scroll需要，up/down/top/bottom）","key":"按键名称（keyboard需要，如Enter/Escape/Tab）","tabQuery":"标签页关键词（switchTab需要）"}[/command]
+必填字段：
+  action     — 操作类型
+  description — 操作描述
+  done       — 1=用户请求的操作已执行 0=还有后续步骤
+
+按操作类型选填：
+  url        — navigate 目标地址
+  elementId  — 骨架元素 ID（click/type/clear/select/focus/hover 必填）
+  text       — type/select 的输入文字
+  direction  — scroll 方向（up/down/top/bottom）
+  key        — keyboard 按键（Enter/Escape/Tab）
+  tabQuery   — switchTab 标签页关键词
 
 ═══ [command] 列表 ═══
 
@@ -135,7 +149,7 @@ ${CAPABILITY_LIST}
 
 ═══ [command] 示例 ═══
 
-[command]{"action":"click","elementId":"e3","description":"登录","done":0}[/command]
+[command]{"action":"click","elementId":"e3","description":"登录","done":1}[/command]
 [command]{"action":"type","elementId":"e5","text":"hello","description":"输入文字","done":0}[/command]
 [command]{"action":"scroll","direction":"down","description":"向下滚动","done":1}[/command]
 
@@ -152,23 +166,29 @@ ${CAPABILITY_LIST}
 - 骨架中"(icon)"元素 → 检查aria-label/title判断功能
 - 定位优先级：elementId > fallbackSelector > description
 - 单步任务（打开网站、搜索、滚动等）必须 done:1，禁止拆成多步
-- 根据[已完成]指令判断：用户请求的操作已全部完成时，必须设置 done:1
+- done 判定：根据用户请求的操作数量设置。例：
+  · "点击登录" → done:1
+  · "打开百度搜索天气" → 搜索后 done:1
+  · "输入用户名然后点下一步" → 输入后 done:0，点击后 done:1
 
 ═══ 禁止输出 ═══
 
 - [command] 标签必须闭合：[command]{...}[/command]
 - 每次只能输出1条 [command]
 - 禁止输出分析/解释/说明/思考过程
-- 禁止输出自然语言
 - 禁止输出除上述两种格式外的任何内容
 \`\`\``
 
 /** 首次进入模式说明 */
-export const MODE_FIRST = '每次只生成1条指令，系统执行后反馈结果再生成下一条。'
+export const MODE_FIRST = '首次执行。根据用户请求和页面骨架，生成第1条指令。每次只生成1条，系统执行后反馈结果再生成下一条。'
 /** 流式执行模式说明 */
-export const MODE_STREAMING = '按照以下信息和格式，生成下一条指令。'
+export const MODE_STREAMING = '继续执行。根据用户原始请求、已完成步骤、当前页面骨架，生成下一条指令。'
 /** 错误重试模式说明 */
-export const MODE_RETRY = '上次指令执行失败。根据以下失败指令、错误信息、最新页面骨架，调整策略，重新生成一条指令。'
+export const MODE_RETRY = `上次指令执行失败。根据错误类型调整策略：
+- 元素被遮挡/不可点击 → 先滚动(scroll)让元素可见，再重试
+- 元素不存在/找不到 → 输出 [need_full] 获取全页骨架
+- 元素定位失败 → 换 description 文本匹配，或换操作方式
+根据以下失败指令、错误信息、页面骨架，生成新指令。`
 
 // ═══════════════════════════════════════════════════════════════
 // 消息构建函数
@@ -221,10 +241,11 @@ export function buildStreamingUserMessage(
   }
 
   if (fullSkeleton) {
+    // 有全页骨架时，视口骨架是其子集，只发全页骨架
     parts.push(`[全页骨架]\n${fullSkeleton}`)
+  } else {
+    parts.push(`[当前页面骨架]\n${JSON.stringify(skeleton)}`)
   }
-
-  parts.push(`[当前页面骨架]\n${JSON.stringify(skeleton)}`)
 
   return parts.join('\n\n')
 }

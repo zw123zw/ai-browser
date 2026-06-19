@@ -3,7 +3,7 @@ import { createPinia } from 'pinia';
 import App from './App.vue';
 import globalCss from '@/src/styles/global.css?inline';
 import { initAllSkeletonIds } from '@/src/browser/skeleton-id';
-import { settingsStorage, conversationStorage } from '@/src/storage';
+import { settingsStorage, conversationStorage, queuedTaskStorage } from '@/src/storage';
 import { TranslateService } from '@/src/browser/translate-service';
 import { showTranslateLoading, updateTranslateResult, updateTranslateError, hideTranslatePopup } from '@/src/browser/translate-popup';
 import { initClickTranslate } from '@/src/browser/translate-click';
@@ -266,5 +266,36 @@ export default defineContentScript({
     });
 
     ui.mount();
+
+    // ═══════════════════════════════════════════════
+    // 跨标签页续接：检查是否有排队任务需要恢复
+    // ═══════════════════════════════════════════════
+    try {
+      const queuedTask = await queuedTaskStorage.getValue()
+      if (queuedTask) {
+        // 获取当前 tab ID，只有目标标签页才执行
+        const tabResponse = await chrome.runtime.sendMessage({ type: 'get-tab-id' }).catch(() => null)
+        const currentTabId = tabResponse?.tabId
+        if (currentTabId !== queuedTask.targetTabId) {
+          log.debug('[跨标签页续接] tabId 不匹配，跳过', { current: currentTabId, target: queuedTask.targetTabId })
+        } else {
+          log.info('[跨标签页续接] 检测到排队任务', { originalRequest: queuedTask.originalRequest, completedSteps: queuedTask.completedSteps.length })
+          await queuedTaskStorage.setValue(null)
+
+          // 等页面稳定 + Vue/Pinia 初始化完成后恢复
+          setTimeout(async () => {
+            try {
+              const { usePipeline } = await import('@/src/composables/usePipeline')
+              const { resumeQueuedTask } = usePipeline()
+              await resumeQueuedTask(queuedTask)
+            } catch (err) {
+              log.error('[跨标签页续接] 恢复失败', err)
+            }
+          }, 1500)
+        }
+      }
+    } catch (err) {
+      log.error('[跨标签页续接] 检查排队任务失败', err)
+    }
   },
 });

@@ -315,7 +315,8 @@ export class ActionExecutor {
         url,
       })
       if (response?.success) {
-        return { success: true, message: `新标签页打开: ${url}` }
+        const tabId = response.tabId
+        return { success: true, message: `新标签页打开: ${url}`, tabId }
       }
       return { success: false, message: response?.error || '导航失败' }
     } catch (error) {

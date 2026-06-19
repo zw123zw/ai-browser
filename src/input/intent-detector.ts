@@ -260,8 +260,8 @@ function stripHeavyData(content: string): string {
   // 1. 去掉骨架 JSON（页面骨架: 后面的所有内容，直到双换行或结尾）
   result = result.replace(/页面骨架:\n[\s\S]*?(?=\n\n|$)/g, '页面骨架: [已省略]')
 
-  // 2. 去掉全页骨架 JSON（[全页骨架] 后面的所有内容）
-  result = result.replace(/\[全页骨架\]\n[\s\S]*?(?=\n\n|$)/g, '[全页骨架]: [已省略]')
+  // 2. 去掉 [全页骨架] 或 [当前页面骨架] JSON
+  result = result.replace(/\[(全页|当前页面)骨架\]\n[\s\S]*?(?=\n\n|$)/g, '[$1骨架]: [已省略]')
 
   return result
 }

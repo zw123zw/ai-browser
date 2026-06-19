@@ -18,6 +18,8 @@ import { SkeletonManager } from '@/src/browser/skeleton'
 import { extractFullPageSkeleton } from '@/src/browser/local-html'
 import { extractTags } from './tag-parser'
 import { PHASE2_SYSTEM_PROMPT, buildStreamingUserMessage, MODE_FIRST, MODE_STREAMING, MODE_RETRY } from './prompts'
+import { queuedTaskStorage } from '@/src/storage'
+import type { QueuedTask } from '@/src/storage'
 import type { InputContext, PipelineCallbacks } from './types'
 import type { AppSettings } from '@/src/types'
 import type { Command, SemanticSkeleton } from '@/src/browser/types'
@@ -25,6 +27,17 @@ import type { Command, SemanticSkeleton } from '@/src/browser/types'
 const log = new Logger('Pipeline')
 
 const MAX_RETRY = 5
+const MAX_TOTAL_STEPS = 20
+
+/**
+ * 去掉历史消息中的重数据（骨架 JSON 等），减少 token 消耗
+ */
+function stripHeavyData(content: string): string {
+  let result = content
+  result = result.replace(/页面骨架:\n[\s\S]*?(?=\n\n|$)/g, '页面骨架: [已省略]')
+  result = result.replace(/\[(全页|当前页面)骨架\]\n[\s\S]*?(?=\n\n|$)/g, '[$1骨架]: [已省略]')
+  return result
+}
 
 /** abort-aware sleep：等待期间可被 AbortSignal 中断 */
 function sleep(ms: number, signal?: AbortSignal): Promise<void> {
@@ -188,17 +201,17 @@ export class InputPipeline {
   // Phase 2 — 流式执行（每次 1 条指令）
   // ═══════════════════════════════════════════════
 
-  private async processPhase2WithRetry(text: string, callbacks: PipelineCallbacks): Promise<void> {
-    log.info('[Phase 2] ─── 流式执行模式 ───', { maxRetry: MAX_RETRY })
+  private async processPhase2WithRetry(text: string, callbacks: PipelineCallbacks, initialCompleted?: Array<{ action: string; elementId?: string; description?: string }>): Promise<void> {
+    log.info('[Phase 2] ─── 流式执行模式 ───', { maxRetry: MAX_RETRY, resumedSteps: initialCompleted?.length || 0 })
 
-    const completed: Array<{ action: string; elementId?: string; description?: string }> = []
-    const completedKeys = new Set<string>()  // 指令去重 key 集合
+    const completed: Array<{ action: string; elementId?: string; description?: string }> = initialCompleted ? [...initialCompleted] : []
+    const completedKeys = new Set<string>(completed.map(c => `${c.action}:${c.description || ''}`))  // 指令去重 key 集合
     let consecutiveErrors = 0
     let lastError = ''
     let lastFailedCommand: { action: string; elementId?: string; description?: string; text?: string; url?: string } | null = null
     let lastFullSkeleton: string | null = null
 
-    while (consecutiveErrors < MAX_RETRY) {
+    while (consecutiveErrors < MAX_RETRY && completed.length < MAX_TOTAL_STEPS) {
       // ★ 检查 abort signal，支持用户中途停止
       const signal = this.options.getSignal?.()
       if (signal?.aborted) {
@@ -273,6 +286,23 @@ export class InputPipeline {
           // navigate 后等待页面加载
           if (cmd.action === 'navigate') {
             this.skeletonManager.invalidate()
+
+            // done:1 → 单步 navigate 任务已完成，无需保存
+            if (cmd.done === 1) {
+              log.info('[Phase 2] ═══ navigate done=1，任务完成 ═══')
+              break
+            }
+
+            // ★ 跨标签页续接：保存剩余任务到 storage，新页加载后自动恢复
+            const task: QueuedTask = {
+              originalRequest: text,
+              completedSteps: completed.map(c => ({ action: c.action, elementId: c.elementId, description: c.description })),
+              targetTabId: result.tabId || 0,
+              timestamp: Date.now(),
+            }
+            await queuedTaskStorage.setValue(task)
+            log.info('[Phase 2] ═══ navigate 成功，任务已保存到 storage ═══', { originalRequest: text, completedSteps: completed.length })
+            break
           }
 
           // ★ 双重停止条件 2：AI 标记 done=1，最后一步
@@ -316,10 +346,44 @@ export class InputPipeline {
     if (consecutiveErrors >= MAX_RETRY) {
       log.error(`[Phase 2] ═══ 连续 ${MAX_RETRY} 次失败，放弃 ═══`)
       callbacks.onError('未找到对应元素，请准确说出您的需求')
+    } else if (completed.length >= MAX_TOTAL_STEPS) {
+      log.warn(`[Phase 2] ═══ 达到最大步数 ${MAX_TOTAL_STEPS}，停止 ═══`)
+      callbacks.onAllCommandsDone?.(text, completed.map(c => ({ action: c.action, elementId: c.elementId })))
     } else if (completed.length > 0) {
       log.info('[Phase 2] ═══ 流式执行完成 ═══', { totalSteps: completed.length })
       callbacks.onAllCommandsDone?.(text, completed.map(c => ({ action: c.action, elementId: c.elementId })))
     }
+  }
+
+  // ═══════════════════════════════════════════════
+  // 跨标签页续接 — navigate 新开页后自动恢复
+  // ═══════════════════════════════════════════════
+
+  /**
+   * 恢复排队任务（新标签页加载完成后调用）
+   *
+   * 跳过 Phase 1，直接进入 Phase 2 流式执行。
+   * 已完成的步骤从 storage 读取，传入 processPhase2WithRetry。
+   */
+  async resumeQueuedTask(task: QueuedTask, callbacks: PipelineCallbacks): Promise<void> {
+    log.info('╔══════════════════════════════════════╗')
+    log.info('║       恢复排队任务                    ║')
+    log.info('╚══════════════════════════════════════╝', {
+      originalRequest: task.originalRequest,
+      completedSteps: task.completedSteps.length,
+    })
+
+    callbacks.onActionDetected()
+
+    // 将已完成步骤转为 processPhase2WithRetry 的格式
+    const completed = task.completedSteps.map(c => ({
+      action: c.action,
+      elementId: c.elementId,
+      description: c.description,
+    }))
+
+    // 直接进入 Phase 2 流式执行，跳过 Phase 1
+    await this.processPhase2WithRetry(task.originalRequest, callbacks, completed)
   }
 
   // ═══════════════════════════════════════════════
@@ -356,6 +420,20 @@ export class InputPipeline {
       hasError: !!lastError,
     })
 
+    // 构建消息列表：历史上下文 + 当前用户消息（与 callAI 一致）
+    const messages: Array<{ id: string; role: 'user' | 'assistant'; content: string; timestamp: number }> = []
+    const recentMsgs = this.options.getRecentMessages?.() || []
+    let validMsgCount = 0
+    for (const msg of recentMsgs) {
+      if (msg.content && msg.content.trim()) {
+        const cleaned = stripHeavyData(msg.content)
+        messages.push({ id: Date.now().toString(), role: msg.role, content: cleaned, timestamp: Date.now() })
+        validMsgCount++
+      }
+    }
+    messages.push({ id: Date.now().toString(), role: 'user', content: `${systemPrompt}\n\n${userContent}`, timestamp: Date.now() })
+    log.info(`[流式] 历史消息 ${validMsgCount} 条`)
+
     let fullResponse = ''
     try {
       await adapter.chat(
@@ -363,9 +441,7 @@ export class InputPipeline {
           baseUrl: model.baseUrl || settings.baseUrl,
           apiKey: model.apiKey || settings.apiKey,
           modelName: model.modelName || settings.defaultModelId,
-          messages: [
-            { id: Date.now().toString(), role: 'user', content: `${systemPrompt}\n\n${userContent}`, timestamp: Date.now() },
-          ],
+          messages,
           signal: this.options.getSignal?.(),
         },
         (chunk) => {

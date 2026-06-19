@@ -12,6 +12,7 @@ import { useSettingsStore } from '@/src/stores/settings'
 import { Logger } from '@/src/utils/logger'
 import type { PipelineCallbacks } from '@/src/input/types'
 import type { Command, ActionResult, ChatMessage } from '@/src/types'
+import type { QueuedTask } from '@/src/storage'
 import { v4 as uuid } from 'uuid'
 
 const log = new Logger('usePipeline')
@@ -250,6 +251,100 @@ export function usePipeline() {
     }
   }
 
+  /**
+   * 恢复排队任务（navigate 新开页后，新页自动调用）
+   */
+  async function resumeQueuedTask(task: QueuedTask): Promise<void> {
+    log.info('═══ resumeQueuedTask 开始 ═══', { originalRequest: task.originalRequest, completedSteps: task.completedSteps.length })
+    isProcessing.value = true
+    currentStreamingMsg = null
+    const ac = new AbortController()
+    currentAborter = ac
+
+    try {
+      const callbacks: PipelineCallbacks = {
+        onChatStart: () => {},
+        onChatDelta: () => {},
+        onChatEnd: () => {},
+        onActionDetected: () => {
+          log.info('[恢复] onActionDetected')
+          if (!convStore.conversation) return
+          currentStreamingMsg = reactive<ChatMessage>({
+            id: uuid(),
+            role: 'assistant',
+            content: '正在恢复跨页面操作...',
+            reasoning: '',
+            timestamp: Date.now(),
+            status: 'streaming',
+          })
+          convStore.conversation.messages.push(currentStreamingMsg)
+        },
+        onChatMessage: () => {},
+        onCommandsParsed: (commands, currentStep) => {
+          log.info('[恢复] onCommandsParsed', { count: commands.length, currentStep })
+          if (currentStreamingMsg && convStore.conversation) {
+            const idx = convStore.conversation.messages.findIndex(m => m.id === currentStreamingMsg!.id)
+            if (idx !== -1) convStore.conversation.messages.splice(idx, 1)
+            currentStreamingMsg = null
+          }
+          const step = currentStep || 1
+          const cmdDetail = formatCommandDetail(commands[0])
+          addSystemMessage(`🔧 **正在执行第 ${step} 条指令：**\n${step}. ${cmdDetail}`)
+        },
+        onCommandResult: (action, success, message) => {
+          log.info('[恢复] onCommandResult', { action, success, message })
+          const icon = success ? '✅' : '❌'
+          addSystemMessage(`${icon} **${action}** — ${message}`)
+        },
+        onAllCommandsDone: (userText, commands) => {
+          if (!convStore.conversation) return
+          const summary = commands
+            .map(c => `${c.action}${c.description ? `(${c.description})` : ''}${c.url ? ` → ${c.url}` : ''}`)
+            .join('; ')
+          convStore.conversation.messages.push({
+            id: uuid(),
+            role: 'assistant',
+            content: `已执行: ${summary}`,
+            timestamp: Date.now(),
+            status: 'done',
+          })
+          log.info('[恢复] onAllCommandsDone', { summary })
+        },
+        onRetryMessage: (message, currentStep, failedCommand) => {
+          log.info('[恢复] onRetryMessage', { message, currentStep, failedCommand })
+          if (currentStreamingMsg && convStore.conversation) {
+            const idx = convStore.conversation.messages.findIndex(m => m.id === currentStreamingMsg!.id)
+            if (idx !== -1) convStore.conversation.messages.splice(idx, 1)
+            currentStreamingMsg = null
+          }
+          addSystemMessage(message)
+        },
+        onError: (message) => {
+          log.warn('[恢复] onError', { message })
+          addSystemMessage(`❌ ${message}`)
+        },
+      }
+
+      await getPipeline().resumeQueuedTask(task, callbacks)
+    } catch (error) {
+      if (ac.signal.aborted) {
+        log.info('═══ resumeQueuedTask 已中止 ═══')
+        addSystemMessage('⏹ 已停止')
+      } else {
+        log.error('═══ resumeQueuedTask 异常 ═══', error)
+        addSystemMessage(`恢复失败: ${error instanceof Error ? error.message : String(error)}`)
+      }
+    } finally {
+      if (currentStreamingMsg && currentStreamingMsg.status === 'streaming') {
+        currentStreamingMsg.status = 'done'
+      }
+      currentStreamingMsg = null
+      if (currentAborter === ac) currentAborter = null
+      isProcessing.value = false
+      log.info('═══ resumeQueuedTask 结束 ═══')
+    }
+  }
+
   async function executeCommand(cmd: Command): Promise<ActionResult> {
     const { ActionExecutor } = await import('@/src/browser/action-executor')
     return new ActionExecutor().execute(cmd)
@@ -265,5 +360,5 @@ export function usePipeline() {
   // 注册模块级 abort 引用
   _abortFn = abort
 
-  return { isProcessing, processInput, executeCommand, addSystemMessage, abort }
+  return { isProcessing, processInput, resumeQueuedTask, executeCommand, addSystemMessage, abort }
 }

@@ -29,6 +29,12 @@ export default defineBackground(() => {
 
   // 监听来自 content script 的消息
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    // content script 获取自身 tab ID（跨标签页续接用）
+    if (message.type === 'get-tab-id') {
+      sendResponse({ tabId: sender.tab?.id })
+      return false
+    }
+
     // 读取本地文件（Content Script 无法直接 fetch file://）
     if (message.type === 'read-local-file') {
       const { url } = message;
@@ -186,7 +192,10 @@ export default defineBackground(() => {
 
       if (action === 'newTab') {
         chrome.tabs.create({ url: message.url }).then((tab) => {
-          sendResponse({ success: true, message: `新标签页: ${tab.id}` });
+          // 聚焦新标签页（跨标签页续接需要新页立即激活）
+          if (tab.id) chrome.tabs.update(tab.id, { active: true })
+          if (tab.windowId) chrome.windows.update(tab.windowId, { focused: true })
+          sendResponse({ success: true, tabId: tab.id, message: `新标签页: ${tab.id}` });
         }).catch((err) => {
           sendResponse({ success: false, error: String(err) });
         });
