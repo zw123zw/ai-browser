@@ -211,8 +211,9 @@ export class InputPipeline {
     let lastFailedCommand: { action: string; elementId?: string; description?: string; text?: string; url?: string } | null = null
     let lastFullSkeleton: string | null = null
     let userInputContext: string | undefined = undefined
+    let totalExecutions = 0  // 总执行次数（成功+失败+重试），防止无限循环
 
-    while (consecutiveErrors < MAX_RETRY && completed.length < MAX_TOTAL_STEPS) {
+    while (totalExecutions < MAX_TOTAL_STEPS) {
       // ★ 检查 abort signal，支持用户中途停止
       const signal = this.options.getSignal?.()
       if (signal?.aborted) {
@@ -274,6 +275,7 @@ export class InputPipeline {
         // ★ 指令去重：和已完成的指令比较，重复则跳过执行
         const cmdKey = `${cmd.action}:${cmd.url || cmd.elementId || cmd.description || ''}`
         if (completedKeys.has(cmdKey)) {
+          totalExecutions++  // 去重也计数，防止死循环
           log.info('[Phase 2] ═══ 指令重复，跳过执行 ═══', { action: cmd.action, url: cmd.url })
           if (cmd.done === 1) {
             log.info('[Phase 2] ═══ 重复指令 done=1，停止 ═══')
@@ -300,6 +302,7 @@ export class InputPipeline {
         }
 
         const result = await this.executor.execute(cmd)
+        totalExecutions++
 
         // 延迟清除：页面跳了 → JS 销毁 → callback 不执行 → queued task 保留
         // _blank 新开页 → 原页不销毁 → 跳过清除，让新页读到任务
@@ -364,6 +367,12 @@ export class InputPipeline {
             log.info('[Phase 2] → 跳过 need_full（指令执行成功，等待骨架刷新）')
           }
 
+          // ★ 指令执行后立即检查 abort（不等 sleep）
+          if (this.options.getSignal?.()?.aborted) {
+            log.info('[Phase 2] ═══ 指令执行后收到 abort 信号 ═══')
+            throw new DOMException('The operation was aborted.', 'AbortError')
+          }
+
           // 等待页面更新（弹窗/新内容渲染），再进入下一轮提取骨架
           await sleep(500, this.options.getSignal?.())
           continue
@@ -372,13 +381,14 @@ export class InputPipeline {
           lastFailedCommand = { action: cmd.action, elementId: cmd.elementId, description: cmd.description, text: cmd.text, url: cmd.url }
           consecutiveErrors++
           log.warn('[Phase 2] 指令执行失败', { action: cmd.action, error: lastError })
-          callbacks.onRetryMessage(`🔄 正在重试... (${consecutiveErrors}/${MAX_RETRY})`, completed.length + 1, lastFailedCommand)
+          callbacks.onRetryMessage(`🔄 正在重试... (${totalExecutions}/${MAX_TOTAL_STEPS})`, completed.length + 1, lastFailedCommand)
           // command 失败 → 继续检查 need_full
         }
       }
 
       // ── need_full → 提取全页骨架后重试 ──
       if (phase2Result.needFull) {
+        totalExecutions++  // need_full 也计数
         log.info('[Phase 2] → need_full')
         const fullSkeleton = extractFullPageSkeleton()
         log.info('[Phase 2] 全页骨架提取结果', { found: !!fullSkeleton })
@@ -386,17 +396,14 @@ export class InputPipeline {
         lastFailedCommand = null
         lastFullSkeleton = fullSkeleton
         consecutiveErrors++
-        callbacks.onRetryMessage(`🔄 正在重试... (${consecutiveErrors}/${MAX_RETRY})`, completed.length + 1, lastFailedCommand)
+        callbacks.onRetryMessage(`🔄 正在重试... (${totalExecutions}/${MAX_TOTAL_STEPS})`, completed.length + 1, lastFailedCommand)
         continue
       }
     }
 
-    if (consecutiveErrors >= MAX_RETRY) {
-      log.error(`[Phase 2] ═══ 连续 ${MAX_RETRY} 次失败，放弃 ═══`)
-      callbacks.onError('未找到对应元素，请准确说出您的需求')
-    } else if (completed.length >= MAX_TOTAL_STEPS) {
-      log.warn(`[Phase 2] ═══ 达到最大步数 ${MAX_TOTAL_STEPS}，停止 ═══`)
-      callbacks.onAllCommandsDone?.(text, completed.map(c => ({ action: c.action, elementId: c.elementId })))
+    if (totalExecutions >= MAX_TOTAL_STEPS) {
+      log.error(`[Phase 2] ═══ 达到最大执行次数 ${MAX_TOTAL_STEPS}，停止 ═══`)
+      callbacks.onError('操作步骤过多，已停止')
     } else if (completed.length > 0) {
       log.info('[Phase 2] ═══ 流式执行完成 ═══', { totalSteps: completed.length })
       callbacks.onAllCommandsDone?.(text, completed.map(c => ({ action: c.action, elementId: c.elementId })))

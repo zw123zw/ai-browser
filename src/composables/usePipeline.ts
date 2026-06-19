@@ -21,8 +21,9 @@ const log = new Logger('usePipeline')
 const isProcessing = ref(false)
 /** AI 等待用户输入时的提示文本（null = 不在等待状态） */
 const waitingInputPrompt = ref<string | null>(null)
-/** 等待用户输入的 Promise resolve 函数 */
+/** 等待用户输入的 Promise resolve/reject 函数 */
 let waitingInputResolve: ((value: string) => void) | null = null
+let waitingInputReject: ((reason?: unknown) => void) | null = null
 
 /** 模块级别的 abort 引用，供外部（清除会话/缓存）调用 */
 let _abortFn: (() => Promise<void>) | null = null
@@ -70,6 +71,7 @@ export function usePipeline() {
           log.info('内置命令', { command, args })
           if (command === 'stop') {
             convStore.abort()
+            abort()
             addSystemMessage('已停止当前操作')
           } else if (command === 'help') {
             addSystemMessage('可用命令：/stop（停止）、/help（帮助）')
@@ -241,8 +243,9 @@ export function usePipeline() {
           log.info('[回调] onNeedInput', { prompt })
           addSystemMessage(`💬 **AI 需要您的输入：** ${prompt}`)
           waitingInputPrompt.value = prompt
-          return new Promise<string>((resolve) => {
+          return new Promise<string>((resolve, reject) => {
             waitingInputResolve = resolve
+            waitingInputReject = reject
           })
         },
       }
@@ -266,6 +269,7 @@ export function usePipeline() {
       // 清理等待输入状态（pipeline 结束时如果还在等待，说明被取消了）
       if (waitingInputResolve) {
         waitingInputResolve = null
+        waitingInputReject = null
         waitingInputPrompt.value = null
       }
       isProcessing.value = false
@@ -352,8 +356,9 @@ export function usePipeline() {
           log.info('[恢复] onNeedInput', { prompt })
           addSystemMessage(`💬 **AI 需要您的输入：** ${prompt}`)
           waitingInputPrompt.value = prompt
-          return new Promise<string>((resolve) => {
+          return new Promise<string>((resolve, reject) => {
             waitingInputResolve = resolve
+            waitingInputReject = reject
           })
         },
       }
@@ -375,6 +380,7 @@ export function usePipeline() {
       if (currentAborter === ac) currentAborter = null
       if (waitingInputResolve) {
         waitingInputResolve = null
+        waitingInputReject = null
         waitingInputPrompt.value = null
       }
       isProcessing.value = false
@@ -391,9 +397,11 @@ export function usePipeline() {
 
   function abort(): Promise<void> {
     log.debug('中止 pipeline 请求')
-    // 如果正在等待用户输入，先取消等待
-    if (waitingInputResolve) {
+    // 如果正在等待用户输入，reject Promise 让 pipeline 从 await 中退出
+    if (waitingInputReject) {
+      waitingInputReject(new DOMException('The operation was aborted.', 'AbortError'))
       waitingInputResolve = null
+      waitingInputReject = null
       waitingInputPrompt.value = null
     }
     currentAborter?.abort()

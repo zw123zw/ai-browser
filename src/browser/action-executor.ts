@@ -397,9 +397,15 @@ export class ActionExecutor {
     const rect = el.getBoundingClientRect()
     const x = rect.left + rect.width / 2
     const y = rect.top + rect.height / 2
+    const common = { bubbles: true, clientX: x, clientY: y, screenX: x, screenY: y }
 
-    el.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true, clientX: x, clientY: y }))
-    el.dispatchEvent(new MouseEvent('mouseover', { bubbles: true, clientX: x, clientY: y }))
+    // 按顺序派发完整鼠标事件链，最大化触发 CSS :hover 和 JS 事件监听
+    el.dispatchEvent(new PointerEvent('pointerover', common))
+    el.dispatchEvent(new PointerEvent('pointerenter', common))
+    el.dispatchEvent(new MouseEvent('mouseover', common))
+    el.dispatchEvent(new MouseEvent('mouseenter', common))
+    el.dispatchEvent(new PointerEvent('pointermove', common))
+    el.dispatchEvent(new MouseEvent('mousemove', common))
 
     return { success: true, message: '悬停成功' }
   }

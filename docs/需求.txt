@@ -1,5 +1,5 @@
-批量指令 异步等待指令 填写验证码  指令elementId位是数组支持多个elementId指令执行  [command]{"action":"click","elementId":"e3","description":"登录","done":0}[/command]
-打开百度，搜索vue3 手动点按钮、批量填表、翻页、复制数据 批量点赞、批量互动、批量评论 批量填写表单
+批量指令  批量点赞、批量互动、批量评论 批量填写表单
+
 
 
 

@@ -86,13 +86,18 @@ ${PHASE1_CAPABILITY_LIST}
 
 单个文件：[FILE:文件名.扩展名]内容[/FILE]
 多个文件：[FILE:a.txt]内容1[/FILE][FILE:b.csv]内容2[/FILE]
-图表：[FILE:name.chart]ECharts JSON[/FILE]
+图表（必须用 .chart）：[FILE:name.chart]ECharts option JSON[/FILE]
+
+.chart 是系统内置的图表渲染格式，直接输出 ECharts option 对象 JSON。
+系统会自动用 ECharts 渲染图表，无需生成 .vue/.html/.js 代码文件。
+多图用多文件：[FILE:饼图.chart]{"series":[{"type":"pie","data":[...]}]}[/FILE][FILE:柱状图.chart]{"series":[{"type":"bar","data":[...]}]}[/FILE]
 
 示例：
 [FILE:report.md]# 标题\n内容[/FILE]
 [FILE:data.csv]name,value\nA,10\nB,20[/FILE]
-[FILE:name.chart]{"xAxis":{"data":["A","B"]},"series":[{"type":"bar","data":[10,20]}]}[/FILE]
-多文件：[FILE:summary.md]# 总结[/FILE][FILE:data.csv]name,value\nA,10[/FILE][FILE:chart.chart]{"series":[{"type":"bar","data":[10]}]}[/FILE]
+[FILE:销售饼图.chart]{"title":{"text":"销售占比"},"series":[{"type":"pie","radius":"60%","data":[{"value":1048,"name":"搜索引擎"},{"value":735,"name":"直接访问"}]}]}[/FILE]
+[FILE:月度柱状图.chart]{"xAxis":{"type":"category","data":["1月","2月","3月"]},"yAxis":{"type":"value"},"series":[{"type":"bar","data":[120,200,150]}]}[/FILE]
+[FILE:趋势折线图.chart]{"xAxis":{"type":"category","data":["Mon","Tue","Wed","Thu","Fri"]},"yAxis":{"type":"value"},"series":[{"type":"line","data":[820,932,901,934,1290]}]}[/FILE]
 
 ═══ [command] 规则 ═══
 
@@ -102,7 +107,8 @@ ${PHASE1_CAPABILITY_LIST}
 
 ═══ [FILE] 规则 ═══
 
-- 文件扩展名必须与用户要求一致（"生成pdf"→.pdf，"生成word"→.docx）
+- 文档类文件扩展名必须与用户要求一致（"生成pdf"→.pdf，"生成word"→.docx）
+- 图表必须用 .chart 格式（ECharts option JSON），禁止生成 .vue/.html/.js 代码文件
 - 文件名只能有一个扩展名（report.pdf ✓，report.pdf.md ✗）
 
 ═══ 禁止输出 ═══
@@ -175,12 +181,15 @@ type 可选值：credentials（账号密码）、verification_code（验证码�
 - 打开网站/搜索/滚动 → 直接[command]（不需要骨架）
 - 骨架中"(icon)"元素 → 检查aria-label/title判断功能
 - 定位优先级：elementId > fallbackSelector > description
+- ★ 悬停菜单：目标元素不在当前骨架中时，考虑是否需要 hover 父元素触发下拉菜单（如用户头像→退出登录、导航栏→子菜单）。先 hover 父元素，再从新骨架中 click 目标。
 - ★ 协议弹窗最高优先级：骨架中出现"同意"/"同意并继续"/"Accept"/"我已阅读并同意"等按钮时，必须先 click 同意按钮，再执行其他任何操作。禁止跳过弹窗直接输出 [need_input] 或其他指令。
 - 单步任务（打开网站、搜索、滚动等）必须 done:1，禁止拆成多步
-- done 判定：根据用户请求的操作数量设置。例：
-  · "点击登录" → done:1
-  · "打开百度搜索天气" → 搜索后 done:1
-  · "输入用户名然后点下一步" → 输入后 done:0，点击后 done:1
+- done 判定：done:1 = 用户请求的目标已达成，不是"这一步操作执行完了"。判断标准：执行这步后，用户还需要做更多事吗？
+  · "打开百度搜索天气" → 搜索后用户目标达成 → done:1
+  · "输入用户名然后点下一步" → 输入后还有下一步 → done:0
+  · "登录"/"帮我登录" → 点击登录按钮只是流程开始，还需要输入凭据/验证码 → done:0
+  · "退出登录" → 点击退出后还需要确认弹窗 → done:0
+  · "点击登录按钮" → 用户明确只要求点按钮 → done:1
 
 ═══ 禁止输出 ═══
 
