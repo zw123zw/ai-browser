@@ -58,7 +58,7 @@ export interface PipelineOptions {
   getSettings: () => AppSettings
   /** 获取当前使用的模型 ID（优先会话级，回退全局默认） */
   getModelId?: () => string
-  getRecentMessages?: () => Array<{ role: 'user' | 'assistant'; content: string }>
+  getRecentMessages?: () => Array<{ role: 'user' | 'assistant' | 'system'; content: string }>
   getSignal?: () => AbortSignal | undefined
   onBuiltinCommand?: (command: string, args: string) => void
 }
@@ -272,8 +272,8 @@ export class InputPipeline {
           done: cmd.done,
         })
 
-        // ★ 指令去重：和已完成的指令比较，重复则跳过执行
-        const cmdKey = `${cmd.action}:${cmd.url || cmd.elementId || cmd.description || ''}`
+        // ★ 指令去重：和已完成的指令比较，重复则跳过执行（含 text 防止同元素不同值被误判为同一指令）
+        const cmdKey = `${cmd.action}:${cmd.url || cmd.elementId || cmd.description || ''}:${cmd.text || ''}`
         if (completedKeys.has(cmdKey)) {
           totalExecutions++  // 去重也计数，防止死循环
           log.info('[Phase 2] ═══ 指令重复，跳过执行 ═══', { action: cmd.action, url: cmd.url })

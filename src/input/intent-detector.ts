@@ -22,7 +22,7 @@ export interface IntentDetectorOptions {
   getSettings: () => AppSettings
   /** 获取当前使用的模型 ID（优先会话级，回退全局默认） */
   getModelId?: () => string
-  getRecentMessages?: () => Array<{ role: 'user' | 'assistant'; content: string }>
+  getRecentMessages?: () => Array<{ role: 'user' | 'assistant' | 'system'; content: string }>
   getSignal?: () => AbortSignal | undefined
 }
 

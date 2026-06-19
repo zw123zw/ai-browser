@@ -284,6 +284,12 @@ function extractElement(el: HTMLElement, id: string): SkeletonElement | null {
   // 有文字用文字，无文字但有图标子元素标记为图标按钮
   if (text) {
     base.text = text
+  } else if (hasFormContent) {
+    // input/textarea 有 value 时显示已输入内容，让 AI 知道输入是否成功
+    const val = (el as HTMLInputElement).value
+    if (val) {
+      base.text = val.length > 20 ? val.slice(0, 20) + '...' : val
+    }
   } else if (labelText) {
     // 表单元素有关联 label 时，用 label 字段标识（不占 text，避免与 label 元素去重）
     base.label = labelText

@@ -362,6 +362,7 @@ const generalForm = reactive({
   autoSendSelection: resolveAutoSend(store.settings.autoSendSelection),
   translateTargetLang: store.settings.translateTargetLang || '中文',
   translateMode: resolveTranslateMode(store.settings),
+  maxContext: store.settings.maxContext || 50,
 });
 
 const autoSendOptions = [
@@ -424,6 +425,12 @@ async function saveGeneral() {
   });
   toast.success('通用配置已保存');
   emit('close');
+}
+
+// 保存上下文消息数
+async function saveMaxContext() {
+  await store.update({ maxContext: generalForm.maxContext });
+  toast.success('上下文消息数已保存');
 }
 
 // 导出模型配置为 JSON 文件
@@ -872,6 +879,25 @@ function importModels(e: Event) {
                   激活
                 </button>
               </div>
+            </div>
+
+            <!-- 上下文消息数 -->
+            <div class="aib-form-row">
+              <label>上下文消息数</label>
+              <div class="aib-input-group">
+                <input
+                  v-model.number="generalForm.maxContext"
+                  type="number"
+                  min="5"
+                  max="200"
+                  step="1"
+                  class="aib-input aib-input-with-btn"
+                  placeholder="50"
+                  @change="generalForm.maxContext = Math.max(5, Math.min(200, Math.round(generalForm.maxContext || 50)))"
+                />
+                <button class="aib-btn-activate" @click="saveMaxContext">保存</button>
+              </div>
+              <span class="aib-text-faint">AI 每次请求携带的历史消息条数（5-200），影响对话连贯性和 token 消耗。</span>
             </div>
 
             <!-- 缓存管理 -->

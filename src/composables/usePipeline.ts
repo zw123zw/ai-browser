@@ -45,7 +45,7 @@ export function usePipeline() {
   /** pipeline 停止后的回调（供 abort() 等待） */
   let stoppedResolve: (() => void) | null = null
 
-  function getRecentMessages(): Array<{ role: 'user' | 'assistant'; content: string }> {
+  function getRecentMessages(): Array<{ role: 'user' | 'assistant' | 'system'; content: string }> {
     const conv = convStore.conversation
     if (!conv) return []
     // 排除当前轮次的两条消息：
@@ -54,10 +54,11 @@ export function usePipeline() {
     // 这样 callAI() 不会将历史中的当前用户消息与当前输入重复，
     // 且无历史时 validMsgCount === 0，正确走 system prompt 拼接逻辑
     const msgs = conv.messages.slice(0, -2)
+    const maxContext = settingsStore.settings.maxContext || 50
     return msgs
-      .filter(m => m.role === 'user' || m.role === 'assistant')
-      .slice(-6)
-      .map(m => ({ role: m.role as 'user' | 'assistant', content: m.content.slice(0, 300) }))
+      .filter(m => m.role === 'user' || m.role === 'assistant' || m.role === 'system')
+      .slice(-maxContext)
+      .map(m => ({ role: m.role as 'user' | 'assistant' | 'system', content: m.content.slice(0, 300) }))
   }
 
   function getPipeline(): InputPipeline {
