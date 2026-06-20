@@ -58,18 +58,20 @@ flowchart TD
     I --> J{标签提取}
     J -->|[command]| K[ActionExecutor.execute]
     J -->|[need_full]| L[提取全页骨架]
+    J -->|[need_input]| M[暂停等待用户输入]
     J -->|无标签| N[任务完成]
 
-    K -->|成功| O{done=1?}
-    K -->|失败| P{重试次数 < 5?}
+    K -->|成功| O{end / done?}
+    K -->|失败| P{执行次数 < 20?}
     K2 -->|成功| N
     K2 -->|失败| N
-    O -->|是| N
-    O -->|否| I
+    O -->|end 或无更多| N
+    O -->|继续| I
     P -->|是| I
-    P -->|否| Q[报错: 超过重试上限]
+    P -->|否| Q[报错: 超过执行上限]
 
     L --> I
+    M -->|用户输入| I
 ```
 
 ## 核心设计决策
@@ -80,12 +82,12 @@ flowchart TD
 
 | 阶段 | 模型 | 职责 | 输出 |
 |------|------|------|------|
-| Phase 1 | 轻量模型 | 聊天 vs 操作 二分类 + 简单指令直出 | `[action]` / `[command]` / 自然语言回复 |
-| Phase 2 | 主力模型 | 从 AI 自然回复中提取结构化指令 | `[command]` / `[need_full]` 标签 |
+| Phase 1 | 轻量模型 | 聊天 vs 操作 二分类 + 简单指令直出 | `[action]` / `[command]` / 自然语言回复 / `[FILE:xxx]` |
+| Phase 2 | 主力模型 | 从 AI 自然回复中提取结构化指令 | `[command]` / `[need_full]` / `[need_input]` / `end` |
 
 **Phase 1 设计考量：**
 - 使用轻量模型做意图分类，降低延迟和成本
-- 系统提示词 (`PHASE1_SYSTEM_PROMPT`) 要求严格三选一输出：`[command]` / `[action]` / 自然语言
+- 系统提示词 (`PHASE1_SYSTEM_PROMPT`) 要求严格四选一输出：`[command]` / `[action]` / `[FILE:xxx]` / 自然语言
 - **快速通道（Fast Path）：** Phase 1 直出 `[command]` 时跳过 Phase 2，直接执行。适用于不需要页面骨架的简单操作（navigate/scroll/keyboard 等）
 - 流式输出期间实时检测 `[action]` 标签，一旦检测到立即清除流式内容，用户只看到"思考中"
 
@@ -109,40 +111,78 @@ Phase 2 采用流式执行模式，每次迭代只执行一条指令：
 - 执行失败时可立即调整策略
 - 用户能实时看到执行进度
 
-### 3. 重试机制 (Retry Mechanism)
+### 3. end 指令验证机制
+
+AI 可以输出 `action: "end"` 表示用户目标已达成。Pipeline 对 end 有严格校验：
+
+- **未执行过任何指令时拒绝 end**：防止 AI 未操作就声称完成
+- **end 后不再继续**：直接退出循环，调用 `onAllCommandsDone`
+- **done:1 不等于 end**：`done:1` 表示"这是计划中的最后一步"，执行后仍会刷新骨架让 AI 确认；只有 AI 看到新骨架后主动输出 `end` 才真正结束
+
+### 4. 重试机制 (Retry Mechanism)
 
 所有错误类型统一处理：
 
-- **最大重试次数：** 5 次 (`MAX_RETRY`)
+- **最大执行次数：** 20 次 (`MAX_TOTAL_STEPS`)，包含成功、失败、重试、need_full
+- **连续错误追踪：** `consecutiveErrors` 计数，指令成功后重置为 0
 - **重试时携带的信息：**
   - 最新页面骨架（每轮重新提取）
   - 上次失败的错误信息
   - 上次失败的指令详情
   - 已完成指令列表
   - `need_full` 触发时的全页骨架（如有）
-- **连续错误计数：** 指令成功执行后 `consecutiveErrors` 重置为 0
 
-### 4. 指令去重 (Command Deduplication)
+### 5. 指令去重 (Command Deduplication)
 
 通过 `completedKeys` Set 防止重复执行：
 
 ```typescript
-// key 格式: "action:url/elementId/description"
-const cmdKey = `${cmd.action}:${cmd.url || cmd.elementId || cmd.description || ''}`
+// key 格式: "action:url/elementId/description:text"
+const cmdKey = `${cmd.action}:${cmd.url || cmd.elementId || cmd.description || ''}:${cmd.text || ''}`
 if (completedKeys.has(cmdKey)) {
   // 跳过执行
 }
 ```
 
-**适用场景：** AI 在重试时可能生成与已完成指令相同的操作，去重机制避免重复点击等副作用。
+**适用场景：** AI 在重试时可能生成与已完成指令相同的操作，去重机制避免重复点击等副作用。`text` 字段参与 key 计算，防止同元素不同值被误判为同一指令。
 
-### 5. Abort 支持
+### 6. need_input 用户交互
+
+AI 可以输出 `[need_input]{"message":"...","type":"credentials"}` 请求用户输入信息（凭据、验证码等）。Pipeline 暂停执行，通过 `callbacks.onNeedInput()` 回调等待用户输入，收到后将用户输入作为上下文传入下一轮 AI 调用。
+
+### 7. 跨标签页任务续接
+
+`navigate` 或 `_blank` 点击导致页面跳转时，当前 JS 上下文可能被销毁。Pipeline 通过 `queuedTaskStorage` 将未完成任务保存到 Chrome Storage：
+
+```mermaid
+sequenceDiagram
+    participant P as Pipeline (原标签页)
+    participant S as Chrome Storage
+    participant N as Pipeline (新标签页)
+
+    P->>S: queuedTaskStorage.setValue({originalRequest, completedSteps, timestamp})
+    Note over P: navigate 成功 → 原标签页停止
+    Note over N: 新标签页加载完成
+    N->>S: queuedTaskStorage.getValue()
+    S-->>N: QueuedTask
+    N->>N: 过期检查（30秒）
+    N->>N: resumeQueuedTask() → 跳过 Phase 1，直接 Phase 2
+```
+
+**click + done:0 的特殊处理：**
+- 执行 click 前先保存 queued task
+- 如果 click 导致页面跳转（JS 上下文销毁），queued task 保留给新标签页
+- 如果 click 未跳转（500ms 后清除 queued task）
+- 如果 click 新开标签页（`openedNewTab`），原标签页立即停止，由新标签页续接
+
+### 8. Abort 支持
 
 整个流水线支持用户中途取消：
 
 - `sleep()` 函数使用 `AbortSignal` 监听，等待期间可被中断
 - 每轮循环开始时检查 `signal.aborted`
 - AI 请求传递 `signal`，网络层可中止
+- 指令执行后立即检查 abort（不等 sleep）
 - Abort 时抛出 `DOMException`，调用方统一处理
 
 ## 组件详细设计
@@ -207,7 +247,8 @@ async detectPhase1(
 - 判断逻辑：
   1. 提取标签 → 有 `[command]` 且无 `[action]` → **快速通道**：`{ isChat: false, commands: [...] }`
   2. 有 `[action]` → `isChat: false`，进入 Phase 2
-  3. 有 `[chat]` 标签或纯文本 → `isChat: true`
+  3. 有 `[FILE:xxx]` 文件标签 → `isChat: true`，返回原始文本（前端渲染为文件卡片）
+  4. 有 `[chat]` 标签或纯文本 → `isChat: true`
 
 **Phase 2 — `detectPhase2()`**
 
@@ -220,7 +261,7 @@ async detectPhase2(text: string, skeleton: SemanticSkeleton): Promise<Phase2Resu
 - 返回 `{ commands?: Command[]; needFull?: boolean; rawAiOutput: string }`
 
 **AI 调用细节：**
-- 消息构建：最近 6 条历史消息（过滤重数据）+ 系统提示词拼接到用户消息前（兼容不支持 system role 的 API）
+- 消息构建：最近 N 条历史消息（过滤重数据）+ 系统提示词拼接到用户消息前（兼容不支持 system role 的 API）
 - `stripHeavyData()` 清理历史消息中的骨架 JSON 和全页骨架 JSON，减少 token 消耗
 - AbortError 向上抛出，由调用方处理
 
@@ -235,6 +276,7 @@ async detectPhase2(text: string, skeleton: SemanticSkeleton): Promise<Phase2Resu
 ```typescript
 class InputPipeline {
   async process(ctx: InputContext, callbacks: PipelineCallbacks): Promise<void>
+  async resumeQueuedTask(task: QueuedTask, callbacks: PipelineCallbacks): Promise<void>
 }
 ```
 
@@ -270,18 +312,23 @@ private async executePhase1Commands(
 **`processPhase2WithRetry()` 流程：**
 
 ```
-while (consecutiveErrors < MAX_RETRY):
+while (totalExecutions < MAX_TOTAL_STEPS):
   1. 检查 abort signal
   2. 提取最新骨架
   3. 选择模式: MODE_FIRST / MODE_STREAMING / MODE_RETRY
   4. callStreamingAI() — 每次只取第一条指令
   5. 无标签 → 任务完成，break
-  6. [command]:
-     - 去重检查 (completedKeys)
+  6. [need_input]:
+     - callbacks.onNeedInput(message) → 暂停等待用户输入
+     - 收到后继续循环（携带 userInputContext）
+  7. [command]:
+     - end 指令 → 检查已执行步骤数 → break
+     - 去重检查 (completedKeys，含 text 字段)
+     - click + done:0 → 保存 queued task → 执行
      - 执行指令
-     - 成功 → 记录、重置错误、sleep 500ms、continue
+     - 成功 → 记录、重置错误、检查 openedNewTab、sleep 500ms、continue
      - 失败 → 记录错误、consecutiveErrors++、continue
-  7. [need_full]:
+  8. [need_full]:
      - extractFullPageSkeleton() 提取全页骨架
      - 记录错误和全页骨架、consecutiveErrors++、continue
 ```
@@ -297,11 +344,12 @@ private async callStreamingAI(
   lastFailedCommand?: {...} | null,
   lastFullSkeleton?: string | null,
   coreRule?: string,
-): Promise<Phase2Result>
+  userInputContext?: string,
+): Promise<Phase2Result & { needInput?: { message: string } }>
 ```
 
 - 构建系统提示词：`PHASE2_SYSTEM_PROMPT` 替换 `{coreRule}`
-- 构建用户消息：`buildStreamingUserMessage()` 包含原始请求、已完成列表、错误信息、全页骨架、当前骨架
+- 构建用户消息：`buildStreamingUserMessage()` 包含原始请求、已完成列表、错误信息、全页骨架、当前骨架、页面提示、用户补充信息
 - 只取 `tags.commands` 的第一条：`tags.commands?.slice(0, 1)`
 
 ### TagParser
@@ -324,17 +372,20 @@ function extractTags(rawText: string): ExtractedTags
 | `[chat]` | `[chat]{"text":"..."}[/chat]` 或 `[chat]文本[/chat]` | Phase 1 聊天回复 |
 | `[command]` | `[command]{"action":"click","elementId":"e3"}[/command]` | 浏览器操作指令 |
 | `[need_full]` | `[need_full]`（无内容） | 请求全页骨架 |
+| `[need_input]` | `[need_input]{"message":"...","type":"credentials"}[/need_input]` | 请求用户输入 |
+| `[FILE:xxx]` | `[FILE:name.ext]内容[/FILE]` | 文件/图表输出 |
 
 **提取策略：**
 - 优先匹配闭合标签 `[tag]...[/tag]`
 - 回退匹配：`[tag]` 后的整个 JSON 对象
 - `[need_full]` 无需 JSON 解析，检测到标签即触发
+- `[FILE:xxx]` 兼容大小写、可选空格、无闭合标签
 
 **辅助函数：**
 
 ```typescript
 function isChatOnlyReply(tags: ExtractedTags): boolean
-// 无操作标签 + 有文本内容 → 纯聊天
+// 无操作标签 + 无文件标签 + 有文本内容 → 纯聊天
 
 function getChatText(tags: ExtractedTags): string
 // 优先取 [chat] 标签内容，回退取原始文本
@@ -348,15 +399,15 @@ function getChatText(tags: ExtractedTags): string
 
 **系统提示词：**
 
-- `PHASE1_SYSTEM_PROMPT`: Phase 1 意图分类，要求严格三选一输出：`[command]` / `[action]` / 自然语言
+- `PHASE1_SYSTEM_PROMPT`: Phase 1 意图分类，要求严格四选一输出：`[command]` / `[action]` / `[FILE:xxx]` / 自然语言
 - `PHASE2_SYSTEM_PROMPT`: Phase 2 操作决策模板，运行时替换 `{coreRule}`（模式说明）
-- `CAPABILITY_DOMAIN`: 所有能力域定义（navigate/search/click/type/scroll/keyboard 等）
+- `CAPABILITY_DOMAIN_LIST`: 所有能力域定义（navigate/search/click/type/scroll/keyboard 等），含 `needSkeleton` 标记
 
 **模式说明（注入 `{coreRule}` 占位符）：**
 
-- `MODE_FIRST`: 首次进入，"每次只生成1条指令，系统执行后反馈结果再生成下一条"
-- `MODE_STREAMING`: 流式执行，"按照以下信息和格式，生成下一条指令"
-- `MODE_RETRY`: 错误重试，"上次指令执行失败。根据失败指令、错误信息、最新页面骨架，调整策略"
+- `MODE_FIRST`: 首次进入，"首次执行。根据用户请求和页面骨架，生成第1条指令"
+- `MODE_STREAMING`: 流式执行，"继续执行。根据已完成步骤和当前骨架，生成下一条指令"
+- `MODE_RETRY`: 错误重试，"上次指令执行失败。根据错误类型调整策略"
 
 **消息构建函数：**
 
@@ -364,8 +415,22 @@ function getChatText(tags: ExtractedTags): string
 buildPhase2UserMessage(text, skeleton)
 // Phase 2 标准消息：当前请求 + 页面骨架
 
-buildStreamingUserMessage(text, skeleton, completed, lastError?, lastFailedCommand?, fullSkeleton?)
-// 流式执行消息：原始请求 + 已完成列表 + 错误信息 + 全页骨架 + 当前骨架
+buildStreamingUserMessage(text, skeleton, completed, lastError?, lastFailedCommand?, fullSkeleton?, userInputContext?)
+// 流式执行消息：原始请求 + 已完成列表 + 错误信息 + 当前页面 URL/标题 + 页面提示 + 全页骨架/当前骨架 + 用户补充信息
+```
+
+**`buildStreamingUserMessage` 消息结构：**
+
+```
+[原始请求] 用户: "..."
+[已完成] 1. click e3 (登录)  2. type e5 (输入文字)
+[上次错误] [click] 未找到目标元素
+[失败指令] {"action":"click","elementId":"e7"}
+[当前页面] https://example.com | 页面标题
+[页面提示] 登录失败：密码错误 | 请重新输入
+[当前页面骨架]
+[{"id":"e1","tag":"input",...},...]
+[用户补充信息] 用户提供的额外信息
 ```
 
 ## 数据流时序图
@@ -378,6 +443,7 @@ sequenceDiagram
     participant D as IntentDetector
     participant E as ActionExecutor
     participant S as SkeletonManager
+    participant ST as queuedTaskStorage
 
     U->>P: process(ctx, callbacks)
     P->>R: route(ctx)
@@ -405,7 +471,7 @@ sequenceDiagram
             P->>P: callbacks.onActionDetected()
 
             Note over P: Phase 2 重试循环
-            loop consecutiveErrors < 5
+            loop totalExecutions < 20
                 P->>S: getSkeleton()
                 S-->>P: SemanticSkeleton
                 P->>D: callStreamingAI(text, skeleton, completed, error, ...)
@@ -413,24 +479,36 @@ sequenceDiagram
 
                 alt [command]
                     P->>P: callbacks.onCommandsParsed([cmd])
+                    alt click + done:0
+                        P->>ST: 保存 queued task
+                    end
                     P->>E: execute(cmd)
-                    E-->>P: { success, message }
+                    E-->>P: { success, message, openedNewTab }
                     P->>P: callbacks.onCommandResult(...)
-                    alt 成功
+                    alt 成功 + openedNewTab
+                        P->>P: 原标签页停止，等待新页续接
+                        Note over P: break
+                    else 成功
                         P->>P: 记录完成，重置错误
                         P->>P: sleep(500ms)
                     else 失败
                         P->>P: consecutiveErrors++
                     end
+                else [need_input]
+                    P->>U: callbacks.onNeedInput(message)
+                    U-->>P: 用户输入
+                    Note over P: 携带 userInputContext 继续
                 else [need_full]
                     P->>P: extractFullPageSkeleton()
                     P->>P: consecutiveErrors++
+                else end
+                    Note over P: 任务完成，退出循环
                 else 无标签
                     Note over P: 任务完成，退出循环
                 end
             end
 
-            alt consecutiveErrors >= 5
+            alt totalExecutions >= 20
                 P->>U: callbacks.onError(...)
             else 完成
                 P->>U: callbacks.onAllCommandsDone(...)
@@ -472,6 +550,8 @@ interface PipelineCallbacks {
   onAllCommandsDone?: (userText: string, commands: Command[]) => void
   onRetryMessage: (message: string, currentStep?: number, failedCommand?: {...} | null) => void
   onError: (message: string) => void
+  /** AI 请求用户输入（返回用户输入的文本，pipeline 暂停等待） */
+  onNeedInput: (prompt: string) => Promise<string>
 }
 ```
 
@@ -483,6 +563,9 @@ interface ExtractedTags {
   commands?: Command[]
   isAction: boolean
   needFull?: boolean
+  needInput?: { message: string; type?: string }
+  hasFileTags: boolean
+  fileTagDetails?: { filename: string; hasClosingTag: boolean; contentLength: number }
   hasAnyTag: boolean
   rawText: string
 }
@@ -498,11 +581,11 @@ function sleep(ms: number, signal?: AbortSignal): Promise<void>
 
 等待期间通过 `AbortSignal` 监听中止事件，清除定时器并抛出 `DOMException`。
 
-### 连续错误追踪
+### 执行次数限制
 
-- `consecutiveErrors`: 连续失败计数器
-- 指令成功执行后重置为 0
-- 达到 `MAX_RETRY` (5) 时终止循环，调用 `onError` 回调
+- `totalExecutions`: 总执行次数计数器（含成功、失败、重试、need_full、去重跳过）
+- 达到 `MAX_TOTAL_STEPS` (20) 时终止循环，调用 `onError` 回调
+- 防止 AI 生成无限步骤序列
 
 ### 重试信息传递
 
@@ -515,6 +598,7 @@ function sleep(ms: number, signal?: AbortSignal): Promise<void>
 | `lastFailedCommand` | 上次失败的指令详情 |
 | `lastFullSkeleton` | `need_full` 触发时的全页骨架 |
 | `completed` 已完成列表 | 避免重复操作 |
+| `userInputContext` | need_input 时用户提供的补充信息 |
 
 ### AI 调用容错
 
@@ -530,9 +614,9 @@ src/input/
 ├── types.ts              # 类型定义 (InputContext, InputResult, PipelineCallbacks)
 ├── router.ts             # InputRouter — / 前缀路由
 ├── intent-detector.ts    # IntentDetector — Phase 1 & Phase 2 AI 调用
-├── pipeline.ts           # InputPipeline — 流程编排 + 流式执行 + 重试
-├── tag-parser.ts         # extractTags() — 标签提取
-└── prompts.ts            # 提示词常量 + 消息构建函数
+├── pipeline.ts           # InputPipeline — 流程编排 + 流式执行 + 重试 + 跨标签页续接
+├── tag-parser.ts         # extractTags() — 标签提取（含 need_input、FILE）
+└── prompts.ts            # 提示词常量 + 消息构建函数 + 能力域定义
 ```
 
 ### 依赖关系
@@ -543,6 +627,7 @@ pipeline.ts
   ├── intent-detector.ts  (IntentDetector)
   ├── tag-parser.ts       (extractTags)
   ├── prompts.ts          (PHASE2_SYSTEM_PROMPT, buildStreamingUserMessage, MODE_*)
+  ├── storage/            (queuedTaskStorage)
   └── browser/
       ├── action-executor.ts  (ActionExecutor)
       ├── skeleton.ts         (SkeletonManager)

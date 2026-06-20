@@ -138,7 +138,7 @@ const markAll = () => setTimeout(() => initAllSkeletonIds(), 1000);
 - 页面加载完成后延迟 1 秒执行，等待 SPA 动态内容渲染
 - 为 DOM 元素注入 `data-skeleton-id`，供翻译系统精确定位元素
 
-#### 阶段 2：翻译功能初始化
+#### 阶段 2：跨标签页续接检查
 
 ```typescript
 const translateService = new TranslateService();
@@ -151,6 +151,10 @@ const translateService = new TranslateService();
 | 点击翻译 | `initClickTranslate()` — 监听特定元素点击 | `translate-click.ts` |
 | 划词翻译 | `document.mouseup` — 检测选中文本 | 直接在 content script 中实现 |
 | 自动翻译 | 页面加载 + URL 变化 + DOM 变化 | `TranslateService.translateVisible()` |
+
+**翻译模型选择：** 翻译功能使用用户在聊天面板选择的模型（通过 `getCurrentModelId()` 从 `conversationStorage` 读取 `conv.modelId`），而非全局默认模型。
+
+**扩展 UI 检测（`isInExtensionUI()`）：** 划词翻译和点击翻译需要忽略来自扩展 UI 内部的事件。通过 `getRootNode()` 穿透 Shadow DOM 边界，检测事件目标是否在扩展容器内。
 
 **自动翻译的触发链路：**
 
@@ -174,7 +178,13 @@ graph LR
 - 忽略纯属性修改
 - 200ms 防抖避免高频触发
 
-#### 阶段 3：Vue 应用挂载
+#### 阶段 3：翻译功能初始化
+
+```typescript
+const translateService = new TranslateService()
+```
+
+#### 阶段 4：Vue 应用挂载
 
 ```typescript
 const ui = await createShadowRootUi(ctx, {
@@ -196,6 +206,24 @@ ui.mount();
 ```
 
 `onRemove` 回调确保扩展卸载时清理翻译状态和 Vue 应用实例。
+
+#### 阶段 5：跨标签页任务续接
+
+Vue 应用挂载完成后，检查 `queuedTaskStorage` 是否有排队任务：
+
+```mermaid
+flowchart TD
+    A[Vue mount 完成] --> B[queuedTaskStorage.getValue]
+    B --> C{有排队任务?}
+    C -->|否| D[跳过]
+    C -->|是| E{过期? >30秒}
+    E -->|是| F[丢弃 + 清除]
+    E -->|否| G[清除 storage]
+    G --> H[usePipeline.resumeQueuedTask]
+    H --> I[跳过 Phase 1, 直接 Phase 2 流式执行]
+```
+
+**过期保护：** 30 秒前的旧任务直接丢弃（新标签页可能已关闭或加载失败）。
 
 ---
 
@@ -401,7 +429,9 @@ async function onSend(payload) {
 
 - 管理单一会话（历史兼容旧的多会话格式，自动迁移）
 - `send()` 实现流式 LLM 调用，使用 `reactive()` 包装 AI 消息实现增量更新
-- `clearCurrent()` 中断进行中的请求并清空消息
+- `clearCurrent()` 中断进行中的 pipeline 和请求并清空消息
+- `resetConversation()` 彻底重置会话（新 ID），用于清除缓存场景
+- `init()` 自动清理残留的 `streaming` 状态消息（跨标签页导航时 JS 上下文被销毁导致）
 - 通过 `defineStorageSync` 实现跨标签页同步
 - `enforceMaxContext()` 截断消息数到 `maxContext` 设置值
 
@@ -497,5 +527,5 @@ try {
 - `src/browser/translate-service.ts` — 翻译服务
 - `src/browser/translate-popup.ts` — 翻译弹窗 DOM 操作
 - `src/browser/translate-click.ts` — 点击翻译逻辑
-- `src/storage/` — 持久化存储定义（settingsStorage、conversationStorage、drawerOpenStorage、fabPosStorage 等）
+- `src/storage/` — 持久化存储定义（settingsStorage、conversationStorage、drawerOpenStorage、fabPosStorage、queuedTaskStorage 等）
 - `src/themes/` — 主题定义与 CSS 变量

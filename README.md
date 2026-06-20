@@ -168,7 +168,7 @@ sequenceDiagram
         else [action] → Phase 2
             Detector-->>Pipeline: { isChat: false }
             Pipeline->>AI: Phase2 流式调用
-            AI-->>Pipeline: [command] 标签
+            AI-->>Pipeline: [command] / [need_input] / end
             Pipeline->>Executor: execute(cmd)
             Executor-->>Pipeline: 执行结果
             Pipeline-->>User: 显示结果
@@ -200,7 +200,7 @@ sequenceDiagram
 ## 关键设计决策
 
 ### 1. 两阶段意图检测 + 快速通道
-- **Phase 1**：轻量分类 — 聊天 / 简单指令直出 / 需要页面操作
+- **Phase 1**：轻量分类 — 聊天 / 简单指令直出 / 文件生成 / 需要页面操作
 - **Phase 1 快速通道**：navigate/scroll/keyboard 等无需骨架的指令，Phase 1 直出 `[command]` 跳过 Phase 2
 - **Phase 2**：从 AI 自然回复中提取结构化指令（需要页面骨架的操作）
 - 优势：简单操作零延迟，复杂操作仍走 Phase 2 精确定位
@@ -209,11 +209,18 @@ sequenceDiagram
 - 每次调用 `getSkeleton()` 重新提取可视窗口内的可交互元素
 - 不缓存、不监听 DOM 变化 — 简单可靠，永不过期
 - 三重元素定位：elementId → CSS 选择器 → 文本匹配
+- `alerts` 字段提取页面错误/状态提示，辅助 AI 决策
 
-### 3. 流式单命令执行
+### 3. 流式单命令执行 + end 验证
 - Phase 2 每次只取 AI 返回的第一条指令执行
 - 执行成功后刷新骨架，再请求下一条
-- 支持最多 5 次重试
+- `end` 指令需 AI 确认页面状态后才能输出，未执行过指令时拒绝 end
+- 最多 20 次总执行步骤（含成功/失败/重试）
+
+### 3.5 跨标签页任务续接
+- `navigate` 或 `_blank` 点击导致页面跳转时，任务保存到 `queuedTaskStorage`
+- 新标签页加载完成后自动恢复执行，跳过 Phase 1
+- 30 秒过期保护 + click 前置保存 + openedNewTab 检测
 
 ### 4. Background 代理流式传输
 - Content Script 无法直接跨域请求

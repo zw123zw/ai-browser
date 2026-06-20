@@ -12,6 +12,7 @@ flowchart TD
         A[页面 DOM] --> B[ensureAllSkeletonIds]
         B --> C[extractSkeleton]
         C --> D[SemanticSkeleton]
+        D --> D2[alerts: 页面提示文本]
     end
 
     subgraph AI 决策层
@@ -29,6 +30,7 @@ flowchart TD
         J --> L
         K --> L
         L --> M[ActionResult]
+        M --> M2[openedNewTab?]
     end
 
     subgraph 兜底层
@@ -72,15 +74,30 @@ mousedown → focus → mouseup → click
 
 **理由：** Element UI、Ant Design 等组件库的 Select、DatePicker 等组件监听 `mousedown` 或 `focus` 事件，仅调用 `el.click()` 无法触发这些组件的交互逻辑。
 
-### 4. iframe 支持
+### 4. 新标签页检测（openedNewTab）
+
+点击操作可能触发 `window.open()`（如 `_blank` 链接、JS 事件处理器），执行引擎通过 monkey-patch `window.open` 检测是否新开标签页：
+
+- 临时替换 `window.open` 为检测函数
+- 执行点击事件序列
+- 如果检测到 `window.open` 被调用，返回 `ActionResult { openedNewTab: true }`
+- `finally` 块恢复原始 `window.open`
+
+**用途：** Pipeline 层根据 `openedNewTab` 决定是否将任务传递给新标签页续接（跨标签页任务续接机制）。
+
+### 5. iframe 支持
 
 同源 iframe 内的元素会被扫描并纳入骨架。iframe 内元素的坐标会加上 iframe 的偏移量，确保视口内判断准确。`parent` 字段标记为 `iframe.{id/class/name}` 以区分来源。
 
 跨域 iframe 因浏览器安全限制无法访问 `contentDocument`，自动跳过。
 
-### 5. 骨架元素上限 200
+### 6. 骨架元素上限 200
 
-`MAX_SKELETON_ELEMENTS = 200`，超出时截断。这是为了控制发送给 AI 的 token 消耗。200 个元素通常足以覆盖页面上所有关键交互元素。
+`MAX_SKELETON_ELEMENTS = 200`，超出时截断（仅 viewport 模式）。这是为了控制发送给 AI 的 token 消耗。200 个元素通常足以覆盖页面上所有关键交互元素。全页骨架（`full` 模式）无元素上限。
+
+### 7. 页面提示提取（alerts）
+
+骨架提取时同时扫描页面上的错误/状态提示文本，写入 `SemanticSkeleton.alerts` 字段。AI 决策时可据此判断操作是否成功（如"登录失败"、"验证码错误"等）。
 
 ## 数据类型
 
@@ -100,13 +117,14 @@ interface SkeletonElement {
 
 ### SemanticSkeleton
 
-页面语义骨架，包含 URL、标题和可交互元素列表：
+页面语义骨架，包含 URL、标题、可交互元素列表和页面提示：
 
 ```typescript
 interface SemanticSkeleton {
   url: string              // 当前页面 URL
   title: string            // 页面标题
-  elements: SkeletonElement[]  // 可交互元素列表（最多 200 个）
+  elements: SkeletonElement[]  // 可交互元素列表（viewport 模式最多 200 个）
+  alerts?: string[]        // 页面上的错误/状态提示（role=alert、aria-live、error/alert 类名等）
 }
 ```
 
@@ -116,7 +134,7 @@ AI 生成的浏览器指令，支持多种操作类型和灵活的定位方式�
 
 ```typescript
 interface Command {
-  action: string              // 操作类型（click/type/clear/scroll/navigate/select/keyboard/press/focus/hover/wait/video/tab 等）
+  action: string              // 操作类型（click/type/clear/scroll/navigate/select/keyboard/press/focus/hover/wait/video/tab/end 等）
   elementId?: string          // 骨架中的元素 ID（主定位）
   fallbackSelector?: string   // CSS 选择器（备选定位）
   text?: string               // type 操作的输入文字
@@ -136,12 +154,14 @@ interface Command {
 
 ### ActionResult
 
-执行结果，包含成功状态和消息：
+执行结果，包含成功状态、消息和新标签页标记：
 
 ```typescript
 interface ActionResult {
   success: boolean
   message: string
+  /** click 操作是否新开标签页（_blank / window.open） */
+  openedNewTab?: boolean
 }
 ```
 
@@ -158,6 +178,7 @@ interface ActionResult {
 | 方法 | 说明 |
 |------|------|
 | `getSkeleton(): SemanticSkeleton` | 获取当前可视窗口内的语义骨架（每次重新提取） |
+| `getFullSkeleton(): SemanticSkeleton` | 获取全页面的语义骨架（无元素上限，`[need_full]` 触发时调用） |
 | `invalidate(): void` | 骨架失效标记（viewport 模式下无缓存，保留接口兼容） |
 | `dispose(): void` | 资源释放（viewport 模式下无操作） |
 
@@ -170,16 +191,20 @@ flowchart TD
     C -->|否| D[跳过]
     C -->|是| E{isElementVisible?}
     E -->|否| D
-    E -->|是| F{在视口内?}
-    F -->|否| D
-    F -->|是| G[extractElement 提取文本/标签/父地标]
-    G --> H[加入 elements 数组]
-    H --> I[iframe 扫描]
-    I --> J[父子去重 + 同级去重]
-    J --> K{超过 200?}
-    K -->|是| L[截断至 200]
-    K -->|否| M[返回 SemanticSkeleton]
-    L --> M
+    E -->|是| F{scope=viewport?}
+    F -->|是| G{在视口内?}
+    F -->|否| H[提取元素]
+    G -->|否| D
+    G -->|是| H
+    H --> I[extractElement 提取文本/标签/父地标]
+    I --> J[加入 elements 数组]
+    J --> K[iframe 扫描]
+    K --> L[父子去重 + 同级去重]
+    L --> M{viewport 且超过 200?}
+    M -->|是| N[截断至 200]
+    M -->|否| O[提取 alerts]
+    N --> O
+    O --> P[返回 SemanticSkeleton]
 ```
 
 **可点击性检测（`isClickable()`）：**
@@ -207,6 +232,20 @@ flowchart TD
 
 1. 父子去重：若父元素的文本包含子元素的文本，移除父级（保留子级更精确的可操作元素）。原生交互标签（`a`/`button` 等）不参与父子去重。
 2. 同级去重：同一 `parent` 下相同文本的元素只保留第一个。
+3. DOM 父子关系追踪：通过 `domParentIdMap` 记录骨架元素的 DOM 父子关系，当父元素被去重时跳过其子元素的同级去重，避免误删。
+
+**页面提示提取（`extractAlerts()`）：**
+
+扫描页面上的错误/状态提示文本，写入 `SemanticSkeleton.alerts`：
+
+```mermaid
+flowchart TD
+    A[扫描 role=alert / aria-live 元素] --> B[提取可见文本]
+    C[class/id 含 error/alert/toast/notice/warning/tip] --> D[提取可见文本]
+    B --> E[去重 + 截断 <200 字符]
+    D --> E
+    E --> F[最多 5 条]
+```
 
 ### SkeletonId（骨架 ID 管理）
 
@@ -236,7 +275,7 @@ ID 格式为 `e{N}`（如 `e1`, `e2`, ...），使用模块级计数器 `idCount
 
 | 操作 | 说明 | 需要元素 |
 |------|------|----------|
-| `click` | 点击元素（完整鼠标事件序列） | 是 |
+| `click` | 点击元素（完整鼠标事件序列 + 新标签页检测） | 是 |
 | `type` | 输入文字（兼容 React/Vue 受控组件） | 是 |
 | `clear` | 清空输入框 | 是 |
 | `scroll` | 滚动页面（up/down/top/bottom） | 否 |
@@ -244,7 +283,7 @@ ID 格式为 `e{N}`（如 `e1`, `e2`, ...），使用模块级计数器 `idCount
 | `select` | 下拉框选择 | 是 |
 | `keyboard`/`press` | 键盘按键（keydown→keypress→keyup） | 否 |
 | `focus` | 聚焦元素 | 是 |
-| `hover` | 悬停元素（mouseenter + mouseover） | 是 |
+| `hover` | 悬停元素（PointerEvent + MouseEvent 完整事件链） | 是 |
 | `wait` | 等待指定毫秒数 | 否 |
 | `video` | 视频控制（play/pause/volume/mute/seek/jump/speed/fullscreen） | 是 |
 | `newTab` | 新建标签页 | 否 |
@@ -291,14 +330,15 @@ flowchart TD
     B -->|否| D
     D --> E{是 <a> 标签?}
     E -->|是| F{href 类型?}
-    F -->|空/#/javascript:| G[triggerClick 交互型链接]
+    F -->|空/#/javascript:| G[patch window.open → triggerClick]
     F -->|真实 URL| H{target 属性?}
     H -->|_self| I[window.location.href 跳转]
-    H -->|其他| J[window.open 新窗口]
-    E -->|否| G
-    G --> K[返回成功]
-    I --> K
-    J --> K
+    H -->|_blank| J[window.open 新窗口 → openedNewTab]
+    E -->|否| K[patch window.open → triggerClick]
+    G --> L{detectedNewTab?}
+    K --> L
+    L -->|是| M[openedNewTab: true]
+    L -->|否| N[openedNewTab: undefined]
 ```
 
 **triggerClick 完整事件序列：**
@@ -345,7 +385,7 @@ mousedown → focus → mouseup → click
 
 **流程：**
 
-1. 调用 `extractFullSkeleton(document)` 提取全页骨架
+1. 调用 `extractFullSkeleton(document)` 提取全页骨架（等同于 `extractSkeleton(document, 'full')`）
 2. 与视口骨架逻辑完全一致（可交互性检测 → 可见性检测 → 提取元素 → 地标标注 → iframe → 去重）
 3. 唯一区别：跳过视口边界检测，不限制元素数量
 4. 返回 JSON 字符串，AI 直接解析 elementId
@@ -367,7 +407,8 @@ sequenceDiagram
     SM->>DOM: querySelectorAll('*')
     SM->>SM: 过滤 isClickable + isElementVisible + 视口内
     SM->>SM: 去重 + 截断至 200
-    SM-->>UI: SemanticSkeleton
+    SM->>SM: extractAlerts() 提取页面提示
+    SM-->>UI: SemanticSkeleton (含 alerts)
 
     UI->>AI: 发送骨架 + 用户意图
     AI-->>UI: Command JSON
@@ -375,7 +416,8 @@ sequenceDiagram
     UI->>AE: execute(Command)
     AE->>AE: findElement() 三重定位
     AE->>DOM: 触发事件序列
-    AE-->>UI: ActionResult
+    AE->>AE: 检测 openedNewTab
+    AE-->>UI: ActionResult (含 openedNewTab)
 
     alt 元素未找到
         AE->>UI: 返回失败
@@ -431,8 +473,8 @@ src/browser/
 ├── index.ts              # 模块入口，统一导出
 ├── types.ts              # 类型定义：SkeletonElement, SemanticSkeleton, Command, ActionResult
 ├── skeleton-id.ts        # data-skeleton-id 打标工具：ensureAllSkeletonIds(), ensureSkeletonId()
-├── skeleton.ts           # 骨架管理器：SkeletonManager 类 + extractSkeleton() + extractFullSkeleton()
-├── action-executor.ts    # 指令执行引擎：ActionExecutor 类，三重定位 + 完整事件序列
+├── skeleton.ts           # 骨架管理器：SkeletonManager 类 + extractSkeleton() + extractFullSkeleton() + extractAlerts()
+├── action-executor.ts    # 指令执行引擎：ActionExecutor 类，三重定位 + 完整事件序列 + openedNewTab 检测
 ├── local-html.ts         # 全页骨架提取：extractFullPageSkeleton() 兜底机制
 ├── code-filter.ts        # 代码过滤（辅助）
 ├── translate-parser.ts   # 翻译解析器

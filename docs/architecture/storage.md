@@ -23,7 +23,7 @@ graph TB
         S3[fabPosStorage]
         S4[drawerOpenStorage]
         S5[inputHistoryStorage]
-        S6[conversationsStorageOld<br/>@deprecated]
+        S6[queuedTaskStorage]
     end
 
     subgraph WXT 框架层
@@ -64,15 +64,25 @@ graph TB
 
 `inputHistoryStorage` 存储用户输入历史，上限 100 条。采用 FIFO（先进先出）策略，超过上限时截掉头部旧记录。连续相同文本自动去重，避免重复记录。
 
-### 5. 旧会话格式迁移
+### 5. 跨标签页排队任务
 
-旧版支持多会话（`conversationsStorageOld` 存储 `Conversation[]`），新版简化为单会话（`conversationStorage` 存储 `Conversation | null`）。首次加载时自动将旧格式迁移为新格式。
+`queuedTaskStorage` 存储跨标签页续接的排队任务。当 `navigate` 或 `_blank` 点击导致页面跳转时，当前 JS 上下文可能被销毁，Pipeline 将未完成任务保存到此存储项。新标签页加载完成后读取并恢复执行。
+
+**生命周期：**
+- Pipeline 执行 click/navigate 前写入
+- 任务完成后清除（`setValue(null)`）
+- 30 秒过期保护（新标签页可能已关闭或加载失败）
+- 非持久化：用后即清，不跨浏览器重启
+
+### 6. 存储键命名规范
+
+所有存储键使用 `ai-browser-` 前缀（从旧版 `aib-` 前缀迁移），存储在 `local:` 域。
 
 ## 存储项详情
 
 ### settingsStorage — 应用设置
 
-- **键**：`local:aib-settings`
+- **键**：`local:ai-browser-settings`
 - **类型**：`AppSettings`
 - **默认值**：`DEFAULT_SETTINGS`（从 `local-config.json` 解析）
 
@@ -113,7 +123,7 @@ flowchart LR
 
 ### conversationStorage — 单会话
 
-- **键**：`local:aib-conversation`
+- **键**：`local:ai-browser-conversation`
 - **类型**：`Conversation | null`
 - **默认值**：`null`
 
@@ -144,16 +154,9 @@ interface ChatMessage {
 }
 ```
 
-### conversationsStorageOld — 旧多会话（已废弃）
-
-- **键**：`local:aib-conversations`
-- **类型**：`Conversation[]`
-- **默认值**：`[]`
-- **用途**：仅用于从旧版迁移，新代码不应使用
-
 ### fabPosStorage — 悬浮按钮位置
 
-- **键**：`local:aib-fab-pos`
+- **键**：`local:ai-browser-fab-pos`
 - **类型**：`FabPos`
 - **默认值**：`{ right: 24, bottom: 24 }`
 
@@ -166,13 +169,13 @@ interface FabPos {
 
 ### drawerOpenStorage — 抽屉展开状态
 
-- **键**：`local:aib-drawer-open`
+- **键**：`local:ai-browser-drawer-open`
 - **类型**：`boolean`
 - **默认值**：`false`
 
 ### inputHistoryStorage — 输入历史
 
-- **键**：`local:aib-input-history`
+- **键**：`local:ai-browser-input-history`
 - **类型**：`string[]`
 - **默认值**：`[]`
 - **上限**：100 条（FIFO 策略）
@@ -182,6 +185,49 @@ interface FabPos {
 2. 连续去重（与最后一条相同则跳过）
 3. 推入新记录
 4. 超过 100 条时 `splice(0, history.length - 100)` 截掉头部
+
+### queuedTaskStorage — 跨标签页排队任务
+
+- **键**：`local:aib-queued-task`
+- **类型**：`QueuedTask | null`
+- **默认值**：`null`
+
+```typescript
+interface QueuedTask {
+  originalRequest: string        // 原始用户请求
+  completedSteps: Array<{
+    action: string
+    elementId?: string
+    description?: string
+  }>                             // 已完成的步骤
+  timestamp: number              // 创建时间（用于过期检测）
+}
+```
+
+**使用场景：**
+
+```mermaid
+sequenceDiagram
+    participant P as Pipeline (原标签页)
+    participant S as queuedTaskStorage
+    participant N as Pipeline (新标签页)
+
+    Note over P: click/navigate 前
+    P->>S: setValue({originalRequest, completedSteps, timestamp})
+    P->>P: 执行 click/navigate
+
+    alt 页面跳转（JS 上下文销毁）
+        Note over N: 新标签页加载完成
+        N->>S: getValue()
+        S-->>N: QueuedTask
+        N->>N: 过期检查（30秒）
+        N->>S: setValue(null) 清除
+        N->>N: resumeQueuedTask() 继续执行
+    else 页面未跳转
+        Note over P: 500ms 后
+        P->>S: setValue(null) 清除
+    end
+```
 
 ## 数据流
 
@@ -237,23 +283,6 @@ function defineStorageSync<T>(opts: {
 - **plain 化**：写入前通过 `JSON.parse(JSON.stringify(toRaw(v)))` 去除 Vue 代理
 - **显式 flush**：提供 `flush()` 方法绕过防抖立即写入（用于关键操作）
 
-## 迁移策略
-
-### 旧多会话 → 单会话迁移
-
-```mermaid
-flowchart TD
-    A[应用启动] --> B{conversationStorage<br/>是否为 null?}
-    B -->|否| C[直接使用现有会话]
-    B -->|是| D{conversationsStorageOld<br/>是否有数据?}
-    D -->|否| E[创建新会话]
-    D -->|是| F[取最新一条会话]
-    F --> G[写入 conversationStorage]
-    G --> H[迁移完成]
-```
-
-迁移在首次加载时自动执行，旧数据保留在 `local:aib-conversations` 中不删除，确保回退兼容。
-
 ## 关键类型与接口
 
 ```typescript
@@ -279,19 +308,19 @@ interface SyncOptions<T> {
 
 // ========== 存储键映射 ==========
 
-// local:aib-settings          → AppSettings
-// local:aib-conversation      → Conversation | null
-// local:aib-conversations     → Conversation[] (@deprecated)
-// local:aib-fab-pos           → FabPos { right, bottom }
-// local:aib-drawer-open       → boolean
-// local:aib-input-history     → string[]
+// local:ai-browser-settings       → AppSettings
+// local:ai-browser-conversation   → Conversation | null
+// local:ai-browser-fab-pos        → FabPos { right, bottom }
+// local:ai-browser-drawer-open    → boolean
+// local:ai-browser-input-history  → string[]
+// local:aib-queued-task           → QueuedTask | null
 ```
 
 ## 目录结构
 
 ```
 src/storage/
-├── index.ts            # 所有存储项定义 + DEFAULT_SETTINGS
+├── index.ts            # 所有存储项定义 + DEFAULT_SETTINGS + QueuedTask 接口
 └── input-history.ts    # pushInputHistory() 输入历史管理
 
 src/utils/

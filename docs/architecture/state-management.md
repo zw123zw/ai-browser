@@ -178,7 +178,7 @@ interface Conversation {
 **核心方法**:
 
 ```typescript
-// 初始化：加载会话数据，兼容旧格式迁移
+// 初始化：加载会话数据，清理残留 streaming 消息
 async function init(): Promise<void>
 
 // 发送消息（流式）
@@ -191,8 +191,11 @@ async function send(
 // 中止当前请求
 function abort(): void
 
-// 清除当前会话历史和上下文
+// 清除当前会话历史和上下文（中断 pipeline + 清空消息）
 async function clearCurrent(): Promise<void>
+
+// 彻底重置会话（清除缓存时使用，同时清空内存状态）
+async function resetConversation(): Promise<void>
 
 // 删除单条消息
 function deleteMessage(msgId: string): void
@@ -230,7 +233,7 @@ sequenceDiagram
         Store->>Store: 累积 aiMsg.content / aiMsg.reasoning
     end
 
-    alt 正常完成
+    alt 正常完成（chunk.done 或 adapter 结束）
         Store->>Store: aiMsg.status = 'done'
     else 中止
         Store->>Store: aiMsg.status = 'aborted'
@@ -336,13 +339,12 @@ function plain<T>(v: T): T
 
 | 存储键 | 类型 | 说明 | 持久化 |
 |--------|------|------|--------|
-| `local:aib-settings` | `AppSettings` | 全局设置 | 是 |
-| `local:aib-conversation` | `Conversation \| null` | 当前会话 | 是 |
-| `local:aib-conversations` | `Conversation[]` | 旧版多会话（已废弃，仅迁移用） | 是 |
-| `local:aib-fab-pos` | `{ right: number, bottom: number }` | 悬浮按钮位置 | 是 |
-| `local:aib-drawer-open` | `boolean` | 抽屉展开状态 | 是 |
-| `local:aib-input-history` | `string[]` | 输入历史（上限 100 条） | 是 |
-| `local:aib-active-id` | `string` | 旧版活跃会话 ID（已废弃） | - |
+| `local:ai-browser-settings` | `AppSettings` | 全局设置 | 是 |
+| `local:ai-browser-conversation` | `Conversation \| null` | 当前会话 | 是 |
+| `local:ai-browser-fab-pos` | `{ right: number, bottom: number }` | 悬浮按钮位置 | 是 |
+| `local:ai-browser-drawer-open` | `boolean` | 抽屉展开状态 | 是 |
+| `local:ai-browser-input-history` | `string[]` | 输入历史（上限 100 条） | 是 |
+| `local:aib-queued-task` | `QueuedTask \| null` | 跨标签页排队任务 | 否（用后即清） |
 
 ## 错误处理
 
@@ -376,10 +378,21 @@ flowchart TD
 
 `contextCleared` 标志用于控制 `send()` 的上下文发送策略：
 
-- `clearCurrent()` 设置 `contextCleared = true`
+- `clearCurrent()` 设置 `contextCleared = true`，同时中断 pipeline 和进行中的请求
 - 下次 `send()` 时仅发送当前用户消息，不携带历史上下文
 - 发送完成后自动重置 `contextCleared = false`
 - 后续消息恢复正常上下文携带
+
+### 彻底重置会话
+
+`resetConversation()` 用于清除缓存等场景，与 `clearCurrent()` 的区别：
+
+- `clearCurrent()`: 清空消息 + 标记 contextCleared，保留会话 ID
+- `resetConversation()`: 创建全新会话对象（新 ID），重置 contextCleared
+
+### 残留 streaming 消息清理
+
+`init()` 加载会话时自动清理残留的 `streaming` 状态消息。跨标签页导航时 JS 上下文被销毁，防抖写入可能未完成，导致消息停留在 `streaming` 状态。清理逻辑将其设为 `done`。
 
 ### 流式请求错误处理
 
@@ -394,9 +407,10 @@ flowchart TD
 | 文件 | 职责 |
 |------|------|
 | `src/stores/settings.ts` | 全局设置 Store，管理 AI 配置和 UI 偏好 |
-| `src/stores/conversations.ts` | 会话 Store，管理消息发送和流式接收 |
+| `src/stores/conversations.ts` | 会话 Store，管理消息发送和流式接收、会话重置 |
 | `src/stores/voice.ts` | 语音 Store，管理语音识别状态（纯内存） |
-| `src/storage/index.ts` | 存储键定义和 Storage Item 创建 |
+| `src/storage/index.ts` | 存储键定义和 Storage Item 创建（含 queuedTaskStorage） |
 | `src/storage/input-history.ts` | 输入历史记录管理（上限 100 条，连续去重） |
 | `src/utils/storage-sync.ts` | 双向同步工具 `defineStorageSync()` 和 `plain()` |
+| `src/utils/cache.ts` | 缓存大小检查和自动清除 |
 | `src/types.ts` | 核心类型定义：AppSettings, Conversation, ChatMessage 等 |
