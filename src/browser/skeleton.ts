@@ -6,6 +6,14 @@
  *
  * 核心原则：从可视窗口的顶层容器开始，递归扫描所有子元素，
  * 只要可点击（a/button/input/有点击事件/cursor:pointer）就提取。
+ *
+ * 字段分组（对齐无障碍树）：
+ * - 身份：id/tag/role
+ * - 内容：text/label/ariaLabel/placeholder
+ * - 导航：href
+ * - 表单：inputType/value/checked/required
+ * - 状态：disabled/expanded/selected
+ * - 上下文：parent
  */
 
 import { Logger } from '@/src/utils/logger'
@@ -24,6 +32,15 @@ export type SkeletonScope = 'viewport' | 'full'
 
 /** 视口骨架最大元素数（减少 token 消耗） */
 const MAX_SKELETON_ELEMENTS = 200
+
+/** href 截断长度 */
+const MAX_HREF_LENGTH = 80
+
+/** placeholder 截断长度 */
+const MAX_PLACEHOLDER_LENGTH = 50
+
+/** value 截断长度 */
+const MAX_VALUE_LENGTH = 20
 
 /**
  * 骨架管理器
@@ -91,6 +108,7 @@ export function extractSkeleton(doc: Document, scope: SkeletonScope = 'viewport'
   const domParentIdMap = new Map<string, string>()
   const existingIds = new Map<string, boolean>()
   let scannedCount = 0
+  let totalInteractive = 0
 
   // 全量打标：同步计数器 + 给所有元素打 data-skeleton-id（含懒加载元素）
   ensureAllSkeletonIds()
@@ -113,6 +131,8 @@ export function extractSkeleton(doc: Document, scope: SkeletonScope = 'viewport'
       existingIds.set(id, true)
 
       if (!isClickable(htmlEl)) continue
+      totalInteractive++
+
       if (!isElementVisible(htmlEl)) continue
 
       // viewport 模式：检查是否在视口内；full 模式：跳过视口检测
@@ -204,26 +224,47 @@ export function extractSkeleton(doc: Document, scope: SkeletonScope = 'viewport'
     return true
   })
   // viewport 模式有元素上限，full 模式无上限
-  const final = scope === 'viewport' && filtered.length > MAX_SKELETON_ELEMENTS
-    ? filtered.slice(0, MAX_SKELETON_ELEMENTS)
-    : filtered
+  const truncated = scope === 'viewport' && filtered.length > MAX_SKELETON_ELEMENTS
+  const final = truncated ? filtered.slice(0, MAX_SKELETON_ELEMENTS) : filtered
 
   // 提取页面上的错误/状态提示文本（非交互元素，但对 AI 决策很重要）
   const alerts = extractAlerts(doc)
+
+  // 页面状态
+  const hasModal = hasModalOverlay(doc)
+  const loading = doc.readyState !== 'complete'
+  const focusedEl = doc.activeElement as HTMLElement | null
+  const focusedElement = focusedEl?.dataset?.skeletonId || undefined
 
   log.info('骨架提取完成', {
     scannedCount,
     rawCount: elements.length,
     filteredCount: filtered.length,
     finalCount: final.length,
-    truncated: filtered.length > MAX_SKELETON_ELEMENTS,
+    truncated,
     alerts: alerts.length,
+    hasModal,
+    loading,
+    focusedElement,
+    totalInteractive,
     url: doc.location.href,
     viewport: `${window.innerWidth}x${window.innerHeight}`,
     scrollY: window.scrollY,
   })
 
-  return { url: doc.location.href, title: doc.title, elements: final, alerts: alerts.length > 0 ? alerts : undefined }
+  return {
+    url: doc.location.href,
+    title: doc.title,
+    viewport: { width: window.innerWidth, height: window.innerHeight },
+    scroll: { y: window.scrollY, height: doc.documentElement.scrollHeight },
+    hasModal,
+    loading,
+    focusedElement,
+    totalInteractive,
+    truncated,
+    alerts: alerts.length > 0 ? alerts : undefined,
+    elements: final,
+  }
 }
 
 
@@ -266,6 +307,16 @@ function isClickable(el: HTMLElement): boolean {
   return false
 }
 
+/**
+ * 提取单个元素的完整字段
+ *
+ * 字段分组：
+ * 1. 身份标识：id/tag/role
+ * 2. 内容信息：text/label/ariaLabel/placeholder
+ * 3. 导航信息：href
+ * 4. 表单属性：inputType/value/checked/required
+ * 5. 交互状态：disabled/expanded/selected
+ */
 function extractElement(el: HTMLElement, id: string): SkeletonElement | null {
   const tag = el.tagName.toLowerCase()
   const text = getDirectText(el)
@@ -281,31 +332,157 @@ function extractElement(el: HTMLElement, id: string): SkeletonElement | null {
   const labelText = isFormElement && !text && !hasFormContent
     ? findAssociatedLabelText(el)
     : null
-  if (!text && !el.getAttribute('role') && !hasIcon && !hasFormContent && !labelText) return null
+  // ariaLabel 独立提取（不合并进 text）
+  const ariaLabel = el.getAttribute('aria-label') || el.getAttribute('title') || null
+  const altText = !ariaLabel ? el.querySelector('img')?.getAttribute('alt') : null
+  const ariaLabelValue = ariaLabel || altText || null
+
+  if (!text && !el.getAttribute('role') && !hasIcon && !hasFormContent && !labelText && !ariaLabelValue) return null
 
   const base: SkeletonElement = { id, tag }
 
-  // 有文字用文字，无文字但有图标子元素标记为图标按钮
+  // ── 1. 身份标识：role ──
+  const role = extractRole(el, tag)
+  if (role) base.role = role
+
+  // ── 2. 内容信息：text/label/ariaLabel ──
   if (text) {
     base.text = text
   } else if (hasFormContent) {
     // input/textarea 有 value 时显示已输入内容，让 AI 知道输入是否成功
     const val = (el as HTMLInputElement).value
     if (val) {
-      base.text = val.length > 20 ? val.slice(0, 20) + '...' : val
+      base.text = val.length > MAX_VALUE_LENGTH ? val.slice(0, MAX_VALUE_LENGTH) + '...' : val
     }
   } else if (labelText) {
     // 表单元素有关联 label 时，用 label 字段标识（不占 text，避免与 label 元素去重）
     base.label = labelText
+  } else if (hasIcon && ariaLabelValue) {
+    // 图标元素：用 ariaLabel 而非 text（语义更清晰）
+    base.ariaLabel = ariaLabelValue
   } else if (hasIcon) {
-    // 优先使用 aria-label 或 title 作为语义描述（如"头像"、"搜索"等）
-    const semanticText = el.getAttribute('aria-label') || el.getAttribute('title')
-    // 如果没有，尝试从子元素的 alt 属性获取（如 <img alt="头像">）
-    const altText = !semanticText ? el.querySelector('img')?.getAttribute('alt') : null
-    base.text = semanticText || altText || '(icon)'
+    base.text = '(icon)'
+  }
+
+  // ariaLabel 独立输出（不与 text 合并）
+  if (ariaLabelValue && !base.ariaLabel && base.text !== ariaLabelValue) {
+    base.ariaLabel = ariaLabelValue
+  }
+
+  // label 独立输出（表单元素专用）
+  if (labelText && !base.label) {
+    base.label = labelText
+  }
+
+  // placeholder
+  if (isFormElement) {
+    const ph = el.getAttribute('placeholder')
+    if (ph) base.placeholder = ph.slice(0, MAX_PLACEHOLDER_LENGTH)
+  }
+
+  // ── 3. 导航信息：href ──
+  if (tag === 'a') {
+    const href = el.getAttribute('href')
+    if (href && href !== '#' && !href.startsWith('javascript:')) {
+      try {
+        const url = new URL(href, el.baseURI)
+        base.href = url.href.slice(0, MAX_HREF_LENGTH)
+      } catch {
+        // 无效 URL 不输出
+      }
+    }
+  }
+
+  // ── 4. 表单属性：inputType/value/checked/required ──
+  if (tag === 'input') {
+    const inputEl = el as HTMLInputElement
+    const inputType = inputEl.type || 'text'
+    // checkbox/radio 用 checked 字段，不输出 inputType
+    if (inputType !== 'checkbox' && inputType !== 'radio') {
+      base.inputType = inputType
+    }
+    // value：密码框不提取（安全考虑）
+    if (inputType !== 'password' && inputEl.value) {
+      base.value = inputEl.value.slice(0, MAX_VALUE_LENGTH)
+    }
+    // checked
+    if ((inputType === 'checkbox' || inputType === 'radio') && inputEl.checked) {
+      base.checked = true
+    }
+    // required
+    if (inputEl.required || el.getAttribute('aria-required') === 'true') {
+      base.required = true
+    }
+  }
+
+  if (tag === 'textarea') {
+    const textareaEl = el as HTMLTextAreaElement
+    if (textareaEl.value) {
+      base.value = textareaEl.value.slice(0, MAX_VALUE_LENGTH)
+    }
+    if (textareaEl.required || el.getAttribute('aria-required') === 'true') {
+      base.required = true
+    }
+  }
+
+  if (tag === 'select') {
+    const selectEl = el as HTMLSelectElement
+    if (selectEl.required || el.getAttribute('aria-required') === 'true') {
+      base.required = true
+    }
+  }
+
+  // ── 5. 交互状态：disabled/expanded/selected ──
+  // disabled
+  if (isFormElement || tag === 'button') {
+    const disabled = (el as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | HTMLButtonElement).disabled
+      || el.getAttribute('aria-disabled') === 'true'
+    if (disabled) base.disabled = true
+  }
+
+  // expanded
+  const ariaExpanded = el.getAttribute('aria-expanded')
+  if (ariaExpanded === 'true' || (tag === 'details' && ((el as HTMLDetailsElement).open || el.hasAttribute('open')))) {
+    base.expanded = true
+  }
+
+  // selected
+  const ariaSelected = el.getAttribute('aria-selected')
+  if (ariaSelected === 'true' || (tag === 'option' && (el as HTMLOptionElement).selected)) {
+    base.selected = true
   }
 
   return base
+}
+
+/**
+ * 提取元素的 ARIA role
+ *
+ * 优先级：
+ * 1. 显式 role 属性
+ * 2. 语义标签自动映射
+ */
+function extractRole(el: HTMLElement, tag: string): string | undefined {
+  // 显式 role 属性
+  const explicitRole = el.getAttribute('role')
+  if (explicitRole) return explicitRole
+
+  // 语义标签自动映射（仅当与默认角色不同时输出，节省 token）
+  if (tag === 'a' && el.hasAttribute('href')) return undefined  // <a> 默认就是 link
+  if (tag === 'button') return undefined  // <button> 默认就是 button
+  if (tag === 'input') {
+    const type = (el as HTMLInputElement).type
+    if (type === 'checkbox') return undefined  // 默认 checkbox
+    if (type === 'radio') return undefined     // 默认 radio
+    if (type === 'submit' || type === 'reset') return 'button'
+    return 'textbox'
+  }
+  if (tag === 'textarea') return undefined    // 默认 textbox
+  if (tag === 'select') return 'combobox'
+  if (tag === 'summary') return 'button'
+  if (tag === 'details') return 'group'
+
+  return undefined
 }
 
 /**
@@ -323,6 +500,65 @@ function isElementVisible(el: HTMLElement): boolean {
 }
 
 /**
+ * 检测页面是否有弹窗/遮罩层阻挡交互
+ *
+ * 检测策略（按优先级）：
+ * 1. 原生 dialog[open]
+ * 2. ARIA dialog/alertdialog/aria-modal
+ * 3. 常见框架弹窗（Bootstrap/Element UI/Ant Design）
+ * 4. 通用遮罩层（面积 > 50% 视口）
+ */
+function hasModalOverlay(doc: Document): boolean {
+  // 1. 原生 dialog[open]
+  if (doc.querySelector('dialog[open]')) return true
+
+  // 2. ARIA 语义标记
+  const ariaSelectors = [
+    '[role="dialog"]',
+    '[role="alertdialog"]',
+    '[aria-modal="true"]',
+  ]
+  for (const sel of ariaSelectors) {
+    const el = doc.querySelector(sel) as HTMLElement | null
+    if (el && isElementVisible(el)) return true
+  }
+
+  // 3. 常见框架弹窗
+  const frameworkSelectors = [
+    '.modal.show',                    // Bootstrap
+    '.el-dialog__wrapper',            // Element UI
+    '.ant-modal-wrap',                // Ant Design
+    '.MuiDialog-root',               // Material UI
+    '.v-dialog--active',              // Vuetify
+  ]
+  for (const sel of frameworkSelectors) {
+    const el = doc.querySelector(sel) as HTMLElement | null
+    if (el && isElementVisible(el)) return true
+  }
+
+  // 4. 通用遮罩检测：fixed/absolute 元素覆盖大面积视口
+  const overlaySelectors = [
+    '[class*="overlay"]',
+    '[class*="mask"]',
+    '[class*="modal-backdrop"]',
+    '[class*="dialog-mask"]',
+  ]
+  for (const sel of overlaySelectors) {
+    const els = doc.querySelectorAll(sel)
+    for (const el of els) {
+      const htmlEl = el as HTMLElement
+      if (!isElementVisible(htmlEl)) continue
+      const rect = htmlEl.getBoundingClientRect()
+      if (rect.width > window.innerWidth * 0.5 && rect.height > window.innerHeight * 0.5) {
+        return true
+      }
+    }
+  }
+
+  return false
+}
+
+/**
  * 提取页面上的错误/状态提示文本
  *
  * 识别方式：
@@ -336,7 +572,6 @@ function extractAlerts(doc: Document): string[] {
     '[aria-live="assertive"]',
     '[aria-live="polite"]',
   ]
-  const ALERT_CLASS_RE = /error|alert|toast|notice|warning|tip|message|hint|validate|invalid/i
 
   const results: string[] = []
   const seen = new Set<string>()
@@ -380,9 +615,7 @@ function getDirectText(el: HTMLElement): string {
       if (childText) { text = childText; break }
     }
   }
-  if (!text) {
-    text = el.getAttribute('aria-label') || el.getAttribute('title') || ''
-  }
+  // 注意：不再 fallback 到 aria-label/title（这些走 ariaLabel 字段独立输出）
   return text.trim().slice(0, 100)
 }
 

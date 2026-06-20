@@ -9,6 +9,8 @@ export { extractFullPageSkeleton } from './local-html'
 export type {
   SkeletonElement,
   SemanticSkeleton,
+  ViewportInfo,
+  ScrollInfo,
   Command,
   ActionResult,
 } from './types'

@@ -238,12 +238,15 @@ export function buildPhase2UserMessage(
 ): string {
   return [
     `[当前请求] 用户: "${text}"`,
-    `页面骨架:\n${JSON.stringify(skeleton)}`,
+    `[页面骨架]\n${JSON.stringify(skeleton)}`,
   ].join('\n\n')
 }
 
 /**
  * 构建流式执行用户消息（每次 1 条指令）
+ *
+ * 消息结构简化：整块 skeleton JSON 替代散落拼接，
+ * AI 一次性获得完整的页面上下文（url/title/viewport/scroll/hasModal/alerts/elements）。
  */
 export function buildStreamingUserMessage(
   text: string,
@@ -274,20 +277,12 @@ export function buildStreamingUserMessage(
     parts.push(errorParts.join('\n'))
   }
 
-  // 当前页面 URL + 标题，让 AI 判断页面是否发生了变化
-  parts.push(`[当前页面] ${skeleton.url} | ${skeleton.title}`)
-
-  // 页面上的错误/状态提示（独立段落，确保 AI 看到）
-  if (skeleton.alerts?.length) {
-    parts.push(`[页面提示] ${skeleton.alerts.join(' | ')}`)
-  }
-
   if (fullSkeleton) {
     // 有全页骨架时，视口骨架是其子集，只发全页骨架
     parts.push(`[全页骨架]\n${fullSkeleton}`)
   } else {
-    // url/title/alerts 已在独立段落中展示，骨架 JSON 只发 elements
-    parts.push(`[当前页面骨架]\n${JSON.stringify(skeleton.elements)}`)
+    // 整块 skeleton JSON（含 url/title/viewport/scroll/hasModal/alerts/elements）
+    parts.push(`[页面骨架]\n${JSON.stringify(skeleton)}`)
   }
 
   if (userInputContext) {
