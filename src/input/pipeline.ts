@@ -18,6 +18,7 @@ import { SkeletonManager } from '@/src/browser/skeleton'
 import { extractFullPageSkeleton } from '@/src/browser/local-html'
 import { extractTags } from './tag-parser'
 import { PHASE2_SYSTEM_PROMPT, buildStreamingUserMessage, MODE_FIRST, MODE_STREAMING, MODE_RETRY } from './prompts'
+import { createAdapter } from '@/src/adapters'
 import { queuedTaskStorage } from '@/src/storage'
 import type { QueuedTask } from '@/src/storage'
 import type { InputContext, PipelineCallbacks } from './types'
@@ -52,6 +53,85 @@ function sleep(ms: number, signal?: AbortSignal): Promise<void> {
       reject(new DOMException('The operation was aborted.', 'AbortError'))
     }, { once: true })
   })
+}
+
+// ═══════════════════════════════════════════════
+// download 数据提取辅助函数
+// ═══════════════════════════════════════════════
+
+/** 清洗骨架：保留数据字段（text/value/href/tag/parent），去掉交互字段和空值 */
+function cleanSkeletonForExtraction(skeletonJson: string): string {
+  const skeleton = JSON.parse(skeletonJson)
+
+  const cleaned = skeleton.elements
+    // 第 1 层：过滤无数据元素
+    .filter((el: any) => {
+      const text = (el.text || '').replace(/[\s\n]/g, '')
+      if (text.length <= 1 && !el.value && !el.href && !el.label && !el.ariaLabel) return false
+      if (el.text === '(icon)') return false
+      if (el.href === '#' || el.href?.startsWith('javascript:')) return false
+      return true
+    })
+    // 第 2 层：精简字段，只保留数据字段
+    .map((el: any) => {
+      const r: Record<string, any> = {}
+      const content = el.text || el.ariaLabel || el.label
+      if (content) r.text = content
+      if (el.value) r.value = el.value
+      if (el.href && el.href !== '#' && !el.href.startsWith('javascript:')) r.href = el.href
+      if (el.tag) r.tag = el.tag
+      if (el.parent) r.parent = el.parent
+      return r
+    })
+    // 第 3 层：去重（同 parent + 同 text）
+    .filter((el: any, i: number, arr: any[]) => {
+      const key = `${el.parent}:${el.text || el.value || el.href}`
+      return arr.findIndex((e: any) => `${e.parent}:${e.text || e.value || e.href}` === key) === i
+    })
+
+  return JSON.stringify({
+    url: skeleton.url,
+    title: skeleton.title,
+    count: cleaned.length,
+    data: cleaned
+  })
+}
+
+/** 构造数据提取 prompt */
+function buildExtractPrompt(userRequest: string, cleanedSkeleton: string): string {
+  return `\`\`\`
+你是数据提取助手。根据用户请求和页面骨架数据，提取用户需要的信息。
+
+═══ 输出格式 ═══
+
+输出 [FILE:文件名.json]...[/FILE] 格式的 JSON 数据。
+JSON 必须是数组格式，每个元素是一个数据对象。
+
+═══ 示例 ═══
+
+用户请求："提取商品名称和价格"
+骨架数据：[包含商品列表的元素]
+输出：
+[FILE:商品数据.json][
+  {"name":"商品A","price":"99元"},
+  {"name":"商品B","price":"199元"}
+][/FILE]
+
+═══ 规则 ═══
+
+- 只提取用户请求的字段
+- 数据来自骨架中的 text/value/href 等字段
+- 过滤掉导航、按钮、页脚等非数据元素
+- JSON 格式必须可直接解析
+- 文件名根据用户请求自动生成
+
+\`\`\`
+
+[用户请求] ${userRequest}
+
+[页面骨架数据]
+${cleanedSkeleton}
+`
 }
 
 export interface PipelineOptions {
@@ -259,121 +339,167 @@ export class InputPipeline {
         }
       }
 
-      // ── command → 执行单条指令（优先于 need_full） ──
+      // ── command → 执行指令（支持单条 + 批量数组） ──
       // command + need_full 同时返回时：先执行 command（如输入手机号），
       // 成功后骨架会刷新，下一轮 AI 就能从新骨架找到目标（如"获取验证码"），
       // 不需要走 need_full 兜底。
       if (phase2Result.commands?.length) {
-        const cmd = phase2Result.commands[0]
-        log.info('[Phase 2] ── 执行指令 ──', {
-          action: cmd.action,
-          elementId: cmd.elementId,
-          description: cmd.description,
-          done: cmd.done,
-        })
-
-        // ★ 指令去重：和已完成的指令比较，重复则跳过执行（含 text 防止同元素不同值被误判为同一指令）
-        const cmdKey = `${cmd.action}:${cmd.url || cmd.elementId || cmd.description || ''}:${cmd.text || ''}`
-        if (completedKeys.has(cmdKey)) {
-          totalExecutions++  // 去重也计数，防止死循环
-          log.info('[Phase 2] ═══ 指令重复，跳过执行 ═══', { action: cmd.action, url: cmd.url })
-          continue
+        const cmds = phase2Result.commands
+        const isBatch = cmds.length > 1
+        if (isBatch) {
+          log.info(`[Phase 2] ── 批量执行 ${cmds.length} 条指令 ──`)
         }
 
-        callbacks.onCommandsParsed([cmd], completed.length + 1)
+        // 通知 UI（批量时只显示第一条，后续由 onCommandResult 逐条展示）
+        callbacks.onCommandsParsed([cmds[0]], completed.length + 1)
 
-        // ★ click + done:0 → 先存 queued task，再执行 click
-        // 页面跳转 → JS 上下文销毁 → setTimeout callback 不执行 → queued task 留在 storage
-        // 页面没跳 → setTimeout 触发 → 删掉 queued task → 继续执行
-        const pendingTask: QueuedTask | null = (cmd.action === 'click' && cmd.done !== 1)
-          ? {
-              originalRequest: text,
-              completedSteps: [...completed, { action: cmd.action, elementId: cmd.elementId, description: cmd.description }],
-              timestamp: Date.now(),
+        let batchStopped = false  // 批量中是否有命令触发了 break（navigate/blank/done:1）
+
+        for (const cmd of cmds) {
+          if (batchStopped) break
+
+          log.info('[Phase 2] ── 执行指令 ──', {
+            action: cmd.action,
+            elementId: cmd.elementId,
+            description: cmd.description,
+            done: cmd.done,
+          })
+
+          // ★ 指令去重
+          const cmdKey = `${cmd.action}:${cmd.url || cmd.elementId || cmd.description || ''}:${cmd.text || ''}`
+          if (completedKeys.has(cmdKey)) {
+            totalExecutions++
+            log.info('[Phase 2] ═══ 指令重复，跳过执行 ═══', { action: cmd.action, url: cmd.url })
+            continue
+          }
+
+          // ★ download → 提取页面数据，调 AI 生成文件
+          if (cmd.action === 'download') {
+            log.info('[Phase 2] ── download：提取页面数据 ──')
+            const fullSkeleton = extractFullPageSkeleton()
+            if (!fullSkeleton) {
+              callbacks.onCommandResult('download', false, '页面无可提取数据')
+              lastError = '页面无可提取数据'
+            } else {
+              try {
+                const cleaned = cleanSkeletonForExtraction(fullSkeleton)
+                const extractPrompt = buildExtractPrompt(text, cleaned)
+                const aiResult = await this.callAIForExtraction(extractPrompt)
+                callbacks.onFileOutput(aiResult)
+                completed.push({ action: cmd.action, description: cmd.description })
+                completedKeys.add(cmdKey)
+                callbacks.onCommandResult('download', true, '数据提取完成')
+                log.info('[Phase 2] ═══ download 完成 ═══')
+              } catch (err) {
+                const errMsg = err instanceof Error ? err.message : String(err)
+                callbacks.onCommandResult('download', false, errMsg)
+                lastError = `[download] ${errMsg}`
+                log.error('[Phase 2] download 失败', err)
+              }
             }
-          : null
-        if (pendingTask) {
-          await queuedTaskStorage.setValue(pendingTask)
-          log.info('[Phase 2] ── click 前置保存 queued task ──')
-        }
-
-        const result = await this.executor.execute(cmd)
-        totalExecutions++
-
-        // 延迟清除：页面跳了 → JS 销毁 → callback 不执行 → queued task 保留
-        // _blank 新开页 → 原页不销毁 → 跳过清除，让新页读到任务
-        if (pendingTask && !result.openedNewTab) {
-          setTimeout(() => {
-            queuedTaskStorage.setValue(null).catch(() => {})
-            log.info('[Phase 2] ── click 未跳转，清除 queued task ──')
-          }, 500)
-        } else if (pendingTask && result.openedNewTab) {
-          log.info('[Phase 2] ── _blank 新开页，保留 queued task 给新标签页 ──')
-          // 原标签页停止执行，由新标签页续接剩余步骤
-          completed.push({ action: cmd.action, elementId: cmd.elementId, description: cmd.description })
-          log.info('[Phase 2] ═══ _blank 新开页，原标签页停止，等待新页续接 ═══')
-          break
-        }
-
-        log.info('[Phase 2] 指令结果', {
-          action: cmd.action,
-          success: result.success,
-          message: result.message,
-        })
-
-        callbacks.onCommandResult(cmd.action, result.success, result.message)
-
-        if (result.success) {
-          completed.push({ action: cmd.action, elementId: cmd.elementId, description: cmd.description })
-          completedKeys.add(cmdKey)
-          consecutiveErrors = 0
-          lastError = ''
-          lastFailedCommand = null
-          lastFullSkeleton = null
-
-          // navigate 后等待页面加载
-          if (cmd.action === 'navigate') {
-            this.skeletonManager.invalidate()
-
-            // ★ 跨标签页续接：保存任务到 storage，新页加载后恢复
-            const task: QueuedTask = {
-              originalRequest: text,
-              completedSteps: completed.map(c => ({ action: c.action, elementId: c.elementId, description: c.description })),
-              timestamp: Date.now(),
+            totalExecutions++
+            if (cmd.done === 1) {
+              log.info('[Phase 2] ═══ done=1，任务完成 ═══')
+              batchStopped = true
             }
-            await queuedTaskStorage.setValue(task)
-            log.info('[Phase 2] ═══ navigate 成功，任务已保存到 storage ═══', { originalRequest: text, completedSteps: completed.length })
+            continue
+          }
+
+          // ★ click + done:0 → 先存 queued task，再执行 click
+          const pendingTask: QueuedTask | null = (cmd.action === 'click' && cmd.done !== 1)
+            ? {
+                originalRequest: text,
+                completedSteps: [...completed, { action: cmd.action, elementId: cmd.elementId, description: cmd.description }],
+                timestamp: Date.now(),
+              }
+            : null
+          if (pendingTask) {
+            await queuedTaskStorage.setValue(pendingTask)
+            log.info('[Phase 2] ── click 前置保存 queued task ──')
+          }
+
+          const result = await this.executor.execute(cmd)
+          totalExecutions++
+
+          // 延迟清除 queued task
+          if (pendingTask && !result.openedNewTab) {
+            setTimeout(() => {
+              queuedTaskStorage.setValue(null).catch(() => {})
+              log.info('[Phase 2] ── click 未跳转，清除 queued task ──')
+            }, 500)
+          } else if (pendingTask && result.openedNewTab) {
+            log.info('[Phase 2] ── _blank 新开页，保留 queued task 给新标签页 ──')
+            completed.push({ action: cmd.action, elementId: cmd.elementId, description: cmd.description })
+            log.info('[Phase 2] ═══ _blank 新开页，原标签页停止，等待新页续接 ═══')
+            batchStopped = true
             break
           }
 
-          // ★ done:1 → 最后一步执行成功，直接结束（不再请求 AI 确认）
-          if (cmd.done === 1) {
-            log.info('[Phase 2] ═══ done=1，任务完成 ═══')
-            break
-          }
+          log.info('[Phase 2] 指令结果', {
+            action: cmd.action,
+            success: result.success,
+            message: result.message,
+          })
 
-          // command 成功 → 跳过同响应的 need_full，等骨架刷新后下一轮处理
-          if (phase2Result.needFull) {
-            log.info('[Phase 2] → 跳过 need_full（指令执行成功，等待骨架刷新）')
-          }
+          callbacks.onCommandResult(cmd.action, result.success, result.message)
 
-          // ★ 指令执行后立即检查 abort（不等 sleep）
-          if (this.options.getSignal?.()?.aborted) {
-            log.info('[Phase 2] ═══ 指令执行后收到 abort 信号 ═══')
-            throw new DOMException('The operation was aborted.', 'AbortError')
-          }
+          if (result.success) {
+            completed.push({ action: cmd.action, elementId: cmd.elementId, description: cmd.description })
+            completedKeys.add(cmdKey)
+            consecutiveErrors = 0
+            lastError = ''
+            lastFailedCommand = null
+            lastFullSkeleton = null
 
-          // 等待页面更新（弹窗/新内容渲染），再进入下一轮提取骨架
-          await sleep(500, this.options.getSignal?.())
-          continue
-        } else {
-          lastError = `[${cmd.action}] ${result.message}`
-          lastFailedCommand = { action: cmd.action, elementId: cmd.elementId, description: cmd.description, text: cmd.text, url: cmd.url }
-          consecutiveErrors++
-          log.warn('[Phase 2] 指令执行失败', { action: cmd.action, error: lastError })
-          callbacks.onRetryMessage(`🔄 正在重试... (${totalExecutions}/${MAX_TOTAL_STEPS})`, completed.length + 1, lastFailedCommand)
-          // command 失败 → 继续检查 need_full
+            // navigate 后等待页面加载
+            if (cmd.action === 'navigate') {
+              this.skeletonManager.invalidate()
+              const task: QueuedTask = {
+                originalRequest: text,
+                completedSteps: completed.map(c => ({ action: c.action, elementId: c.elementId, description: c.description })),
+                timestamp: Date.now(),
+              }
+              await queuedTaskStorage.setValue(task)
+              log.info('[Phase 2] ═══ navigate 成功，任务已保存到 storage ═══', { originalRequest: text, completedSteps: completed.length })
+              batchStopped = true
+              break
+            }
+
+            // ★ done:1 → 最后一步执行成功，直接结束
+            if (cmd.done === 1) {
+              log.info('[Phase 2] ═══ done=1，任务完成 ═══')
+              batchStopped = true
+              break
+            }
+
+            // 等待页面更新
+            if (this.options.getSignal?.()?.aborted) {
+              log.info('[Phase 2] ═══ 指令执行后收到 abort 信号 ═══')
+              throw new DOMException('The operation was aborted.', 'AbortError')
+            }
+
+            // 批量执行时缩短等待时间（同页面操作不需要等太久）
+            await sleep(isBatch ? 200 : 500, this.options.getSignal?.())
+          } else {
+            // 失败 → 记录错误，批量时跳过继续，单条时走重试
+            lastError = `[${cmd.action}] ${result.message}`
+            lastFailedCommand = { action: cmd.action, elementId: cmd.elementId, description: cmd.description, text: cmd.text, url: cmd.url }
+            consecutiveErrors++
+            log.warn('[Phase 2] 指令执行失败', { action: cmd.action, error: lastError })
+            if (!isBatch) {
+              callbacks.onRetryMessage(`🔄 正在重试... (${totalExecutions}/${MAX_TOTAL_STEPS})`, completed.length + 1, lastFailedCommand)
+            }
+            // 批量时跳过继续，单条时走 need_full 兜底
+          }
         }
+
+        // 批量执行完成，记录汇总
+        if (isBatch && !batchStopped) {
+          log.info(`[Phase 2] ═══ 批量执行完成 ═══`, { total: cmds.length, completed: completed.length })
+        }
+
+        // navigate/blank/done:1 触发了内层 break，外层循环也要停止
+        if (batchStopped) break
       }
 
       // ── need_full → 提取全页骨架后重试 ──
@@ -429,6 +555,34 @@ export class InputPipeline {
 
     // 直接进入 Phase 2 流式执行，跳过 Phase 1
     await this.processPhase2WithRetry(task.originalRequest, callbacks, completed)
+  }
+
+  // ═══════════════════════════════════════════════
+  // 数据提取 AI 调用（download 专用）
+  // ═══════════════════════════════════════════════
+
+  private async callAIForExtraction(prompt: string): Promise<string> {
+    const settings = this.options.getSettings()
+    const modelId = this.options.getModelId?.() || settings.defaultModelId
+    const model = settings.models.find(m => m.id === modelId) || settings.models[0]
+    if (!model) throw new Error('未找到可用模型')
+
+    const adapter = createAdapter(model.provider || settings.provider)
+    const messages = [{ role: 'user' as const, content: prompt }]
+    let fullResponse = ''
+
+    await adapter.chat(
+      {
+        baseUrl: model.baseUrl || settings.baseUrl,
+        apiKey: model.apiKey || settings.apiKey,
+        modelName: model.modelName || settings.defaultModelId,
+        messages,
+        signal: this.options.getSignal?.(),
+      },
+      (chunk) => { if (chunk.delta) fullResponse += chunk.delta }
+    )
+
+    return fullResponse
   }
 
   // ═══════════════════════════════════════════════

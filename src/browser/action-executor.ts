@@ -144,22 +144,33 @@ export class ActionExecutor {
 
   // ========== 操作执行 ==========
 
-  /** 触发点击事件：完整的鼠标事件序列（mousedown → focus → mouseup → click） */
+  /** 触发点击事件：完整的 Pointer + 鼠标事件序列（pointerdown → mousedown → focus → pointerup → mouseup → click） */
   private triggerClick(el: HTMLElement): void {
     log.info('triggerClick 开始', { tag: el.tagName, className: el.className, id: el.id })
     const rect = el.getBoundingClientRect()
+    const x = rect.left + rect.width / 2
+    const y = rect.top + rect.height / 2
     const eventInit: MouseEventInit = {
       bubbles: true,
       cancelable: true,
-      clientX: rect.left + rect.width / 2,
-      clientY: rect.top + rect.height / 2,
+      clientX: x,
+      clientY: y,
       button: 0,
     }
+    const pointerEventInit: PointerEventInit = {
+      ...eventInit,
+      pointerId: 1,
+      pointerType: 'mouse',
+      isPrimary: true,
+    }
 
-    // 完整事件序列：模拟真实用户点击
-    // Element UI 的 Select/DatePicker 等组件监听 mousedown/focus，仅 el.click() 无法触发
+    // 完整事件序列：模拟真实浏览器点击
+    // PointerEvent 优先于 MouseEvent —— 现代 SPA（Vue 3、React 17+）的按钮组件
+    // 常监听 pointerdown/pointerup 而非 mousedown/mouseup，仅派发 MouseEvent 无法触发
+    el.dispatchEvent(new PointerEvent('pointerdown', pointerEventInit))
     el.dispatchEvent(new MouseEvent('mousedown', eventInit))
     el.dispatchEvent(new FocusEvent('focus', { bubbles: true }))
+    el.dispatchEvent(new PointerEvent('pointerup', pointerEventInit))
     el.dispatchEvent(new MouseEvent('mouseup', eventInit))
     el.dispatchEvent(new MouseEvent('click', eventInit))
     log.info('triggerClick 完整事件序列执行完成')

@@ -39,6 +39,7 @@ export const CAPABILITY_DOMAIN_LIST: CapabilityItem[] = [
   { id: 'select',    desc: '选择下拉框（需elementId+text）',         needSkeleton: true },
   { id: 'focus',     desc: '聚焦元素（需elementId）',                needSkeleton: true },
   { id: 'hover',     desc: '悬停元素（需elementId）',                needSkeleton: true },
+  { id: 'download',  desc: '提取页面数据并导出文件',                  needSkeleton: true },
 ]
 
 // 完整能力域列表（Phase2 用）
@@ -160,6 +161,30 @@ ${CAPABILITY_LIST}
 [command]{"action":"click","elementId":"e3","description":"登录","done":1}[/command]
 [command]{"action":"type","elementId":"e5","text":"hello","description":"输入文字","done":0}[/command]
 [command]{"action":"scroll","direction":"down","description":"向下滚动","done":1}[/command]
+
+═══ [command] 批量格式 ═══
+
+用户请求涉及多个相同操作时（批量点赞、批量填表等），返回命令数组：
+[command][
+  {"action":"click","elementId":"e10","description":"点赞第1条","done":0},
+  {"action":"click","elementId":"e15","description":"点赞第2条","done":0},
+  {"action":"click","elementId":"e20","description":"点赞第3条","done":1}
+][/command]
+
+规则：
+- 数组中最后一条的 done 设为 1，其余为 0
+- 某条失败不影响后续执行
+- 单次建议不超过 20 条
+
+═══ [command] download 格式 ═══
+
+用户请求提取页面数据时（商品列表、订单、表格、榜单等），输出：
+[command]{"action":"download","description":"提取商品名称和价格"}[/command]
+
+规则：
+- description 中写明用户要提取的字段
+- 系统自动提取页面数据并生成结构化文件
+- 不需要指定文件名，系统自动命名
 
 ═══ [need_full] ═══
 

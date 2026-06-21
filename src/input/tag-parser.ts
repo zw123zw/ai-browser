@@ -79,16 +79,26 @@ export function extractTags(rawText: string): ExtractedTags {
     result.hasAnyTag = true
   }
 
-  // [command] 提取（支持多条）— 先匹配闭合标签，匹配不到则取 [command] 后的整个 JSON 对象
+  // [command] 提取（支持单条 + 数组）— 先匹配闭合标签，匹配不到则取 [command] 后的整个 JSON
   const cmdMatches = [...rawText.matchAll(/\[command\]([\s\S]*?)\[\/command\]/g)]
   const cmdFallback = cmdMatches.length > 0 ? cmdMatches : [...rawText.matchAll(/\[command\](\{[\s\S]*\})/g)]
   if (cmdFallback.length > 0) {
     const commands: Command[] = []
     for (const m of cmdFallback) {
+      const content = m[1].trim()
       try {
-        commands.push(JSON.parse(m[1].trim()))
+        if (content.startsWith('[')) {
+          // 数组格式：[command][{...},{...}][/command]
+          const arr = JSON.parse(content)
+          if (Array.isArray(arr)) {
+            commands.push(...arr)
+          }
+        } else {
+          // 单条格式：[command]{...}[/command]
+          commands.push(JSON.parse(content))
+        }
       } catch {
-        log.warn('command JSON 解析失败', { raw: m[1].slice(0, 100) })
+        log.warn('command JSON 解析失败', { raw: content.slice(0, 100) })
       }
     }
     if (commands.length > 0) {

@@ -49,4 +49,7 @@ export interface PipelineCallbacks {
 
   /** AI 请求用户输入（返回用户输入的文本，pipeline 暂停等待） */
   onNeedInput: (prompt: string) => Promise<string>
+
+  /** download 数据提取完成，返回 AI 生成的 [FILE] 内容 */
+  onFileOutput?: (content: string) => void
 }
