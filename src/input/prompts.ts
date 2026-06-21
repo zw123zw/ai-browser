@@ -53,6 +53,25 @@ const PHASE1_CAPABILITY_LIST = CAPABILITY_DOMAIN_LIST
   .map(item => `${item.id.padEnd(12)}— ${item.desc}`)
   .join('\n')
 
+// 文件输出格式规则（Phase1 / download 共用）
+const FILE_FORMAT_RULES = `单个文件：[FILE:文件名.扩展名]内容[/FILE]
+多个文件：[FILE:a.txt]内容1[/FILE][FILE:b.csv]内容2[/FILE]
+图表（必须用 .chart）：[FILE:name.chart]ECharts option JSON[/FILE]
+
+.chart 是系统内置的图表渲染格式，直接输出 ECharts option 对象 JSON。
+系统会自动用 ECharts 渲染图表，无需生成 .vue/.html/.js 代码文件。
+多图用多文件：[FILE:饼图.chart]{"series":[{"type":"pie","data":[...]}]}[/FILE][FILE:柱状图.chart]{"series":[{"type":"bar","data":[...]}]}[/FILE]
+
+示例：
+[FILE:report.md]# 标题
+内容[/FILE]
+[FILE:data.csv]name,value
+A,10
+B,20[/FILE]
+[FILE:销售饼图.chart]{"title":{"text":"销售占比"},"series":[{"type":"pie","radius":"60%","data":[{"value":1048,"name":"搜索引擎"},{"value":735,"name":"直接访问"}]}]}[/FILE]
+[FILE:月度柱状图.chart]{"xAxis":{"type":"category","data":["1月","2月","3月"]},"yAxis":{"type":"value"},"series":[{"type":"bar","data":[120,200,150]}]}[/FILE]
+[FILE:趋势折线图.chart]{"xAxis":{"type":"category","data":["Mon","Tue","Wed","Thu","Fri"]},"yAxis":{"type":"value"},"series":[{"type":"line","data":[820,932,901,934,1290]}]}[/FILE]`
+
 // ═══════════════════════════════════════════════════════════════
 // Phase 1: 意图检测（轻量模型）
 //
@@ -85,20 +104,7 @@ ${PHASE1_CAPABILITY_LIST}
 
 ═══ 文件输出格式 ═══
 
-单个文件：[FILE:文件名.扩展名]内容[/FILE]
-多个文件：[FILE:a.txt]内容1[/FILE][FILE:b.csv]内容2[/FILE]
-图表（必须用 .chart）：[FILE:name.chart]ECharts option JSON[/FILE]
-
-.chart 是系统内置的图表渲染格式，直接输出 ECharts option 对象 JSON。
-系统会自动用 ECharts 渲染图表，无需生成 .vue/.html/.js 代码文件。
-多图用多文件：[FILE:饼图.chart]{"series":[{"type":"pie","data":[...]}]}[/FILE][FILE:柱状图.chart]{"series":[{"type":"bar","data":[...]}]}[/FILE]
-
-示例：
-[FILE:report.md]# 标题\n内容[/FILE]
-[FILE:data.csv]name,value\nA,10\nB,20[/FILE]
-[FILE:销售饼图.chart]{"title":{"text":"销售占比"},"series":[{"type":"pie","radius":"60%","data":[{"value":1048,"name":"搜索引擎"},{"value":735,"name":"直接访问"}]}]}[/FILE]
-[FILE:月度柱状图.chart]{"xAxis":{"type":"category","data":["1月","2月","3月"]},"yAxis":{"type":"value"},"series":[{"type":"bar","data":[120,200,150]}]}[/FILE]
-[FILE:趋势折线图.chart]{"xAxis":{"type":"category","data":["Mon","Tue","Wed","Thu","Fri"]},"yAxis":{"type":"value"},"series":[{"type":"line","data":[820,932,901,934,1290]}]}[/FILE]
+${FILE_FORMAT_RULES}
 
 ═══ [command] 规则 ═══
 
@@ -349,5 +355,42 @@ export function buildAutoTranslateMessage(
 
 输入：
 ${JSON.stringify(texts)}`
+}
+
+// ═══════════════════════════════════════════════════════════════
+// 数据提取 prompt（download 专用）
+// ═══════════════════════════════════════════════════════════════
+
+/** 数据提取系统提示词 */
+export const EXTRACT_SYSTEM_PROMPT = `\`\`\`
+你是数据提取助手。根据用户请求和页面骨架数据，提取用户需要的信息。
+
+═══ 输出格式 ═══
+
+输出 [FILE:文件名.json]...[/FILE] 格式的 JSON 数据。
+JSON 必须是数组格式，每个元素是一个数据对象。
+
+${FILE_FORMAT_RULES}
+
+═══ 规则 ═══
+
+- 只提取用户请求的字段
+- 数据来自骨架中的 text/value/href 等字段
+- 过滤掉导航、按钮、页脚等非数据元素
+- JSON 格式必须可直接解析
+- 文件名根据用户请求自动生成
+
+\`\`\``
+
+/**
+ * 构建数据提取用户消息
+ */
+export function buildExtractPrompt(userRequest: string, cleanedSkeleton: string): string {
+  return `${EXTRACT_SYSTEM_PROMPT}
+
+[用户请求] ${userRequest}
+
+[页面骨架数据]
+${cleanedSkeleton}`
 }
 

@@ -17,7 +17,7 @@ import { ActionExecutor } from '@/src/browser/action-executor'
 import { SkeletonManager } from '@/src/browser/skeleton'
 import { extractFullPageSkeleton } from '@/src/browser/local-html'
 import { extractTags } from './tag-parser'
-import { PHASE2_SYSTEM_PROMPT, buildStreamingUserMessage, MODE_FIRST, MODE_STREAMING, MODE_RETRY } from './prompts'
+import { PHASE2_SYSTEM_PROMPT, buildStreamingUserMessage, MODE_FIRST, MODE_STREAMING, MODE_RETRY, buildExtractPrompt } from './prompts'
 import { createAdapter } from '@/src/adapters'
 import { queuedTaskStorage } from '@/src/storage'
 import type { QueuedTask } from '@/src/storage'
@@ -95,43 +95,6 @@ function cleanSkeletonForExtraction(skeletonJson: string): string {
     count: cleaned.length,
     data: cleaned
   })
-}
-
-/** 构造数据提取 prompt */
-function buildExtractPrompt(userRequest: string, cleanedSkeleton: string): string {
-  return `\`\`\`
-你是数据提取助手。根据用户请求和页面骨架数据，提取用户需要的信息。
-
-═══ 输出格式 ═══
-
-输出 [FILE:文件名.json]...[/FILE] 格式的 JSON 数据。
-JSON 必须是数组格式，每个元素是一个数据对象。
-
-═══ 示例 ═══
-
-用户请求："提取商品名称和价格"
-骨架数据：[包含商品列表的元素]
-输出：
-[FILE:商品数据.json][
-  {"name":"商品A","price":"99元"},
-  {"name":"商品B","price":"199元"}
-][/FILE]
-
-═══ 规则 ═══
-
-- 只提取用户请求的字段
-- 数据来自骨架中的 text/value/href 等字段
-- 过滤掉导航、按钮、页脚等非数据元素
-- JSON 格式必须可直接解析
-- 文件名根据用户请求自动生成
-
-\`\`\`
-
-[用户请求] ${userRequest}
-
-[页面骨架数据]
-${cleanedSkeleton}
-`
 }
 
 export interface PipelineOptions {
