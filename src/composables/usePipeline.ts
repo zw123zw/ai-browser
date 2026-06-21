@@ -250,11 +250,17 @@ export function usePipeline() {
           })
         },
 
-        // download 数据提取完成
+        // download 数据提取完成 → 用 assistant 消息（触发 MessageItem 的 [FILE] 渲染）
         onFileOutput: (content) => {
           log.info('[回调] onFileOutput', { length: content.length, preview: content.slice(0, 100) })
-          // 从 AI 输出中提取 [FILE:xxx]...[/FILE] 标签，添加到对话中
-          addSystemMessage(content)
+          if (!convStore.conversation) return
+          convStore.conversation.messages.push({
+            id: uuid(),
+            role: 'assistant',
+            content,
+            timestamp: Date.now(),
+            status: 'done',
+          })
         },
       }
 
@@ -369,7 +375,14 @@ export function usePipeline() {
         },
         onFileOutput: (content) => {
           log.info('[恢复] onFileOutput', { length: content.length, preview: content.slice(0, 100) })
-          addSystemMessage(content)
+          if (!convStore.conversation) return
+          convStore.conversation.messages.push({
+            id: uuid(),
+            role: 'assistant',
+            content,
+            timestamp: Date.now(),
+            status: 'done',
+          })
         },
       }
 
