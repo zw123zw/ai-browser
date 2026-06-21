@@ -156,7 +156,7 @@ export function usePipeline() {
           }
         },
 
-        // Phase 1 检测到操作意图 → 更新为"执行中"状态（保留视觉反馈）
+        // Phase 1 检测到操作意图 → 标记完成（assistant 消息在 onAllCommandsDone 中创建）
         onActionDetected: () => {
           log.info('[回调] onActionDetected')
           if (currentStreamingMsg) {
@@ -178,14 +178,14 @@ export function usePipeline() {
           })
         },
 
-        // 解析到指令列表 → 替换"执行中"消息为具体指令列表
+        // 解析到指令列表 → 删除 Phase 1 的 assistant 占位消息，添加执行状态消息
         onCommandsParsed: (commands, currentStep) => {
           log.info('[回调] onCommandsParsed', {
             count: commands.length,
             currentStep,
             commands: commands.map(c => ({ action: c.action, elementId: c.elementId, description: c.description, url: c.url })),
           })
-          // 移除"正在执行操作..."占位消息
+          // 删除 Phase 1 的 assistant 占位消息（"正在执行操作..."）
           if (currentStreamingMsg && convStore.conversation) {
             const idx = convStore.conversation.messages.findIndex(m => m.id === currentStreamingMsg!.id)
             if (idx !== -1) convStore.conversation.messages.splice(idx, 1)
@@ -203,9 +203,20 @@ export function usePipeline() {
           addSystemMessage(`${icon} **${action}** — ${message}`)
         },
 
-        // 全部指令执行成功
+        // 全部指令执行成功 → 记录任务完成状态到对话历史
         onAllCommandsDone: (userText, commands) => {
           log.info('[回调] onAllCommandsDone', { commandCount: commands.length })
+          if (!convStore.conversation) return
+          const summary = commands
+            .map(c => `${c.action}${c.description ? `(${c.description})` : ''}`)
+            .join('; ')
+          convStore.conversation.messages.push({
+            id: uuid(),
+            role: 'assistant',
+            content: `已执行：${summary}`,
+            timestamp: Date.now(),
+            status: 'done',
+          })
         },
 
         // 重试消息（清理占位消息）
@@ -299,9 +310,9 @@ export function usePipeline() {
         onChatMessage: () => {},
         onCommandsParsed: (commands, currentStep) => {
           log.info('[恢复] onCommandsParsed', { count: commands.length, currentStep })
-          if (currentStreamingMsg && convStore.conversation) {
-            const idx = convStore.conversation.messages.findIndex(m => m.id === currentStreamingMsg!.id)
-            if (idx !== -1) convStore.conversation.messages.splice(idx, 1)
+          // 标记 assistant 消息完成（保留在对话历史中，不删除）
+          if (currentStreamingMsg) {
+            currentStreamingMsg.status = 'done'
             currentStreamingMsg = null
           }
           const step = currentStep || 1
@@ -313,8 +324,20 @@ export function usePipeline() {
           const icon = success ? '✅' : '❌'
           addSystemMessage(`${icon} **${action}** — ${message}`)
         },
+        // 全部指令执行成功 → 记录任务完成状态到对话历史
         onAllCommandsDone: (userText, commands) => {
           log.info('[恢复] onAllCommandsDone', { commandCount: commands.length })
+          if (!convStore.conversation) return
+          const summary = commands
+            .map(c => `${c.action}${c.description ? `(${c.description})` : ''}`)
+            .join('; ')
+          convStore.conversation.messages.push({
+            id: uuid(),
+            role: 'assistant',
+            content: `已执行：${summary}`,
+            timestamp: Date.now(),
+            status: 'done',
+          })
         },
         onRetryMessage: (message, currentStep, failedCommand) => {
           log.info('[恢复] onRetryMessage', { message, currentStep, failedCommand })
