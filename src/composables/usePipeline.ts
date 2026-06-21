@@ -19,6 +19,8 @@ import { v4 as uuid } from 'uuid'
 const log = new Logger('usePipeline')
 
 const isProcessing = ref(false)
+/** 是否处于 Phase 2 流式指令执行阶段（影响 getRecentMessages 是否包含 system 消息） */
+const isPhase2 = ref(false)
 /** AI 等待用户输入时的提示文本（null = 不在等待状态） */
 const waitingInputPrompt = ref<string | null>(null)
 /** 等待用户输入的 Promise resolve/reject 函数 */
@@ -53,10 +55,15 @@ export function usePipeline() {
     // 2. onChatStart() 创建的 assistant 占位消息
     const msgs = conv.messages.slice(0, -2)
     const maxContext = settingsStore.settings.maxContext || 50
-    // 只保留 user/assistant 消息作为上下文
-    // system 消息是任务执行过程中的状态通知（🔧 执行中、✅ 成功等），
-    // 属于任务级别的临时消息，不应作为跨任务上下文传给新任务的 AI，
-    // 否则会导致模型混淆上一个任务和当前任务的指令（指令"窜"了）
+
+    if (isPhase2.value) {
+      // Phase 2 流式指令执行中：保留 system 消息，AI 需要知道已执行步骤和结果
+      return msgs
+        .slice(-maxContext)
+        .map(m => ({ role: m.role as 'user' | 'assistant' | 'system', content: m.content.slice(0, 300) }))
+    }
+
+    // Phase 1 用户新消息：只保留 user/assistant，过滤 system（避免指令"窜"）
     return msgs
       .filter(m => m.role === 'user' || m.role === 'assistant')
       .slice(-maxContext)
@@ -112,6 +119,7 @@ export function usePipeline() {
   async function processInput(text: string): Promise<void> {
     log.info('═══ processInput 开始 ═══', { text })
     isProcessing.value = true
+    isPhase2.value = false  // 新用户输入从 Phase 1 开始
     currentStreamingMsg = null
     const ac = new AbortController()
     currentAborter = ac
@@ -156,9 +164,10 @@ export function usePipeline() {
           }
         },
 
-        // Phase 1 检测到操作意图 → 标记完成（assistant 消息在 onAllCommandsDone 中创建）
+        // Phase 1 检测到操作意图 → 标记完成，进入 Phase 2
         onActionDetected: () => {
           log.info('[回调] onActionDetected')
+          isPhase2.value = true  // 进入 Phase 2，后续 AI 请求保留 system 消息
           if (currentStreamingMsg) {
             currentStreamingMsg.content = '正在执行操作...'
             currentStreamingMsg.status = 'done'
@@ -276,6 +285,7 @@ export function usePipeline() {
         waitingInputPrompt.value = null
       }
       isProcessing.value = false
+      isPhase2.value = false  // 任务结束，回到 Phase 1 状态
       stoppedResolve?.()
       stoppedResolve = null
       const lastMsg = convStore.conversation?.messages[convStore.conversation.messages.length - 1]
@@ -294,6 +304,7 @@ export function usePipeline() {
   async function resumeQueuedTask(task: QueuedTask): Promise<void> {
     log.info('═══ resumeQueuedTask 开始 ═══', { originalRequest: task.originalRequest, completedSteps: task.completedSteps.length })
     isProcessing.value = true
+    isPhase2.value = true  // resume 直接进入 Phase 2
     currentStreamingMsg = null
     const ac = new AbortController()
     currentAborter = ac
@@ -385,6 +396,7 @@ export function usePipeline() {
         waitingInputPrompt.value = null
       }
       isProcessing.value = false
+      isPhase2.value = false  // 任务结束，回到 Phase 1 状态
       stoppedResolve?.()
       stoppedResolve = null
       const lastMsg = convStore.conversation?.messages[convStore.conversation.messages.length - 1]
