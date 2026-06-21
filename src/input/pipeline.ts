@@ -396,7 +396,7 @@ export class InputPipeline {
       callbacks.onError('操作步骤过多，已停止')
     } else if (completed.length > 0) {
       log.info('[Phase 2] ═══ 流式执行完成 ═══', { totalSteps: completed.length })
-      callbacks.onAllCommandsDone?.(text, completed.map(c => ({ action: c.action, elementId: c.elementId })))
+      callbacks.onAllCommandsDone?.(text, completed.map(c => ({ action: c.action, elementId: c.elementId, description: c.description })))
     }
   }
 
