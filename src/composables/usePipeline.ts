@@ -21,6 +21,8 @@ const log = new Logger('usePipeline')
 const isProcessing = ref(false)
 /** 是否处于 Phase 2 流式指令执行阶段（影响 getRecentMessages 是否包含 system 消息） */
 const isPhase2 = ref(false)
+/** 当前任务在 messages 数组中的起始索引（用于区分当前任务和历史任务的 system 消息） */
+let taskStartIdx = 0
 /** AI 等待用户输入时的提示文本（null = 不在等待状态） */
 const waitingInputPrompt = ref<string | null>(null)
 /** 等待用户输入的 Promise resolve/reject 函数 */
@@ -53,18 +55,20 @@ export function usePipeline() {
     // 排除当前轮次的两条消息：
     // 1. ChatPanel 预先 push 的用户消息
     // 2. onChatStart() 创建的 assistant 占位消息
-    const msgs = conv.messages.slice(0, -2)
+    const allMsgs = conv.messages.slice(0, -2)
     const maxContext = settingsStore.settings.maxContext || 50
 
     if (isPhase2.value) {
-      // Phase 2 流式指令执行中：保留 system 消息，AI 需要知道已执行步骤和结果
-      return msgs
+      // Phase 2：只返回当前任务的消息（包含 system），不返回历史任务的 system
+      const currentTaskMsgs = allMsgs.slice(taskStartIdx)
+      return currentTaskMsgs
         .slice(-maxContext)
         .map(m => ({ role: m.role as 'user' | 'assistant' | 'system', content: m.content.slice(0, 300) }))
     }
 
-    // Phase 1 用户新消息：只保留 user/assistant，过滤 system（避免指令"窜"）
-    return msgs
+    // Phase 1：只返回历史任务的 user/assistant（不含当前任务的 system）
+    const historyMsgs = allMsgs.slice(0, taskStartIdx)
+    return historyMsgs
       .filter(m => m.role === 'user' || m.role === 'assistant')
       .slice(-maxContext)
       .map(m => ({ role: m.role as 'user' | 'assistant', content: m.content.slice(0, 300) }))
@@ -120,6 +124,8 @@ export function usePipeline() {
     log.info('═══ processInput 开始 ═══', { text })
     isProcessing.value = true
     isPhase2.value = false  // 新用户输入从 Phase 1 开始
+    // 记录当前任务起始位置（此时 user 消息已由 ChatPanel push，assistant 占位还未创建）
+    taskStartIdx = (convStore.conversation?.messages.length ?? 1) - 1
     currentStreamingMsg = null
     const ac = new AbortController()
     currentAborter = ac
@@ -305,6 +311,7 @@ export function usePipeline() {
     log.info('═══ resumeQueuedTask 开始 ═══', { originalRequest: task.originalRequest, completedSteps: task.completedSteps.length })
     isProcessing.value = true
     isPhase2.value = true  // resume 直接进入 Phase 2
+    taskStartIdx = convStore.conversation?.messages.length ?? 0
     currentStreamingMsg = null
     const ac = new AbortController()
     currentAborter = ac
