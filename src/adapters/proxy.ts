@@ -121,6 +121,13 @@ export async function proxyFetchStream(
     requestId = response.requestId;
     log.debug(`→ [stream] 已启动 requestId=${requestId}`)
 
+    // ★ 如果在 requestId 赋值前就已经 abort，立即拒绝
+    if (aborted || options.signal?.aborted) {
+      log.info(`⊘ [stream] ${url} 已中止（请求启动前）`)
+      chrome.runtime.sendMessage({ type: 'abort-stream', requestId }).catch(() => {});
+      throw new DOMException('The operation was aborted.', 'AbortError');
+    }
+
     // 注册监听器（在 sendMessage 之后但在流数据到达之前）
     chrome.runtime.onMessage.addListener(chunkListener);
 

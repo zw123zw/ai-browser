@@ -816,8 +816,9 @@ describe('功能 5: 提示词管理功能', () => {
       expect(PHASE2_SYSTEM_PROMPT).toContain('1=用户请求的操作已执行')
     })
 
-    it('步骤 4: 验证包含 end 规则', () => {
-      expect(PHASE2_SYSTEM_PROMPT).toContain('end 规则')
+    it('步骤 4: 验证 done:1 自动结束', () => {
+      expect(PHASE2_SYSTEM_PROMPT).toContain('done:1')
+      expect(PHASE2_SYSTEM_PROMPT).toContain('任务自动结束')
     })
   })
 
@@ -1082,13 +1083,14 @@ describe('功能 6: 完整业务流程测试', () => {
     })
   })
 
-  describe('场景 6.7: 任务完成 → end 指令', () => {
-    it('步骤 1: Phase 2 返回 end', () => {
-      const aiOutput = '[command]{"action":"end","description":"任务完成"}[/command]'
+  describe('场景 6.7: 任务完成 → done:1 自动结束', () => {
+    it('步骤 1: done:1 指令可被解析', () => {
+      const aiOutput = '[command]{"action":"click","elementId":"e3","description":"登录","done":1}[/command]'
       const tags = extractTags(aiOutput)
 
       expect(tags.commands).toHaveLength(1)
-      expect(tags.commands![0].action).toBe('end')
+      expect(tags.commands![0].action).toBe('click')
+      expect(tags.commands![0].done).toBe(1)
     })
   })
 })

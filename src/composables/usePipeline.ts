@@ -46,19 +46,10 @@ export function usePipeline() {
   let stoppedResolve: (() => void) | null = null
 
   function getRecentMessages(): Array<{ role: 'user' | 'assistant' | 'system'; content: string }> {
-    const conv = convStore.conversation
-    if (!conv) return []
-    // 排除当前轮次的两条消息：
-    // 1. ChatPanel 预先 push 的用户消息
-    // 2. onChatStart() 创建的 assistant 占位消息
-    // 这样 callAI() 不会将历史中的当前用户消息与当前输入重复，
-    // 且无历史时 validMsgCount === 0，正确走 system prompt 拼接逻辑
-    const msgs = conv.messages.slice(0, -2)
-    const maxContext = settingsStore.settings.maxContext || 50
-    return msgs
-      .filter(m => m.role === 'user' || m.role === 'assistant' || m.role === 'system')
-      .slice(-maxContext)
-      .map(m => ({ role: m.role as 'user' | 'assistant' | 'system', content: m.content.slice(0, 300) }))
+    // 不传对话历史给 AI，避免跨任务上下文污染（指令"窜"）。
+    // Phase 2 的多步上下文通过 completed 数组 + [已完成] 标签传递，
+    // 页面状态通过骨架传递，不需要对话历史。
+    return []
   }
 
   function getPipeline(): InputPipeline {
@@ -201,20 +192,9 @@ export function usePipeline() {
           addSystemMessage(`${icon} **${action}** — ${message}`)
         },
 
-        // 全部指令执行成功 → 存为 assistant 消息，让 AI 知道已执行过什么
+        // 全部指令执行成功
         onAllCommandsDone: (userText, commands) => {
-          if (!convStore.conversation) return
-          const summary = commands
-            .map(c => `${c.action}${c.description ? `(${c.description})` : ''}${c.url ? ` → ${c.url}` : ''}`)
-            .join('; ')
-          convStore.conversation.messages.push({
-            id: uuid(),
-            role: 'assistant',
-            content: `已执行: ${summary}`,
-            timestamp: Date.now(),
-            status: 'done',
-          })
-          log.info('[回调] onAllCommandsDone → assistant 消息已存入对话历史', { summary })
+          log.info('[回调] onAllCommandsDone', { commandCount: commands.length })
         },
 
         // 重试消息（清理占位消息）
@@ -276,7 +256,13 @@ export function usePipeline() {
       isProcessing.value = false
       stoppedResolve?.()
       stoppedResolve = null
-      log.info('═══ processInput 结束 ═══')
+      const lastMsg = convStore.conversation?.messages[convStore.conversation.messages.length - 1]
+      log.info('═══ processInput 结束 ═══', {
+        isProcessing: isProcessing.value,
+        lastMsgRole: lastMsg?.role,
+        lastMsgStatus: lastMsg?.status,
+        lastMsgPreview: lastMsg?.content?.slice(0, 50),
+      })
     }
   }
 
@@ -297,16 +283,7 @@ export function usePipeline() {
         onChatEnd: () => {},
         onActionDetected: () => {
           log.info('[恢复] onActionDetected')
-          if (!convStore.conversation) return
-          currentStreamingMsg = reactive<ChatMessage>({
-            id: uuid(),
-            role: 'assistant',
-            content: '正在恢复跨页面操作...',
-            reasoning: '',
-            timestamp: Date.now(),
-            status: 'streaming',
-          })
-          convStore.conversation.messages.push(currentStreamingMsg)
+          // 不向用户展示"正在恢复跨页面操作..."，直接由后续 onCommandsParsed 处理
         },
         onChatMessage: () => {},
         onCommandsParsed: (commands, currentStep) => {
@@ -326,18 +303,7 @@ export function usePipeline() {
           addSystemMessage(`${icon} **${action}** — ${message}`)
         },
         onAllCommandsDone: (userText, commands) => {
-          if (!convStore.conversation) return
-          const summary = commands
-            .map(c => `${c.action}${c.description ? `(${c.description})` : ''}${c.url ? ` → ${c.url}` : ''}`)
-            .join('; ')
-          convStore.conversation.messages.push({
-            id: uuid(),
-            role: 'assistant',
-            content: `已执行: ${summary}`,
-            timestamp: Date.now(),
-            status: 'done',
-          })
-          log.info('[恢复] onAllCommandsDone', { summary })
+          log.info('[恢复] onAllCommandsDone', { commandCount: commands.length })
         },
         onRetryMessage: (message, currentStep, failedCommand) => {
           log.info('[恢复] onRetryMessage', { message, currentStep, failedCommand })
@@ -387,7 +353,13 @@ export function usePipeline() {
       isProcessing.value = false
       stoppedResolve?.()
       stoppedResolve = null
-      log.info('═══ resumeQueuedTask 结束 ═══')
+      const lastMsg = convStore.conversation?.messages[convStore.conversation.messages.length - 1]
+      log.info('═══ resumeQueuedTask 结束 ═══', {
+        isProcessing: isProcessing.value,
+        lastMsgRole: lastMsg?.role,
+        lastMsgStatus: lastMsg?.status,
+        lastMsgPreview: lastMsg?.content?.slice(0, 50),
+      })
     }
   }
 
@@ -408,9 +380,19 @@ export function usePipeline() {
     currentAborter?.abort()
     // 清除跨标签页排队任务，阻止后续标签页继续执行
     queuedTaskStorage.setValue(null).catch(() => {})
-    // 如果 pipeline 正在运行，等它真正结束
+    // 如果 pipeline 正在运行，等它真正结束（超时 3 秒兜底，防止挂死）
     if (isProcessing.value) {
-      return new Promise<void>(resolve => { stoppedResolve = resolve })
+      return new Promise<void>(resolve => {
+        stoppedResolve = resolve
+        setTimeout(() => {
+          if (isProcessing.value) {
+            log.warn('abort 超时，强制重置 isProcessing')
+            isProcessing.value = false
+            stoppedResolve = null
+            resolve()
+          }
+        }, 3000)
+      })
     }
     return Promise.resolve()
   }

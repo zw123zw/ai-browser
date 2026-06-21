@@ -280,22 +280,12 @@ export class InputPipeline {
           continue
         }
 
-        // ★ end 指令 → AI 确认任务完成，结束执行
-        if (cmd.action === 'end') {
-          if (completed.length === 0) {
-            log.warn('[Phase 2] ═══ end 被拒绝：未执行过任何指令 ═══')
-            continue
-          }
-          log.info('[Phase 2] ═══ end 指令，任务完成 ═══', { totalSteps: completed.length })
-          break
-        }
-
         callbacks.onCommandsParsed([cmd], completed.length + 1)
 
         // ★ click + done:0 → 先存 queued task，再执行 click
         // 页面跳转 → JS 上下文销毁 → setTimeout callback 不执行 → queued task 留在 storage
         // 页面没跳 → setTimeout 触发 → 删掉 queued task → 继续执行
-        const pendingTask: QueuedTask | null = (cmd.action === 'click')
+        const pendingTask: QueuedTask | null = (cmd.action === 'click' && cmd.done !== 1)
           ? {
               originalRequest: text,
               completedSteps: [...completed, { action: cmd.action, elementId: cmd.elementId, description: cmd.description }],
@@ -345,7 +335,7 @@ export class InputPipeline {
           if (cmd.action === 'navigate') {
             this.skeletonManager.invalidate()
 
-            // ★ 跨标签页续接：保存任务到 storage，新页加载后由 AI 验证
+            // ★ 跨标签页续接：保存任务到 storage，新页加载后恢复
             const task: QueuedTask = {
               originalRequest: text,
               completedSteps: completed.map(c => ({ action: c.action, elementId: c.elementId, description: c.description })),
@@ -356,9 +346,10 @@ export class InputPipeline {
             break
           }
 
-          // ★ done:1 → 不停止，继续循环让 AI 看到新骨架后决定是否 end
+          // ★ done:1 → 最后一步执行成功，直接结束（不再请求 AI 确认）
           if (cmd.done === 1) {
-            log.info('[Phase 2] ── done=1，继续验证 ──')
+            log.info('[Phase 2] ═══ done=1，任务完成 ═══')
+            break
           }
 
           // command 成功 → 跳过同响应的 need_full，等骨架刷新后下一轮处理
