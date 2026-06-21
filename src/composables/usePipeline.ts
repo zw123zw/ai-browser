@@ -46,10 +46,21 @@ export function usePipeline() {
   let stoppedResolve: (() => void) | null = null
 
   function getRecentMessages(): Array<{ role: 'user' | 'assistant' | 'system'; content: string }> {
-    // 不传对话历史给 AI，避免跨任务上下文污染（指令"窜"）。
-    // Phase 2 的多步上下文通过 completed 数组 + [已完成] 标签传递，
-    // 页面状态通过骨架传递，不需要对话历史。
-    return []
+    const conv = convStore.conversation
+    if (!conv) return []
+    // 排除当前轮次的两条消息：
+    // 1. ChatPanel 预先 push 的用户消息
+    // 2. onChatStart() 创建的 assistant 占位消息
+    const msgs = conv.messages.slice(0, -2)
+    const maxContext = settingsStore.settings.maxContext || 50
+    // 只保留 user/assistant 消息作为上下文
+    // system 消息是任务执行过程中的状态通知（🔧 执行中、✅ 成功等），
+    // 属于任务级别的临时消息，不应作为跨任务上下文传给新任务的 AI，
+    // 否则会导致模型混淆上一个任务和当前任务的指令（指令"窜"了）
+    return msgs
+      .filter(m => m.role === 'user' || m.role === 'assistant')
+      .slice(-maxContext)
+      .map(m => ({ role: m.role as 'user' | 'assistant', content: m.content.slice(0, 300) }))
   }
 
   function getPipeline(): InputPipeline {
