@@ -663,21 +663,19 @@ export class InputPipeline {
 
     const tags = extractTags(fullResponse)
 
-    // 流式模式：只取第一条指令
-    const firstCommand = tags.commands?.slice(0, 1)
-
     log.info('[流式] 标签提取', {
-      hasCommand: !!firstCommand?.length,
-      action: firstCommand?.[0]?.action,
-      elementId: firstCommand?.[0]?.elementId,
-      description: firstCommand?.[0]?.description,
-      done: firstCommand?.[0]?.done,
+      hasCommand: !!tags.commands?.length,
+      commandCount: tags.commands?.length || 0,
+      action: tags.commands?.[0]?.action,
+      elementId: tags.commands?.[0]?.elementId,
+      description: tags.commands?.[0]?.description,
+      done: tags.commands?.[0]?.done,
       hasNeedFull: !!tags.needFull,
       hasNeedInput: !!tags.needInput,
     })
 
     return {
-      commands: firstCommand,
+      commands: tags.commands,
       needFull: tags.needFull,
       needInput: tags.needInput,
       rawAiOutput: fullResponse,
