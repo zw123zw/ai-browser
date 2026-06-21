@@ -367,8 +367,7 @@ export const EXTRACT_SYSTEM_PROMPT = `\`\`\`
 
 ═══ 输出格式 ═══
 
-输出 [FILE:文件名.json]...[/FILE] 格式的 JSON 数据。
-JSON 必须是数组格式，每个元素是一个数据对象。
+输出 [FILE:文件名.扩展名]...[/FILE] 格式的数据。
 
 ${FILE_FORMAT_RULES}
 
@@ -377,8 +376,11 @@ ${FILE_FORMAT_RULES}
 - 只提取用户请求的字段
 - 数据来自骨架中的 text/value/href 等字段
 - 过滤掉导航、按钮、页脚等非数据元素
-- JSON 格式必须可直接解析
 - 文件名根据用户请求自动生成
+- 用户要求 excel/xlsx → 文件扩展名用 .xlsx（系统自动转换）
+- 用户要求 csv → 文件扩展名用 .csv
+- 用户要求 json → 文件扩展名用 .json，内容为 JSON 数组
+- 未指定格式 → 默认用 .xlsx
 
 \`\`\``
 

@@ -57,43 +57,105 @@ function sleep(ms: number, signal?: AbortSignal): Promise<void> {
 
 // ═══════════════════════════════════════════════
 // download 数据提取辅助函数
+//
+// 注意：download 用独立的提取逻辑，不用骨架系统。
+// 骨架系统只提取可交互元素（按钮/链接/输入框），用于操作决策。
+// download 需要提取所有有内容的元素（表格 td、列表 li、段落 p 等）。
 // ═══════════════════════════════════════════════
 
-/** 清洗骨架：保留数据字段（text/value/href/tag/parent），去掉交互字段和空值 */
-function cleanSkeletonForExtraction(skeletonJson: string): string {
-  const skeleton = JSON.parse(skeletonJson)
+/**
+ * 从 DOM 提取所有有文本内容的元素（不关心是否可交互）
+ * 与骨架提取的区别：骨架只提取 clickable 元素，这里提取所有有内容的元素
+ */
+function extractDataElements(): Array<{ tag: string; text: string; parent?: string; href?: string }> {
+  const results: Array<{ tag: string; text: string; parent?: string; href?: string }> = []
+  const seen = new Set<string>()
 
-  const cleaned = skeleton.elements
-    // 第 1 层：过滤无数据元素
-    .filter((el: any) => {
-      const text = (el.text || '').replace(/[\s\n]/g, '')
-      if (text.length <= 1 && !el.value && !el.href && !el.label && !el.ariaLabel) return false
-      if (el.text === '(icon)') return false
-      if (el.href === '#' || el.href?.startsWith('javascript:')) return false
-      return true
+  // 提取所有有文本内容的元素
+  const allElements = document.body.querySelectorAll('*')
+  for (const el of allElements) {
+    const htmlEl = el as HTMLElement
+    const tag = htmlEl.tagName.toLowerCase()
+
+    // 跳过脚本/样式/隐藏元素
+    if (['script', 'style', 'noscript', 'svg', 'path', 'br', 'hr'].includes(tag)) continue
+    if (htmlEl.offsetParent === null && htmlEl.style.position !== 'fixed') continue
+
+    // 获取直接文本内容（不包含子元素的文本）
+    const directText = getDirectText(htmlEl).trim()
+    if (directText.length <= 1) continue
+
+    // 去重
+    const key = `${tag}:${directText.slice(0, 50)}`
+    if (seen.has(key)) continue
+    seen.add(key)
+
+    const item: { tag: string; text: string; parent?: string; href?: string } = {
+      tag,
+      text: directText.slice(0, 200),
+    }
+
+    // 链接
+    if (tag === 'a') {
+      const href = htmlEl.getAttribute('href')
+      if (href && href !== '#' && !href.startsWith('javascript:')) {
+        item.href = href
+      }
+    }
+
+    // 父级区域
+    const parent = findDataParent(htmlEl)
+    if (parent) item.parent = parent
+
+    results.push(item)
+  }
+
+  return results
+}
+
+/** 获取元素的直接文本（不包含子元素的文本） */
+function getDirectText(el: HTMLElement): string {
+  let text = ''
+  for (const node of el.childNodes) {
+    if (node.nodeType === Node.TEXT_NODE) {
+      text += node.textContent || ''
+    }
+  }
+  // 如果没有直接文本，用全部文本（处理没有子元素的情况）
+  if (text.trim().length === 0) {
+    text = el.textContent || ''
+  }
+  return text
+}
+
+/** 找到数据元素的父级区域（表格/列表/主内容区） */
+function findDataParent(el: HTMLElement): string | undefined {
+  let current = el.parentElement
+  while (current) {
+    const tag = current.tagName.toLowerCase()
+    if (['table', 'thead', 'tbody', 'tr', 'ul', 'ol', 'dl', 'main', 'article', 'section'].includes(tag)) {
+      return tag
+    }
+    current = current.parentElement
+  }
+  return undefined
+}
+
+/** 清洗数据元素：去掉无意义的，保留有内容的 */
+function cleanDataForExtraction(elements: ReturnType<typeof extractDataElements>): string {
+  const cleaned = elements
+    .filter(el => {
+      // 过滤纯空白/纯标点
+      const text = el.text.replace(/[\s\n.,;:!?，。；：！？]/g, '')
+      return text.length > 0
     })
-    // 第 2 层：精简字段，只保留数据字段
-    .map((el: any) => {
-      const r: Record<string, any> = {}
-      const content = el.text || el.ariaLabel || el.label
-      if (content) r.text = content
-      if (el.value) r.value = el.value
-      if (el.href && el.href !== '#' && !el.href.startsWith('javascript:')) r.href = el.href
-      if (el.tag) r.tag = el.tag
-      if (el.parent) r.parent = el.parent
-      return r
-    })
-    // 第 3 层：去重（同 parent + 同 text）
-    .filter((el: any, i: number, arr: any[]) => {
-      const key = `${el.parent}:${el.text || el.value || el.href}`
-      return arr.findIndex((e: any) => `${e.parent}:${e.text || e.value || e.href}` === key) === i
-    })
+    .slice(0, 500)  // 限制数量，避免 token 过多
 
   return JSON.stringify({
-    url: skeleton.url,
-    title: skeleton.title,
+    url: location.href,
+    title: document.title,
     count: cleaned.length,
-    data: cleaned
+    data: cleaned,
   })
 }
 
@@ -339,13 +401,14 @@ export class InputPipeline {
           // ★ download → 提取页面数据，调 AI 生成文件
           if (cmd.action === 'download') {
             log.info('[Phase 2] ── download：提取页面数据 ──')
-            const fullSkeleton = extractFullPageSkeleton()
-            if (!fullSkeleton) {
+            const dataElements = extractDataElements()
+            if (dataElements.length === 0) {
               callbacks.onCommandResult('download', false, '页面无可提取数据')
               lastError = '页面无可提取数据'
             } else {
               try {
-                const cleaned = cleanSkeletonForExtraction(fullSkeleton)
+                log.info('[Phase 2] download 提取到元素', { count: dataElements.length })
+                const cleaned = cleanDataForExtraction(dataElements)
                 const extractPrompt = buildExtractPrompt(text, cleaned)
                 const aiResult = await this.callAIForExtraction(extractPrompt)
                 callbacks.onFileOutput(aiResult)
@@ -364,6 +427,7 @@ export class InputPipeline {
             if (cmd.done === 1) {
               log.info('[Phase 2] ═══ done=1，任务完成 ═══')
               batchStopped = true
+              break
             }
             continue
           }
