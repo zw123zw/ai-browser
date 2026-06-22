@@ -12,8 +12,10 @@ import type { Command, ActionResult } from './types'
 const log = new Logger('ActionExecutor')
 
 // ═══════════════════════════════════════════════
-// 自动滚动状态（全局单例，跨 ActionExecutor 实例共享）
+// 自动滚动状态（持久化到 chrome.storage.local，跨页面/标签页共享）
 // ═══════════════════════════════════════════════
+
+const AUTO_SCROLL_KEY = 'local:ai-browser-auto-scroll'
 
 const autoScroll = {
   running: false,
@@ -21,6 +23,77 @@ const autoScroll = {
   animationId: 0,
   container: null as Window | Element | null,
   wheelListener: null as ((e: WheelEvent) => void) | null,
+}
+
+/** 保存自动滚动状态到 storage */
+function saveAutoScrollState(active: boolean): void {
+  try {
+    if (active) {
+      chrome.storage.local.set({ [AUTO_SCROLL_KEY]: true })
+    } else {
+      chrome.storage.local.remove(AUTO_SCROLL_KEY)
+    }
+  } catch { /* storage 可能不可用 */ }
+}
+
+/** 检查 storage 中是否有自动滚动状态，有则恢复 */
+function restoreAutoScrollIfActive(): void {
+  try {
+    chrome.storage.local.get(AUTO_SCROLL_KEY, (result) => {
+      if (result[AUTO_SCROLL_KEY] && !autoScroll.running) {
+        startAutoScrollInternal()
+      }
+    })
+  } catch { /* storage 可能不可用 */ }
+}
+
+/** 内部启动自动滚动（供 restore 调用） */
+function startAutoScrollInternal(): void {
+  if (autoScroll.running) return
+  const container = getScrollableContainer()
+  autoScroll.running = true
+  autoScroll.paused = false
+  autoScroll.container = container
+
+  const speed = 1
+  const tick = () => {
+    if (!autoScroll.running) return
+    if (!autoScroll.paused) {
+      const info = getScrollInfo(container)
+      if (info.current >= info.max - 1) {
+        stopAutoScroll()
+        log.info('自动滚动到底部，停止')
+        return
+      }
+      scrollContainer(container, speed)
+    }
+    autoScroll.animationId = requestAnimationFrame(tick)
+  }
+  autoScroll.animationId = requestAnimationFrame(tick)
+
+  autoScroll.wheelListener = (e: WheelEvent) => {
+    if (!autoScroll.running) return
+    if (e.deltaY < 0) {
+      if (!autoScroll.paused) {
+        autoScroll.paused = true
+        log.info('滚轮向上，自动滚动暂停')
+      }
+    } else if (e.deltaY > 0 && autoScroll.paused) {
+      autoScroll.paused = false
+      log.info('滚轮向下，自动滚动恢复')
+    }
+  }
+  window.addEventListener('wheel', autoScroll.wheelListener, { passive: true })
+  log.info('自动滚动开始', { container: container === window ? 'window' : (container as Element)?.tagName })
+}
+
+// 页面加载时检查并恢复自动滚动
+if (typeof chrome !== 'undefined' && chrome.storage) {
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', restoreAutoScrollIfActive)
+  } else {
+    restoreAutoScrollIfActive()
+  }
 }
 
 /** 获取最近的可滚动容器（从目标元素向上查找） */
@@ -92,6 +165,7 @@ function stopAutoScroll(): void {
   autoScroll.running = false
   autoScroll.paused = false
   autoScroll.container = null
+  saveAutoScrollState(false)
 }
 
 export class ActionExecutor {
@@ -461,46 +535,8 @@ export class ActionExecutor {
       if (autoScroll.running) {
         return { success: false, message: '自动滚动已在运行中' }
       }
-      const container = getScrollableContainer()
-      autoScroll.running = true
-      autoScroll.paused = false
-      autoScroll.container = container
-
-      const speed = 1 // 每帧滚动像素（~60px/秒，适合阅读速度）
-      const tick = () => {
-        if (!autoScroll.running) return
-        if (!autoScroll.paused) {
-          const info = getScrollInfo(container)
-          if (info.current >= info.max - 1) {
-            // 到底自动停止
-            stopAutoScroll()
-            log.info('自动滚动到底部，停止')
-            return
-          }
-          scrollContainer(container, speed)
-        }
-        autoScroll.animationId = requestAnimationFrame(tick)
-      }
-      autoScroll.animationId = requestAnimationFrame(tick)
-
-      // wheel 监听：向上暂停，向下恢复
-      autoScroll.wheelListener = (e: WheelEvent) => {
-        if (!autoScroll.running) return
-        if (e.deltaY < 0) {
-          // 滚轮向上 → 暂停
-          if (!autoScroll.paused) {
-            autoScroll.paused = true
-            log.info('滚轮向上，自动滚动暂停')
-          }
-        } else if (e.deltaY > 0 && autoScroll.paused) {
-          // 滚轮向下 → 恢复
-          autoScroll.paused = false
-          log.info('滚轮向下，自动滚动恢复')
-        }
-      }
-      window.addEventListener('wheel', autoScroll.wheelListener, { passive: true })
-
-      log.info('自动滚动开始', { container: container === window ? 'window' : (container as Element)?.tagName })
+      startAutoScrollInternal()
+      saveAutoScrollState(true)
       return { success: true, message: '开始自动滚动' }
     }
 

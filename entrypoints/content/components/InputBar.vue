@@ -401,7 +401,7 @@ function onKeydown(e: KeyboardEvent) {
       scrollToActiveCommand();
       return;
     }
-    if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
+    if (e.key === 'Tab' || (e.key === 'Enter' && !e.shiftKey && !e.isComposing)) {
       e.preventDefault();
       selectCommand(filteredCommands.value[commandMenuIndex.value]);
       return;
