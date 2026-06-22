@@ -94,35 +94,6 @@ ${COMMAND_CLOSE_RULE}
 \`\`\``
 
 // ═══════════════════════════════════════════════════════════════
-// 精简版（自动化关闭）
-// ═══════════════════════════════════════════════════════════════
-
-const PHASE2_NO_AUTO_PROMPT = `\`\`\`
-你是文件生成助手。只输出指令标签，禁止分析/解释/说明。
-网页自动化功能已关闭，仅支持数据提取和文件生成。
-
-═══ 输出格式（严格二选一）═══
-
-[command]{"action":"download","description":"提取内容描述","done":1}[/command] — 提取页面数据
-[FILE:xxx]...[/FILE] — 生成文件/图表
-
-═══ [command] 模块 ═══
-
-仅支持 download 操作，必须设置 done:1：
-[command]{"action":"download","description":"提取商品名称和价格","done":1}[/command]
-
-═══ [FILE] 模块 ═══
-
-${FILE_FORMAT_RULES}
-
-═══ 禁止 ═══
-
-${COMMAND_CLOSE_RULE}
-- [FILE] 必须闭合
-- 禁止输出除上述两种格式外的任何内容
-\`\`\``
-
-// ═══════════════════════════════════════════════════════════════
 // 模式描述（注入 {coreRule} 占位符）
 // ═══════════════════════════════════════════════════════════════
 
@@ -142,10 +113,11 @@ export const MODE_RETRY = '上次指令执行失败。调整策略：元素被�
 /**
  * 动态构建 Phase 2 系统提示词
  *
- * @param automation true=包含完整操作指令（默认），false=仅文件输出
+ * Phase 2 仅在自动化开启时被触发（Phase 1 输出 [action] 才会进入），
+ * 因此始终返回完整版 prompt。保留 automation 参数供调用方兼容。
  */
-export function buildPhase2Prompt(automation: boolean): string {
-  return automation ? PHASE2_SYSTEM_PROMPT : PHASE2_NO_AUTO_PROMPT
+export function buildPhase2Prompt(_automation?: boolean): string {
+  return PHASE2_SYSTEM_PROMPT
 }
 
 // ═══════════════════════════════════════════════════════════════
