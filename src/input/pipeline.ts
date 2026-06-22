@@ -802,6 +802,7 @@ export class InputPipeline {
     log.info(`[流式] 历史消息 ${validMsgCount} 条`)
 
     let fullResponse = ''
+    let reasoningResponse = ''
     try {
       await adapter.chat(
         {
@@ -813,6 +814,7 @@ export class InputPipeline {
         },
         (chunk) => {
           if (chunk.delta) fullResponse += chunk.delta
+          if (chunk.reasoningDelta) reasoningResponse += chunk.reasoningDelta
         },
       )
     } catch (error) {

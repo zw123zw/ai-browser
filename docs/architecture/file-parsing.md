@@ -65,8 +65,8 @@ parseFile(file)
 | 类型 | 解析器 | 库 | 大小限制 | 输出 |
 |------|--------|-----|---------|------|
 | image | `parseImage` | FileReader | 20 MB | base64 dataUrl，content 为空 |
-| text | `parseText` | FileReader | 2 MB（截断到 100KB） | UTF-8 文本 |
-| code | `parseText` | FileReader | 2 MB（截断到 100KB） | UTF-8 文本 + lang 标识 |
+| text | `parseText` | FileReader | 2 MB（截断到 500KB） | UTF-8 文本 |
+| code | `parseText` | FileReader | 2 MB（截断到 500KB） | UTF-8 文本 + lang 标识 |
 | pdf | `parsePdf` | pdfjs-dist | 10 MB | 提取的文字，失败返回占位符 |
 | word | `parseWord` | mammoth | 10 MB | 提取的文字，失败返回占位符 |
 | excel | `parseExcel` | xlsx | 10 MB | CSV 文字，失败返回占位符 |

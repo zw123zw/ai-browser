@@ -172,7 +172,7 @@ async function addFiles(files: File[]) {
   }
 
   if (truncationCount > 0) {
-    toast.warning(`${truncationCount} 个文件内容过长，已自动截断至 100KB`);
+    toast.warning(`${truncationCount} 个文件内容过长，已自动截断至 500KB`);
   }
 
   setDraftAttachments(newAttachments);

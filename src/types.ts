@@ -19,7 +19,7 @@ export interface Attachment {
   content?: string;
   /** 代码语言标识（用于语法高亮） */
   lang?: string;
-  /** 内容是否被截断（超过 100KB） */
+  /** 内容是否被截断（超过 500KB） */
   truncated?: boolean;
 }
 

@@ -23,9 +23,9 @@ export function removeFromFileCache(attachmentId: string): void {
   originalFileCache.delete(attachmentId);
 }
 
-/** 文本内容最大 100KB（约 25000 中文字） */
-export const MAX_TEXT_CONTENT_SIZE = 100 * 1024;
-/** 文本文件最大 2MB（读取后截断到 100KB） */
+/** 文本内容最大 500KB（约 125000 中文字） */
+export const MAX_TEXT_CONTENT_SIZE = 500 * 1024;
+/** 文本文件最大 2MB（读取后截断到 500KB） */
 const MAX_TEXT_FILE_SIZE = 2 * 1024 * 1024;
 /** 二进制文件（PDF/Office）最大 10MB */
 export const MAX_BINARY_FILE_SIZE = 10 * 1024 * 1024;

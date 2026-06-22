@@ -49,48 +49,78 @@ async function onSend(payload: { text: string; attachments: import('@/src/types'
   messageListRef.value?.jumpToBottom();
 
   // AI 正在等待用户输入 → 提供输入继续执行
-  if (pipeline.waitingInputPrompt.value && !payload.attachments.length && !payload.reasoning) {
-    log.info('提供 AI 请求的输入', { text: payload.text.slice(0, 50) });
-    pipeline.provideInput(payload.text);
+  if (pipeline.waitingInputPrompt.value) {
+    let inputText = payload.text;
+
+    // 如果有附件，提取内容拼接到输入中
+    if (payload.attachments.length > 0) {
+      const fileContents = payload.attachments
+        .filter(a => a.content)
+        .map(a => `[文件: ${a.name}]\n${a.content}`)
+        .join('\n\n');
+
+      if (fileContents) {
+        inputText = inputText
+          ? `${inputText}\n\n${fileContents}`
+          : fileContents;
+      }
+    }
+
+    log.info('提供 AI 请求的输入', { text: inputText.slice(0, 100) });
+    pipeline.provideInput(inputText);
     return;
   }
 
-  // 纯文本（无附件、无深度思考）→ 走流水线（指令检测）
-  if (!payload.attachments.length && !payload.reasoning) {
-    log.info('走流水线处理', { text: payload.text.slice(0, 50) });
-    // 添加用户消息到会话
-    convStore.conversation.messages.push({
-      id: Date.now().toString(),
-      role: 'user',
-      content: payload.text,
-      timestamp: Date.now(),
-      status: 'done',
-    });
-    convStore.conversation.updatedAt = Date.now();
-    if (convStore.conversation.title === '新对话') {
-      convStore.conversation.title = payload.text.slice(0, 20);
-    }
-    // 记录输入历史（跳过纯文件消息）
-    if (payload.text.trim()) {
-      pushInputHistory(payload.text.trim());
-    }
+  // 构建用户消息（包括附件内容）
+  let userMessage = payload.text;
 
-    try {
-      await pipeline.processInput(payload.text);
-    } catch (e: any) {
-      toast.error(e?.message || '处理失败');
+  // 如果有附件，提取内容拼接到用户消息中
+  if (payload.attachments.length > 0) {
+    const fileContents = payload.attachments
+      .filter(a => a.content)
+      .map(a => `[文件: ${a.name}]\n${a.content}`)
+      .join('\n\n');
+
+    if (fileContents) {
+      userMessage = userMessage
+        ? `${userMessage}\n\n${fileContents}`
+        : fileContents;
     }
-    return;
   }
 
-  // 有附件或深度思考 → 走普通 LLM 聊天
-  const text = payload.reasoning
-    ? `[请按深度思考的方式作答，先给出完整推理过程，再给出最终答案]\n\n${payload.text}`
-    : payload.text;
+  // 深度思考 → 添加前缀
+  if (payload.reasoning) {
+    userMessage = `[请按深度思考的方式作答，先给出完整推理过程，再给出最终答案]\n\n${userMessage}`;
+  }
+
+  log.info('走流水线处理', { text: userMessage.slice(0, 100) });
+
+  // 添加用户消息到会话
+  // content 只存用户原文，不存附件内容（历史消息不带附件，避免占用过多 token）
+  // attachments 存结构化元数据，供 UI 渲染文件卡片
+  // userMessage（合并后的完整文本）只传给 processInput，当前轮次 AI 能看到
+  convStore.conversation.messages.push({
+    id: Date.now().toString(),
+    role: 'user',
+    content: payload.text,
+    attachments: payload.attachments.length ? payload.attachments : undefined,
+    timestamp: Date.now(),
+    status: 'done',
+    reasoningEnabled: payload.reasoning,
+  });
+  convStore.conversation.updatedAt = Date.now();
+  if (convStore.conversation.title === '新对话') {
+    convStore.conversation.title = payload.text.slice(0, 20);
+  }
+  // 记录输入历史（跳过纯文件消息）
+  if (payload.text.trim()) {
+    pushInputHistory(payload.text.trim());
+  }
+
   try {
-    await convStore.send(text, payload.attachments, payload.reasoning);
+    await pipeline.processInput(userMessage, payload.reasoning);
   } catch (e: any) {
-    toast.error(e?.message || '发送失败');
+    toast.error(e?.message || '处理失败');
   }
 }
 

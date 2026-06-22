@@ -410,11 +410,41 @@ export class ActionExecutor {
     return { success: true, message: '点击成功' }
   }
 
-  /** 输入：focus → 设置值 → 触发 input/change 事件（兼容 React/Vue） */
+  /** 输入：focus → 设置值 → 触发 input/change 事件（兼容 React/Vue/各种编辑器） */
   private async executeType(el: HTMLElement, text: string): Promise<ActionResult> {
     el.focus()
     el.dispatchEvent(new FocusEvent('focus', { bubbles: true }))
 
+    // 1. CodeMirror 编辑器
+    const cmElement = el.closest('.CodeMirror') as HTMLElement & { CodeMirror?: { setValue: (v: string) => void } }
+    if (cmElement?.CodeMirror) {
+      cmElement.CodeMirror.setValue(text)
+      return { success: true, message: `输入成功: ${text}` }
+    }
+
+    // 2. Monaco 编辑器
+    const monacoElement = el.closest('.monaco-editor') as HTMLElement & { __editor?: { setValue: (v: string) => void } }
+    if (monacoElement?.__editor) {
+      monacoElement.__editor.setValue(text)
+      return { success: true, message: `输入成功: ${text}` }
+    }
+
+    // 3. Ace 编辑器
+    const aceElement = el.closest('.ace_editor') as HTMLElement & { env?: { editor?: { session?: { setValue: (v: string) => void } } } }
+    if (aceElement?.env?.editor?.session) {
+      aceElement.env.editor.session.setValue(text)
+      return { success: true, message: `输入成功: ${text}` }
+    }
+
+    // 4. contenteditable 元素（Quill/TinyMCE/CKEditor/ProseMirror/TipTap 等）
+    if (el.getAttribute('contenteditable') === 'true' || el.isContentEditable) {
+      // 选中所有内容，然后插入新文本
+      document.execCommand('selectAll', false, undefined)
+      document.execCommand('insertText', false, text)
+      return { success: true, message: `输入成功: ${text}` }
+    }
+
+    // 5. 标准 input/textarea
     if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
       // 使用 nativeInputValueSetter 绕过 React/Vue 受控组件
       const proto = el instanceof HTMLInputElement

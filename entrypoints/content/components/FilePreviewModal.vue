@@ -252,7 +252,7 @@ function triggerDownload(url: string, name: string) {
           <line x1="12" y1="9" x2="12" y2="13" />
           <line x1="12" y1="17" x2="12.01" y2="17" />
         </svg>
-        <span>内容过长，已截断至 100KB。完整内容已发送给 AI。</span>
+        <span>内容过长，已截断至 500KB。截断后的内容将发送给 AI。</span>
       </div>
     </div>
   </div>

@@ -107,7 +107,7 @@ export function usePipeline() {
   /**
    * 处理用户输入
    */
-  async function processInput(text: string): Promise<void> {
+  async function processInput(text: string, reasoning?: boolean): Promise<void> {
     log.info('═══ processInput 开始 ═══', { text })
     isProcessing.value = true
     currentStreamingMsg = null
@@ -128,6 +128,7 @@ export function usePipeline() {
             reasoning: '',
             timestamp: Date.now(),
             status: 'streaming',
+            reasoningEnabled: reasoning,
           })
           convStore.conversation.messages.push(currentStreamingMsg)
           convStore.conversation.updatedAt = Date.now()
