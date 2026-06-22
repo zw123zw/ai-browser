@@ -23,10 +23,24 @@ ${FILE_FORMAT_RULES}
 ★ 骨架数据就是当前页面的实际内容，每个元素的 text/value/href 字段包含真实数据。
 ★ 如果骨架中确实找不到用户要的数据，直接说明"未找到"，不要编造。
 
+═══ 数据字段说明 ═══
+
+- text: 元素文本内容
+- href: 链接地址（仅 a 标签）
+- src: 图片地址（仅 img 标签，type=image）
+- alt: 图片描述（仅 img 标签，type=image）
+- row/col: 表格单元格位置（仅 td/th 标签）
+- type: 元素类型（text/image/code）
+- parent: 父级区域（table/tbody/tr/ul/ol/main/article 等）
+
 ═══ 提取规则 ═══
 
 - 只提取用户请求的字段
-- 数据来自骨架元素的 text/value/href 等字段
+- 数据来自骨架元素的 text/value/href/src/alt 等字段
+- 图片：使用 ![alt](src) 格式嵌入 markdown
+- 链接：使用 [text](href) 格式嵌入 markdown
+- 表格：根据 row/col 重建表格结构
+- 代码块：完整保留，不要截断
 - 过滤掉导航、按钮、页脚等非数据元素
 - 文件名根据用户请求自动生成
 - 用户要求 word/docx → 文件扩展名用 .docx

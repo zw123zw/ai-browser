@@ -67,8 +67,20 @@ function sleep(ms: number, signal?: AbortSignal): Promise<void> {
  * 从 DOM 提取所有有文本内容的元素（不关心是否可交互）
  * 与骨架提取的区别：骨架只提取 clickable 元素，这里提取所有有内容的元素
  */
-function extractDataElements(): Array<{ tag: string; text: string; parent?: string; href?: string }> {
-  const results: Array<{ tag: string; text: string; parent?: string; href?: string }> = []
+interface DataElement {
+  tag: string
+  text: string
+  parent?: string
+  href?: string
+  src?: string
+  alt?: string
+  row?: number
+  col?: number
+  type?: 'text' | 'image' | 'code'
+}
+
+function extractDataElements(): DataElement[] {
+  const results: DataElement[] = []
   const seen = new Set<string>()
 
   // 提取所有有文本内容的元素
@@ -81,6 +93,20 @@ function extractDataElements(): Array<{ tag: string; text: string; parent?: stri
     if (['script', 'style', 'noscript', 'svg', 'path', 'br', 'hr'].includes(tag)) continue
     if (htmlEl.offsetParent === null && htmlEl.style.position !== 'fixed') continue
 
+    // 图片提取（不需要文本内容）
+    if (tag === 'img') {
+      const src = htmlEl.getAttribute('src')
+      const alt = htmlEl.getAttribute('alt') || ''
+      if (src && !src.startsWith('data:')) {
+        const key = `img:${src.slice(0, 100)}`
+        if (!seen.has(key)) {
+          seen.add(key)
+          results.push({ tag, text: alt || '[图片]', src, alt, type: 'image' })
+        }
+      }
+      continue
+    }
+
     // 获取直接文本内容（不包含子元素的文本）
     const directText = getDirectText(htmlEl).trim()
     if (directText.length <= 1) continue
@@ -90,16 +116,28 @@ function extractDataElements(): Array<{ tag: string; text: string; parent?: stri
     if (seen.has(key)) continue
     seen.add(key)
 
-    const item: { tag: string; text: string; parent?: string; href?: string } = {
-      tag,
-      text: directText.slice(0, 200),
-    }
+    const item: DataElement = { tag, text: directText, type: 'text' }
 
     // 链接
     if (tag === 'a') {
       const href = htmlEl.getAttribute('href')
       if (href && href !== '#' && !href.startsWith('javascript:')) {
         item.href = href
+      }
+    }
+
+    // 代码块完整保留
+    if (tag === 'pre' || tag === 'code') {
+      item.text = htmlEl.textContent || directText
+      item.type = 'code'
+    }
+
+    // 表格单元格保留位置信息
+    if (tag === 'td' || tag === 'th') {
+      const row = htmlEl.closest('tr')
+      if (row && row.parentElement) {
+        item.row = Array.from(row.parentElement.children).indexOf(row)
+        item.col = Array.from(row.children).indexOf(htmlEl)
       }
     }
 
@@ -145,6 +183,8 @@ function findDataParent(el: HTMLElement): string | undefined {
 function cleanDataForExtraction(elements: ReturnType<typeof extractDataElements>): string {
   const cleaned = elements
     .filter(el => {
+      // 图片和代码块直接保留
+      if (el.type === 'image' || el.type === 'code') return true
       // 过滤纯空白/纯标点
       const text = el.text.replace(/[\s\n.,;:!?，。；：！？]/g, '')
       return text.length > 0
