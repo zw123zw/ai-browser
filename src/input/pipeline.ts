@@ -17,7 +17,7 @@ import { ActionExecutor } from '@/src/browser/action-executor'
 import { SkeletonManager } from '@/src/browser/skeleton'
 import { extractFullPageSkeleton } from '@/src/browser/local-html'
 import { extractTags } from './tag-parser'
-import { PHASE2_SYSTEM_PROMPT, buildPhase2Prompt, buildStreamingUserMessage, MODE_FIRST, MODE_STREAMING, MODE_RETRY, buildExtractPrompt } from './prompts'
+import { PHASE2_SYSTEM_PROMPT, buildPhase2Prompt, buildStreamingUserMessage, MODE_FIRST, MODE_STREAMING, MODE_RETRY, buildExtractPrompt, buildSummarizePrompt } from './prompts'
 import { createAdapter } from '@/src/adapters'
 import { queuedTaskStorage } from '@/src/storage'
 import type { QueuedTask } from '@/src/storage'
@@ -157,6 +157,29 @@ function cleanDataForExtraction(elements: ReturnType<typeof extractDataElements>
     count: cleaned.length,
     data: cleaned,
   })
+}
+
+/**
+ * 提取页面全文（用于 summarize）
+ *
+ * 与 extractDataElements 的区别：
+ * - extractDataElements 返回结构化 JSON（用于 download 生成文件）
+ * - extractPageText 返回纯文本（用于 summarize 发给 AI 分析）
+ *
+ * 提取策略：用 innerText 获取页面可见文本（保留换行和段落结构）。
+ */
+function extractPageText(): string {
+  // innerText 自动过滤 script/style/hidden 元素，保留可见文本和换行
+  const text = document.body.innerText
+
+  return [
+    `页面标题: ${document.title}`,
+    `页面URL: ${location.href}`,
+    '',
+    '--- 页面正文 ---',
+    '',
+    text,
+  ].join('\n').slice(0, 15000) // 限制 15000 字符，避免 token 过多
 }
 
 export interface PipelineOptions {
@@ -433,6 +456,42 @@ export class InputPipeline {
             continue
           }
 
+          // ★ summarize → 提取页面全文，调 AI 分析总结，输出聊天消息
+          if (cmd.action === 'summarize') {
+            log.info('[Phase 2] ── summarize：提取页面全文 ──')
+            const pageText = extractPageText()
+            if (pageText.length < 50) {
+              callbacks.onCommandResult('summarize', false, '页面内容过少')
+              lastError = '页面内容过少'
+            } else {
+              try {
+                log.info('[Phase 2] summarize 提取到文本', { length: pageText.length })
+                const summarizePrompt = buildSummarizePrompt(text, pageText)
+                const aiResult = await this.callAIForSummarize(summarizePrompt)
+                // 创建新消息并输出总结
+                callbacks.onChatStart()
+                callbacks.onChatDelta(aiResult)
+                callbacks.onChatEnd()
+                completed.push({ action: cmd.action, description: cmd.description })
+                completedKeys.add(cmdKey)
+                callbacks.onCommandResult('summarize', true, '分析完成')
+                log.info('[Phase 2] ═══ summarize 完成 ═══')
+              } catch (err) {
+                const errMsg = err instanceof Error ? err.message : String(err)
+                callbacks.onCommandResult('summarize', false, errMsg)
+                lastError = `[summarize] ${errMsg}`
+                log.error('[Phase 2] summarize 失败', err)
+              }
+            }
+            totalExecutions++
+            if (cmd.done === 1) {
+              log.info('[Phase 2] ═══ done=1，任务完成 ═══')
+              batchStopped = true
+              break
+            }
+            continue
+          }
+
           // ★ click + done:0 → 先存 queued task，再执行 click
           const pendingTask: QueuedTask | null = (cmd.action === 'click' && cmd.done !== 1)
             ? {
@@ -590,6 +649,34 @@ export class InputPipeline {
   // ═══════════════════════════════════════════════
 
   private async callAIForExtraction(prompt: string): Promise<string> {
+    const settings = this.options.getSettings()
+    const modelId = this.options.getModelId?.() || settings.defaultModelId
+    const model = settings.models.find(m => m.id === modelId) || settings.models[0]
+    if (!model) throw new Error('未找到可用模型')
+
+    const adapter = createAdapter(model.provider || settings.provider)
+    const messages = [{ role: 'user' as const, content: prompt }]
+    let fullResponse = ''
+
+    await adapter.chat(
+      {
+        baseUrl: model.baseUrl || settings.baseUrl,
+        apiKey: model.apiKey || settings.apiKey,
+        modelName: model.modelName || settings.defaultModelId,
+        messages,
+        signal: this.options.getSignal?.(),
+      },
+      (chunk) => { if (chunk.delta) fullResponse += chunk.delta }
+    )
+
+    return fullResponse
+  }
+
+  // ═══════════════════════════════════════════════
+  // 页面分析 AI 调用（summarize 专用）
+  // ═══════════════════════════════════════════════
+
+  private async callAIForSummarize(prompt: string): Promise<string> {
     const settings = this.options.getSettings()
     const modelId = this.options.getModelId?.() || settings.defaultModelId
     const model = settings.models.find(m => m.id === modelId) || settings.models[0]

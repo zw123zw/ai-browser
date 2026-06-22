@@ -67,6 +67,13 @@ ${CAPABILITY_LIST}
 [command]{"action":"download","description":"提取商品名称和价格","done":1}[/command]
 - ★ download 是一次性操作，必须 done:1，系统自动提取页面数据并生成文件
 
+═══ summarize 操作 ═══
+
+分析总结当前页面内容：
+[command]{"action":"summarize","description":"分析总结这个页面","done":1}[/command]
+- ★ summarize 是一次性操作，必须 done:1，系统提取页面全文并 AI 分析，结果作为聊天消息返回
+- 用户说"总结页面"、"分析这个页面"、"概括页面内容"等 → 输出 summarize
+
 ═══ [need_full] / [need_input] ═══
 
 [need_full] — 单独输出，不需要闭合。系统返回全页骨架后直接用 elementId 生成 [command]

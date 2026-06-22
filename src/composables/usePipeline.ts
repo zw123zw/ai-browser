@@ -154,12 +154,14 @@ export function usePipeline() {
           }
         },
 
-        // Phase 1 检测到操作意图 → 标记完成
+        // Phase 1 检测到操作意图 → 标记完成并清空引用
+        // 清空引用后，后续 onChatDelta 会创建新消息（summarize 等场景需要）
         onActionDetected: () => {
           log.info('[回调] onActionDetected')
           if (currentStreamingMsg) {
             currentStreamingMsg.content = '正在执行操作...'
             currentStreamingMsg.status = 'done'
+            currentStreamingMsg = null
           }
         },
 

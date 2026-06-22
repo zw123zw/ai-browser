@@ -32,6 +32,7 @@ export const CAPABILITY_DOMAIN_LIST: CapabilityItem[] = [
   { id: 'focus',     desc: '聚焦元素（需elementId）',                needSkeleton: true },
   { id: 'hover',     desc: '悬停元素（需elementId）',                needSkeleton: true },
   { id: 'download',  desc: '提取页面数据并导出文件',                  needSkeleton: true },
+  { id: 'summarize', desc: '提取页面全文并AI分析总结',                needSkeleton: true },
 ]
 
 // 完整能力域列表（Phase2 用）

@@ -7,7 +7,7 @@ const SUGGESTIONS = [
   { icon: '⚡', title: '网页操作', desc: '滚动到页面底部' },
   { icon: '🎙️', title: '语音助手', desc: '帮我打开百度，搜索 AI 新闻' },
   { icon: '📄', title: '报告生成', desc: '给我输出一份 Vue3 的 Word 报告' },
-  { icon: '📊', title: '内容分析', desc: '总结这个页面的要点' },
+  { icon: '📊', title: '内容分析', desc: '分析总结这个页面' },
 ];
 
 const greeting = computed(() => {
