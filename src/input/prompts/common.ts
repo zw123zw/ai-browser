@@ -10,29 +10,30 @@
 
 export interface CapabilityItem {
   id: string
+  title: string
   desc: string
   needSkeleton: boolean
 }
 
 export const CAPABILITY_DOMAIN_LIST: CapabilityItem[] = [
-  { id: 'navigate',  desc: '打开URL（需url）',                     needSkeleton: false },
-  { id: 'scroll',    desc: '滚动页面（direction:up/down/top/bottom/auto/stop/pause/resume）', needSkeleton: false },
-  { id: 'newTab',    desc: '打开新标签页',                          needSkeleton: false },
-  { id: 'closeTab',  desc: '关闭当前标签页',                        needSkeleton: false },
-  { id: 'nextTab',   desc: '切换下一个标签页',                      needSkeleton: false },
-  { id: 'prevTab',   desc: '切换上一个标签页',                      needSkeleton: false },
-  { id: 'switchTab', desc: '切换到指定标签页（需tabQuery）',          needSkeleton: false },
-  { id: 'keyboard',  desc: '模拟按键（需key:Enter/Escape/Tab）',     needSkeleton: false },
-  { id: 'wait',      desc: '等待（需ms）',                          needSkeleton: false },
-  { id: 'search',    desc: '全网搜索（需text）',                    needSkeleton: true },
-  { id: 'click',     desc: '点击元素（需elementId或description）',   needSkeleton: true },
-  { id: 'type',      desc: '输入文字（需elementId+text）',           needSkeleton: true },
-  { id: 'clear',     desc: '清空输入框（需elementId）',              needSkeleton: true },
-  { id: 'select',    desc: '选择下拉框（需elementId+text）',         needSkeleton: true },
-  { id: 'focus',     desc: '聚焦元素（需elementId）',                needSkeleton: true },
-  { id: 'hover',     desc: '悬停元素（需elementId）',                needSkeleton: true },
-  { id: 'download',  desc: '提取页面数据并导出文件',                  needSkeleton: true },
-  { id: 'summarize', desc: '提取页面全文并AI分析总结',                needSkeleton: true },
+  { id: 'navigate',  title: '打开网址',   desc: '打开URL（需url）',                     needSkeleton: false },
+  { id: 'scroll',    title: '滚动页面',   desc: '滚动页面（direction:up/down/top/bottom/auto/stop/pause/resume）', needSkeleton: false },
+  { id: 'newTab',    title: '新标签页',   desc: '打开新标签页',                          needSkeleton: false },
+  { id: 'closeTab',  title: '关闭标签页', desc: '关闭当前标签页',                        needSkeleton: false },
+  { id: 'nextTab',   title: '下一个标签', desc: '切换下一个标签页',                      needSkeleton: false },
+  { id: 'prevTab',   title: '上一个标签', desc: '切换上一个标签页',                      needSkeleton: false },
+  { id: 'switchTab', title: '切换标签页', desc: '切换到指定标签页（需tabQuery）',          needSkeleton: false },
+  { id: 'keyboard',  title: '模拟按键',   desc: '模拟按键（需key:Enter/Escape/Tab）',     needSkeleton: false },
+  { id: 'wait',      title: '等待',       desc: '等待（需ms）',                          needSkeleton: false },
+  { id: 'search',    title: '全网搜索',   desc: '全网搜索（需text）',                    needSkeleton: true },
+  { id: 'click',     title: '点击元素',   desc: '点击元素（需elementId或description）',   needSkeleton: true },
+  { id: 'type',      title: '输入文字',   desc: '输入文字（需elementId+text）',           needSkeleton: true },
+  { id: 'clear',     title: '清空输入框', desc: '清空输入框（需elementId）',              needSkeleton: true },
+  { id: 'select',    title: '选择下拉框', desc: '选择下拉框（需elementId+text）',         needSkeleton: true },
+  { id: 'focus',     title: '聚焦元素',   desc: '聚焦元素（需elementId）',                needSkeleton: true },
+  { id: 'hover',     title: '悬停元素',   desc: '悬停元素（需elementId）',                needSkeleton: true },
+  { id: 'download',  title: '提取数据',   desc: '提取页面数据并导出文件',                  needSkeleton: true },
+  { id: 'summarize', title: '分析总结',   desc: '提取页面全文并AI分析总结',                needSkeleton: true },
 ]
 
 // 完整能力域列表（Phase2 用）

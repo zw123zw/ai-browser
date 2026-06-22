@@ -229,7 +229,19 @@ export class InputPipeline {
       return
     }
 
-    // 2. Phase 1 — 流式输出，但检测到操作标签时清掉内容，用户只看到"思考中"
+    // 2. /command 指令 → 跳过 Phase 1，直接进 Phase 2
+    if (routeResult.type === 'capability') {
+      log.info('[路由] → 能力域指令，跳过 Phase 1', { command: routeResult.command, args: routeResult.args })
+      const commandText = routeResult.args
+        ? `${routeResult.command} ${routeResult.args}`
+        : routeResult.command
+      callbacks.onChatStart()
+      callbacks.onActionDetected()
+      await this.processPhase2WithRetry(commandText, callbacks)
+      return
+    }
+
+    // 3. Phase 1 — 流式输出，但检测到操作标签时清掉内容，用户只看到"思考中"
     callbacks.onChatStart()
     let phase1StreamedContent = ''
     let phase1ActionTagDetected = false

@@ -13,6 +13,7 @@ export interface InputContext {
 /** 输入路由结果 */
 export type InputResult =
   | { type: 'builtin'; command: string; args: string }
+  | { type: 'capability'; command: string; args: string }
   | { type: 'ai' }
 
 /** 流水线回调 */

@@ -155,6 +155,7 @@ function scrollToBottom() {
         :models="settingsStore.settings.models"
         :is-processing="pipeline.isProcessing.value"
         :waiting-input-prompt="pipeline.waitingInputPrompt.value"
+        :automation-enabled="settingsStore.settings.automationEnabled !== false"
         @send="onSend"
         @abort="onAbort"
         @switch-voice="emit('switch-voice')"

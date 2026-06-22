@@ -6,6 +6,7 @@ import { getFileTypeIcon, formatFileSize } from '@/src/utils/file-type';
 import { useToast } from '@/src/composables/useToast';
 import { Logger } from '@/src/utils/logger';
 import { inputHistoryStorage } from '@/src/storage';
+import { CAPABILITY_DOMAIN_LIST } from '@/src/input/prompts/common';
 import type { Conversation, ModelConfig, Attachment } from '@/src/types';
 
 /** 图片 OCR 进度追踪（key = attachment id） */
@@ -18,6 +19,7 @@ const props = defineProps<{
   models: ModelConfig[];
   isProcessing?: boolean;
   waitingInputPrompt?: string | null;
+  automationEnabled?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -35,6 +37,21 @@ const textarea = ref<HTMLTextAreaElement | null>(null);
 const localAttachments = ref<Attachment[]>([]);
 const modelMenuOpen = ref(false);
 const modelMenuRef = ref<HTMLDivElement | null>(null);
+
+// ---- / 指令选择器 ----
+const commandMenuOpen = ref(false);
+const commandMenuIndex = ref(0);
+const commandFilter = ref('');
+const commandMenuRef = ref<HTMLDivElement | null>(null);
+
+/** 过滤后的指令列表 */
+const filteredCommands = computed(() => {
+  const q = commandFilter.value.toLowerCase();
+  if (!q) return CAPABILITY_DOMAIN_LIST;
+  return CAPABILITY_DOMAIN_LIST.filter(c =>
+    c.id.includes(q) || c.title.includes(q) || c.desc.includes(q)
+  );
+});
 
 // ---- 输入历史导航 ----
 /** 历史记录缓存（从 storage 加载） */
@@ -336,6 +353,14 @@ watch(() => text.value, (newVal, oldVal) => {
   if (historyIndex.value >= 0 && newVal !== historyCache?.[historyIndex.value]) {
     exitHistoryMode();
   }
+  // / 指令选择器：检测输入 / 触发菜单（仅自动化开启时）
+  if (props.automationEnabled && (newVal === '/' || (newVal.startsWith('/') && !newVal.includes(' ') && newVal.length <= 20))) {
+    commandFilter.value = newVal.slice(1); // 去掉 /
+    commandMenuOpen.value = true;
+    commandMenuIndex.value = 0;
+  } else {
+    commandMenuOpen.value = false;
+  }
 });
 watch(() => props.conversation?.id, () => nextTick(autoResize));
 
@@ -362,6 +387,32 @@ function send() {
 }
 
 function onKeydown(e: KeyboardEvent) {
+  // / 指令选择器键盘导航
+  if (commandMenuOpen.value) {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      commandMenuIndex.value = (commandMenuIndex.value + 1) % filteredCommands.value.length;
+      scrollToActiveCommand();
+      return;
+    }
+    if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      commandMenuIndex.value = (commandMenuIndex.value - 1 + filteredCommands.value.length) % filteredCommands.value.length;
+      scrollToActiveCommand();
+      return;
+    }
+    if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
+      e.preventDefault();
+      selectCommand(filteredCommands.value[commandMenuIndex.value]);
+      return;
+    }
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      commandMenuOpen.value = false;
+      return;
+    }
+  }
+
   if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
     e.preventDefault();
     send();
@@ -381,6 +432,23 @@ function onKeydown(e: KeyboardEvent) {
     navigateHistory(1);
     return;
   }
+}
+
+/** 选择指令 */
+function selectCommand(cmd: { id: string; title: string }) {
+  text.value = `/${cmd.id} `;
+  commandMenuOpen.value = false;
+  nextTick(() => textarea.value?.focus());
+}
+
+/** 滚动当前选中指令到可视区域 */
+function scrollToActiveCommand() {
+  nextTick(() => {
+    const active = commandMenuRef.value?.querySelector('.aib-command-active');
+    if (active) {
+      active.scrollIntoView({ block: 'nearest' });
+    }
+  });
 }
 
 /**
@@ -474,6 +542,20 @@ onUnmounted(() => document.removeEventListener('click', onDocClick, true));
       @keydown="onKeydown"
       @paste="onPaste"
     />
+
+    <!-- / 指令选择器 -->
+    <div v-if="commandMenuOpen && filteredCommands.length" ref="commandMenuRef" class="aib-command-menu">
+      <div
+        v-for="(cmd, i) in filteredCommands"
+        :key="cmd.id"
+        :class="['aib-command-item', { 'aib-command-active': i === commandMenuIndex }]"
+        @click="selectCommand(cmd)"
+        @mouseenter="commandMenuIndex = i"
+      >
+        <span class="aib-command-id">/{{ cmd.id }}</span>
+        <span class="aib-command-title">{{ cmd.title }}</span>
+      </div>
+    </div>
 
     <div class="aib-input-toolbar">
       <div class="aib-toolbar-left">
