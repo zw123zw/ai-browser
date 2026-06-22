@@ -3,10 +3,13 @@ import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { useVoiceStore } from '@/src/stores/voice'
 import { useSettingsStore } from '@/src/stores/settings'
 import { useToast } from '@/src/composables/useToast'
+import { useI18n } from '@/src/i18n'
 import { VoiceSession } from '@/src/voice/session'
 import { ActionExecutor } from '@/src/browser/action-executor'
 import { Logger } from '@/src/utils/logger'
 import type { SessionState } from '@/src/stores/voice'
+
+const { t } = useI18n()
 
 const emit = defineEmits<{ (e: 'switch-chat'): void }>()
 const log = new Logger('VoicePanel')
@@ -151,13 +154,13 @@ function clearVoiceChat() {
 function getStatusText(state: SessionState): string {
   switch (state) {
     case 'listening':
-      return '正在聆听...'
+      return t('voice.listening')
     case 'processing':
-      return '处理中...'
+      return t('voice.processing')
     case 'speaking':
-      return '播报中...'
+      return t('voice.processing')
     default:
-      return '点击麦克风开始'
+      return t('voice.listening')
   }
 }
 
@@ -191,7 +194,7 @@ onUnmounted(() => {
       <!-- 空状态 -->
       <div v-if="voiceStore.messages.length === 0" class="aib-voice-empty">
         <div class="aib-empty-icon">🎤</div>
-        <p>说出你的指令</p>
+        <p>{{ t('voice.title') }}</p>
         <p class="aib-empty-hint">
           例如：「打开B站」「搜索美食教程」「今天天气怎么样」
         </p>

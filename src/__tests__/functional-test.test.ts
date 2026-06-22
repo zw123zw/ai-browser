@@ -813,12 +813,12 @@ describe('功能 5: 提示词管理功能', () => {
 
     it('步骤 3: 验证包含 done 字段说明', () => {
       expect(PHASE2_SYSTEM_PROMPT).toContain('done')
-      expect(PHASE2_SYSTEM_PROMPT).toContain('1=用户请求的操作已执行')
+      expect(PHASE2_SYSTEM_PROMPT).toContain('done:1 = 用户原始请求的最终目标已达成')
     })
 
     it('步骤 4: 验证 done:1 自动结束', () => {
       expect(PHASE2_SYSTEM_PROMPT).toContain('done:1')
-      expect(PHASE2_SYSTEM_PROMPT).toContain('任务自动结束')
+      expect(PHASE2_SYSTEM_PROMPT).toContain('最终目标已达成')
     })
   })
 

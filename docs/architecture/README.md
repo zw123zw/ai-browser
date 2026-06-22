@@ -1,311 +1,284 @@
-# AI 浏览器助手 — 总体架构
+# AI Browser - 架构总览
 
-## 项目概述
-
-AI 浏览器助手是一个 Chrome 浏览器扩展（Manifest V3），支持语音控制、网页自动化、多模型切换和翻译功能。基于 WXT + Vue 3 + TypeScript 构建。
-
-**核心能力：**
-- 🤖 多 AI 模型对话（OpenAI / Anthropic / Gemini / 通义千问 / 文心一言 / 豆包等）
-- 🌐 网页自动化（语义骨架 → AI 理解 → 指令执行）
-- 🎤 语音输入/输出（Web Speech API + Sherpa-ONNX）
-- 🌍 翻译功能（划词翻译 / 自动翻译 / 点击翻译）
-- 📎 文件附件（图片 OCR / PDF / Word / Excel）
+> Chrome 扩展：AI 语音浏览器助手。WXT + Vue 3 + TypeScript + Pinia，运行在 Shadow DOM 中。
 
 ## 技术栈
 
-| 层级 | 技术 |
-|------|------|
-| 构建工具 | WXT (Web Extension Toolkit) |
-| 前端框架 | Vue 3 + Composition API |
-| 状态管理 | Pinia |
-| 类型系统 | TypeScript |
-| 语音识别 | Web Speech API / Sherpa-ONNX |
-| OCR | Tesseract.js |
-| 文件解析 | pdfjs-dist / mammoth / xlsx |
+| 层 | 技术 | 说明 |
+|---|---|---|
+| 构建 | WXT (Manifest V3) | Chrome 扩展框架，支持 HMR 开发 |
+| UI | Vue 3 + `<script setup>` | Composition API，Shadow DOM 隔离 |
+| 状态 | Pinia (setup store) | Composition API 写法，reactive 响应 |
+| 类型 | TypeScript + `vue-tsc` | 严格类型检查 |
+| 样式 | 纯 CSS (`aib-` 前缀) | `src/styles/global.css`，避免样式冲突 |
+| 日志 | Logger -> `chrome.storage.local` | 禁止 console，统一写入 storage |
+| AI 适配器 | 工厂+策略模式 | 11 家供应商，统一 `chat()` 接口 |
+| 代理 | Background Service Worker | `proxyFetchStream` 规避 CORS |
 
-## 分层架构
+## 架构分层
 
 ```mermaid
-graph TD
-    subgraph "UI 层 (Content Script)"
+graph TB
+    subgraph UI["UI 层 -- Content Script (Shadow DOM)"]
         App[App.vue]
-        ChatPanel[ChatPanel.vue]
-        InputBar[InputBar.vue]
-        VoicePanel[VoicePanel.vue]
-        SettingsModal[SettingsModal.vue]
+        ChatPanel[ChatPanel]
+        InputBar[InputBar]
+        FAB[FloatingActionButton]
     end
 
-    subgraph "Composable 层"
+    subgraph Composable["Composable 层"]
         usePipeline[usePipeline]
-        useToast[useToast]
+        useSettings[useSettingsStore]
+        useConversations[useConversationsStore]
     end
 
-    subgraph "输入处理层"
-        Router[InputRouter]
-        IntentDetector[IntentDetector]
-        Pipeline[InputPipeline]
-        TagParser[TagParser]
+    subgraph Input["输入处理层"]
+        InputRouter[InputRouter -- 3 路由: builtin/capability/ai]
+        IntentDetector[IntentDetector -- Phase 1 意图检测]
+        InputPipeline[InputPipeline -- Phase 2 流式执行]
+        TagParser[TagParser -- extractTags]
+        Prompts[Prompts -- phase1/phase2/extract/summarize]
     end
 
-    subgraph "浏览器执行层"
-        Skeleton[SkeletonManager]
-        ActionExecutor[ActionExecutor]
-        TranslateService[TranslateService]
-        LocalHTML[LocalHTML]
+    subgraph Browser["浏览器执行层"]
+        ActionExecutor[ActionExecutor -- click/type/scroll/video/...]
+        SkeletonManager[SkeletonManager -- SemanticSkeleton]
+        SkeletonId[skeleton-id -- data-skeleton-id 打标]
     end
 
-    subgraph "AI 适配器层"
-        BaseAdapter[BaseAdapter]
-        OpenAI[OpenAIAdapter]
-        Gemini[GeminiAdapter]
-        Qwen[QwenAdapter]
-        Wenxin[WenxinAdapter]
-        Doubao[DoubaoAdapter]
-        Proxy[proxyFetchStream]
+    subgraph Adapters["AI 适配器层"]
+        BaseAdapter[BaseAdapter -- abstract chat + parseSSE]
+        OpenAIAdapter[OpenAIAdapter -- OpenAI + Anthropic]
+        GeminiAdapter[GeminiAdapter]
+        QwenAdapter[QwenAdapter]
+        WenxinAdapter[WenxinAdapter]
+        DoubaoAdapter[DoubaoAdapter]
+        Factory[createAdapter -- 工厂函数]
     end
 
-    subgraph "状态管理层"
-        SettingsStore[useSettingsStore]
-        ConvStore[useConversationsStore]
-        VoiceStore[useVoiceStore]
+    subgraph State["状态管理层"]
+        SettingsStore[settingsStore]
+        ConversationsStore[conversationsStore]
     end
 
-    subgraph "存储层"
-        Storage[Chrome Storage API]
+    subgraph Storage["存储层"]
         SettingsStorage[settingsStorage]
-        ConvStorage[conversationStorage]
+        ConversationStorage[conversationStorage]
+        QueuedTaskStorage[queuedTaskStorage]
+        InputHistoryStorage[inputHistoryStorage]
     end
 
-    subgraph "Background Service Worker"
-        BG[background.ts]
-        ProxyFetch[proxy-fetch-stream]
-        TabMgmt[tab-action]
-        StreamMgr[activeStreams]
+    subgraph Background["Background Service Worker"]
+        ProxyFetch[proxy-fetch]
+        ProxyFetchStream[proxy-fetch-stream]
+        TabAction[tab-action]
+        AbortStream[abort-stream]
     end
 
     App --> ChatPanel
     App --> InputBar
-    App --> VoicePanel
-    App --> SettingsModal
-
+    App --> FAB
     ChatPanel --> usePipeline
     InputBar --> usePipeline
-    VoicePanel --> usePipeline
-
-    usePipeline --> Pipeline
-    Pipeline --> Router
-    Pipeline --> IntentDetector
-    Pipeline --> ActionExecutor
-    Pipeline --> Skeleton
-
-    IntentDetector --> BaseAdapter
-    ActionExecutor --> BG
-    TranslateService --> BaseAdapter
-
-    BaseAdapter --> OpenAI
-    BaseAdapter --> Gemini
-    BaseAdapter --> Qwen
-    BaseAdapter --> Wenxin
-    BaseAdapter --> Doubao
-
-    OpenAI --> Proxy
-    Proxy --> BG
-
-    SettingsStore --> Storage
-    ConvStore --> Storage
-
-    BG --> ProxyFetch
-    BG --> TabMgmt
-    BG --> StreamMgr
+    usePipeline --> InputPipeline
+    InputPipeline --> InputRouter
+    InputPipeline --> IntentDetector
+    InputPipeline --> TagParser
+    InputPipeline --> ActionExecutor
+    InputPipeline --> SkeletonManager
+    IntentDetector --> Prompts
+    InputPipeline --> Prompts
+    InputPipeline --> Factory
+    ActionExecutor --> Background
+    Factory --> BaseAdapter
+    BaseAdapter --> OpenAIAdapter
+    BaseAdapter --> GeminiAdapter
+    BaseAdapter --> QwenAdapter
+    BaseAdapter --> WenxinAdapter
+    BaseAdapter --> DoubaoAdapter
+    OpenAIAdapter --> ProxyFetchStream
+    GeminiAdapter --> ProxyFetchStream
+    QwenAdapter --> ProxyFetchStream
+    usePipeline --> useSettings
+    usePipeline --> useConversations
+    useSettings --> SettingsStorage
+    useConversations --> ConversationStorage
+    InputPipeline --> QueuedTaskStorage
 ```
 
-## 模块列表
+## 模块文档
 
-| 模块 | 路径 | 职责 |
-|------|------|------|
-| [输入处理流水线](./input-pipeline.md) | `src/input/` | 用户输入路由、意图检测、指令解析 |
-| [浏览器命令执行](./browser-command.md) | `src/browser/` | 语义骨架提取、指令执行引擎 |
-| [AI 适配器](./ai-adapters.md) | `src/adapters/` | 多 AI 提供者协议适配 |
-| [状态管理](./state-management.md) | `src/stores/` | Pinia stores + 跨标签页同步 |
-| [Background Service](./background-service.md) | `entrypoints/background.ts` | CORS 代理、标签页管理、流式传输 |
-| [Content Script](./content-script.md) | `entrypoints/content/` | Shadow DOM + Vue 应用 + 组件 |
-| [翻译功能](./translation.md) | `src/browser/translate-*.ts` | 划词/自动/点击翻译 |
-| [语音功能](./voice.md) | `src/voice/` | 语音识别、指令解析、语音播报 |
-| [存储层](./storage.md) | `src/storage/` | Chrome Storage API 封装 |
+| 模块 | 文档 | 核心职责 |
+|---|---|---|
+| 输入管线 | [input-pipeline.md](./input-pipeline.md) | 路由、Phase 1/2、标签提取、download/summarize |
+| 浏览器指令 | [browser-command.md](./browser-command.md) | 语义骨架、元素定位、操作执行引擎 |
+| AI 适配器 | [ai-adapters.md](./ai-adapters.md) | 多供应商协议适配、流式代理 |
+| Content Script | [content-script.md](./content-script.md) | Shadow DOM 挂载、组件树 |
+| 状态管理 | [state-management.md](./state-management.md) | Pinia store、会话管理 |
+| 存储层 | [storage.md](./storage.md) | Chrome storage 抽象、双向同步 |
+| Background | [background-service.md](./background-service.md) | 代理请求、标签页操作 |
+| 语音 | [voice.md](./voice.md) | 语音识别与会话管理 |
+| 翻译 | [translation.md](./translation.md) | 划词翻译、自动翻译 |
+| 文件解析 | [file-parsing.md](./file-parsing.md) | 附件解析（图片 OCR、PDF、Office） |
 
 ## 核心数据流
 
-### 用户输入 → AI 对话
+### 用户输入 -> AI 对话
 
 ```mermaid
 sequenceDiagram
-    participant User as 用户
-    participant InputBar as 输入框
-    participant Pipeline as InputPipeline
-    participant Router as InputRouter
-    participant Detector as IntentDetector
-    participant AI as AI Adapter
-    participant Executor as ActionExecutor
+    participant U as 用户
+    participant IB as InputBar
+    participant UP as usePipeline
+    participant IP as InputPipeline
+    participant IR as InputRouter
+    participant ID as IntentDetector
+    participant TP as TagParser
+    participant AE as ActionExecutor
+    participant SM as SkeletonManager
 
-    User->>InputBar: 输入文本
-    InputBar->>Pipeline: processInput(text)
-    Pipeline->>Router: route(ctx)
+    U->>IB: 输入文字 / 语音
+    IB->>UP: processInput(text)
+    UP->>IP: process(ctx, callbacks)
 
-    alt /命令
-        Router-->>Pipeline: builtin
-    else AI 处理
-        Router-->>Pipeline: { type: 'ai' }
-        Pipeline->>Detector: detectPhase1(text)
+    IP->>IR: route(ctx)
+    alt builtin
+        IR-->>IP: { type: 'builtin', command, args }
+        IP->>UP: onBuiltinCommand(command, args)
+    else capability (/scroll, /navigate 等)
+        IR-->>IP: { type: 'capability', command, args }
+        IP->>IP: processPhase2WithRetry(commandText)
+    else ai
+        IR-->>IP: { type: 'ai' }
+        IP->>ID: detectPhase1(text)
+        ID-->>IP: Phase1Detection
 
-        alt 聊天回复
-            Detector-->>Pipeline: { isChat: true, responseText }
-            Pipeline-->>User: 显示回复
-        else Phase 1 快速通道 (navigate/scroll 等)
-            Detector-->>Pipeline: { isChat: false, commands }
-            Pipeline->>Executor: executePhase1Commands(commands)
-            Executor-->>Pipeline: 执行结果
-            Pipeline-->>User: 显示结果
-        else [action] → Phase 2
-            Detector-->>Pipeline: { isChat: false }
-            Pipeline->>AI: Phase2 流式调用
-            AI-->>Pipeline: [command] 标签
-            Pipeline->>Executor: execute(cmd)
-            Executor-->>Pipeline: 执行结果
-            Pipeline-->>User: 显示结果
+        alt isChat
+            IP->>UP: onChatDelta -> onChatEnd
+        else commands (快速通道)
+            IP->>AE: execute(cmd) x N
+            AE-->>IP: ActionResult
+        else action
+            IP->>IP: processPhase2WithRetry(text)
+            loop 流式执行 (MAX_TOTAL_STEPS=20)
+                IP->>SM: getSkeleton()
+                IP->>ID: callStreamingAI(text, skeleton, completed)
+                ID-->>IP: Phase2Result
+                IP->>TP: extractTags(rawText)
+                TP-->>IP: { commands, needFull, needInput }
+                IP->>AE: execute(cmd)
+                AE-->>IP: ActionResult
+            end
         end
     end
 ```
 
-### 流式代理架构
+### 流式代理请求
 
 ```mermaid
 sequenceDiagram
     participant CS as Content Script
     participant BG as Background SW
-    participant API as AI API
+    participant API as AI Provider API
 
-    CS->>BG: proxy-fetch-stream (url, headers, body)
+    CS->>BG: chrome.runtime.sendMessage -- type: 'proxy-fetch-stream'
     BG->>API: fetch(url, { stream: true })
-    BG-->>CS: { success: true, requestId }
+    API-->>BG: ReadableStream
 
-    loop 流式数据
-        API-->>BG: chunk
-        BG->>CS: stream-chunk { requestId, chunk }
+    loop 流式传输
+        BG-->>CS: { type: 'stream-chunk', requestId, chunk }
+        CS->>CS: processChunk -> onChunk({ delta })
     end
 
-    API-->>BG: stream end
-    BG->>CS: stream-end { requestId }
+    BG-->>CS: { type: 'stream-end', requestId }
+    CS->>CS: onChunk({ done: true })
+
+    opt 用户取消
+        CS->>BG: { type: 'abort-stream', requestId }
+        BG->>API: AbortController.abort()
+    end
 ```
 
 ## 关键设计决策
 
 ### 1. 两阶段意图检测 + 快速通道
-- **Phase 1**：轻量分类 — 聊天 / 简单指令直出 / 文件生成 / 需要页面操作
-- **Phase 1 快速通道**：navigate/scroll/keyboard 等无需骨架的指令，Phase 1 直出 `[command]` 跳过 Phase 2
-- **Phase 2**：从 AI 自然回复中提取结构化指令（需要页面骨架的操作）
-- 优势：简单操作零延迟，复杂操作仍走 Phase 2 精确定位
 
-### 2. 语义骨架（无缓存）
-- 每次调用 `getSkeleton()` 重新提取可视窗口内的可交互元素
-- 不缓存、不监听 DOM 变化 — 简单可靠，永不过期
-- 三重元素定位：elementId → CSS 选择器 → 文本匹配
-- `alerts` 字段提取页面错误/状态提示，辅助 AI 决策
+Phase 1 做轻量分类（聊天 / [action] / [command] / [FILE]），Phase 2 做复杂操作决策。不需要页面骨架的操作（navigate、scroll、keyboard）由 Phase 1 直出 [command]，跳过 Phase 2，减少一次 AI 调用。
 
-### 3. 流式单命令执行 + end 验证
-- Phase 2 每次只取 AI 返回的第一条指令执行
-- 执行成功后刷新骨架，再请求下一条
-- `end` 指令需 AI 确认页面状态后才能输出，未执行过指令时拒绝 end
-- 最多 20 次总执行步骤（含成功/失败/重试）
+### 2. 语义骨架无缓存
 
-### 3.5 跨标签页任务续接
-- `navigate` 或 `_blank` 点击导致页面跳转时，任务保存到 `queuedTaskStorage`
-- 新标签页加载完成后自动恢复执行，跳过 Phase 1
-- 30 秒过期保护 + click 前置保存 + openedNewTab 检测
+`SkeletonManager.getSkeleton()` 每次重新提取视口内可交互元素。不缓存、不监听 DOM 变化——简单可靠，永不过期。MAX_SKELETON_ELEMENTS=200 限制 token 消耗。
 
-### 4. Background 代理流式传输
-- Content Script 无法直接跨域请求
-- Background Service Worker 代理 fetch + SSE 解析
-- 通过 `chrome.runtime.sendMessage` 转发 chunk
+### 3. 流式单指令执行 + 终止验证
 
-### 5. Shadow DOM 隔离
-- Vue 应用挂载在 Shadow DOM 内
-- 样式完全隔离，不影响宿主页面
-- 通过 `createShadowRootUi` (WXT) 创建
+Phase 2 每次只生成 1 条指令，执行后反馈结果再生成下一条。通过 `done:1` 字段标记最终目标是否达成，`MAX_TOTAL_STEPS=20` 防止无限循环。
+
+### 4. 跨标签页任务续接
+
+navigate/click(_blank) 后，当前步骤保存到 `queuedTaskStorage`（30s 过期）。新标签页加载完成后检测到 queued task，跳过 Phase 1 直接进入 Phase 2 恢复执行。
+
+### 5. Background 代理流式请求
+
+所有 AI API 请求通过 `proxyFetchStream` 经 Background Service Worker 中转，规避 Content Script 的 CORS 限制。使用 requestId 标识流，支持 AbortSignal 取消。
+
+### 6. Shadow DOM 样式隔离
+
+UI 组件运行在 Shadow DOM 中，CSS 类名统一 `aib-` 前缀，避免与宿主页面样式冲突。
 
 ## 目录结构
 
 ```
-ai-browser/
-├── entrypoints/
-│   ├── background.ts           # Background Service Worker
-│   └── content/
-│       ├── index.ts            # Content Script 入口
-│       ├── App.vue             # Vue 根组件
-│       └── components/         # UI 组件
-│           ├── ChatDrawer.vue
-│           ├── ChatPanel.vue
-│           ├── InputBar.vue
-│           ├── VoicePanel.vue
-│           ├── SettingsModal.vue
-│           └── ...
-├── src/
-│   ├── adapters/               # AI 适配器
-│   │   ├── base.ts
-│   │   ├── openai.ts
-│   │   ├── gemini.ts
-│   │   ├── qwen.ts
-│   │   ├── wenxin.ts
-│   │   ├── doubao.ts
-│   │   ├── proxy.ts
-│   │   └── index.ts
-│   ├── browser/                # 浏览器命令执行
-│   │   ├── types.ts
-│   │   ├── skeleton.ts
-│   │   ├── skeleton-id.ts
-│   │   ├── action-executor.ts
-│   │   ├── local-html.ts
-│   │   ├── code-filter.ts
-│   │   ├── translate-service.ts
-│   │   ├── translate-popup.ts
-│   │   ├── translate-click.ts
-│   │   ├── translate-parser.ts
-│   │   └── index.ts
-│   ├── composables/            # Vue Composables
-│   │   ├── usePipeline.ts
-│   │   └── useToast.ts
-│   ├── input/                  # 输入处理
-│   │   ├── types.ts
-│   │   ├── router.ts
-│   │   ├── intent-detector.ts
-│   │   ├── pipeline.ts
-│   │   ├── tag-parser.ts
-│   │   ├── prompts.ts
-│   │   └── index.ts
-│   ├── storage/                # 存储层
-│   │   ├── index.ts
-│   │   └── input-history.ts
-│   ├── stores/                 # Pinia Stores
-│   │   ├── settings.ts
-│   │   ├── conversations.ts
-│   │   └── voice.ts
-│   ├── voice/                  # 语音功能
-│   │   ├── recognition.ts
-│   │   ├── sherpa-recognition.ts
-│   │   ├── commandParser.ts
-│   │   ├── broadcast.ts
-│   │   ├── session.ts
-│   │   └── index.ts
-│   ├── utils/                  # 工具函数
-│   │   ├── logger.ts
-│   │   ├── log-storage.ts
-│   │   ├── storage-sync.ts
-│   │   ├── shortcut.ts
-│   │   ├── markdown.ts
-│   │   ├── file-parsers.ts
-│   │   ├── file-type.ts
-│   │   ├── file.ts
-│   │   └── ocr.ts
-│   ├── types.ts                # 全局类型定义
-│   └── themes.ts               # 主题配置
-└── package.json
+entrypoints/
+  background.ts              # 后台 Service Worker（代理请求、标签页操作）
+  content/
+    index.ts                 # Content Script 入口（Shadow DOM 挂载）
+    App.vue                  # 根组件
+    components/              # 所有 Vue 组件
+src/
+  adapters/                  # AI 适配器（工厂+策略模式）
+    base.ts                  #   BaseAdapter 抽象类
+    openai.ts                #   OpenAI + Anthropic 适配器
+    gemini.ts                #   Google Gemini 适配器
+    qwen.ts                  #   通义千问适配器
+    wenxin.ts                #   文心一言适配器
+    doubao.ts                #   豆包适配器
+    index.ts                 #   createAdapter() 工厂函数
+    proxy.ts                 #   proxyFetch / proxyFetchStream
+  browser/                   # 浏览器命令执行引擎
+    types.ts                 #   SemanticSkeleton, Command, ActionResult
+    skeleton.ts              #   SkeletonManager + extractSkeleton()
+    skeleton-id.ts           #   data-skeleton-id 打标
+    action-executor.ts       #   ActionExecutor（click/type/scroll/video/...）
+    local-html.ts            #   extractFullPageSkeleton() -- [need_full] 兜底
+  composables/               # Vue 组合式函数
+    usePipeline.ts           #   输入流水线 composable
+  input/                     # 统一输入处理管线
+    types.ts                 #   InputContext, PipelineCallbacks
+    router.ts                #   InputRouter（3 路由类型）
+    intent-detector.ts       #   IntentDetector（Phase 1/2 AI 调用）
+    tag-parser.ts            #   extractTags() 标签提取
+    pipeline.ts              #   InputPipeline（核心编排）
+    prompts/                 #   提示词模块
+      index.ts               #     桶导出
+      common.ts              #     CAPABILITY_DOMAIN_LIST (18 项)
+      phase1.ts              #     PHASE1_SYSTEM_PROMPT
+      phase2.ts              #     PHASE2_SYSTEM_PROMPT + MODE_FIRST/STREAMING/RETRY
+      extract.ts             #     EXTRACT_SYSTEM_PROMPT (download)
+      summarize.ts           #     SUMMARIZE_SYSTEM_PROMPT
+      translate.ts           #     TRANSLATE_SYSTEM_PROMPT
+  storage/                   # Chrome storage 抽象层
+    index.ts                 #   settingsStorage, conversationStorage, queuedTaskStorage
+  stores/                    # Pinia 状态管理
+    settings.ts              #   设置 store
+    conversations.ts         #   会话 store
+  styles/                    # 全局 CSS
+    global.css               #   aib-* 类名
+  types.ts                   # 共享类型定义
+  utils/                     # 工具函数
+    logger.ts                #   Logger 类
+    log-storage.ts           #   日志写入 storage
 ```
+
+---
+
+[功能文档](../features/)

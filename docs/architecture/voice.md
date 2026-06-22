@@ -48,7 +48,7 @@ graph TB
 
 系统同时支持两套语音识别引擎，按优先级自动切换：
 
-- **Sherpa-ONNX（优先）**：基于 WebAssembly 的本地模型，完全离线运行，不依赖网络。使用 `sherpa-onnx-streaming-zipformer-bilingual-zh-en` 中英双语流式模型，通过 `AudioContext` + `ScriptProcessorNode` 采集 16kHz 单声道音频并实时喂入识别器。
+- **Sherpa-ONNX（优先）**：基于 WebAssembly 的本地模型，完全离线运行，不依赖网络。使用 `sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20` 中英双语流式模型，通过 `AudioContext` + `ScriptProcessorNode` 采集 16kHz 单声道音频并实时喂入识别器。
 - **Web Speech API（回退）**：浏览器原生 `SpeechRecognition` 接口，依赖 Chrome/Edge 的 Google 语音服务，需要联网。支持连续模式、中间结果、自动重启。
 
 **切换逻辑**：`VoiceSession.start()` 优先初始化 SherpaRecognition，若加载模型或获取麦克风失败，自动回退到 VoiceRecognition。

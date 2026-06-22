@@ -1,13 +1,15 @@
 ---
 name: update-architecture-docs
-description: "扫描项目代码库，生成或增量更新架构文档（docs/architecture/）和功能文档（docs/features/）。架构文档关注设计与实现，功能文档关注支持什么、怎么用、具体细节。"
+description: "全量扫描项目代码库，重写全部架构文档（docs/architecture/）和功能文档（docs/features/）。每次执行都读取所有源文件，确保文档与代码完全同步。"
 ---
 
 # 更新架构文档与功能文档
 
-智能生成和增量更新项目文档，包含两个维度：
+全量扫描项目代码，重写全部文档，包含两个维度：
 - **架构文档**（`docs/architecture/`）— 模块怎么设计的、怎么实现的
 - **功能文档**（`docs/features/`）— 模块支持什么功能、怎么用、具体参数和行为
+
+**核心原则：文档必须反映代码的真实状态，每次执行都从源文件重新生成。**
 
 ---
 
@@ -60,19 +62,17 @@ docs/
 
 ---
 
-## 两种模式
+## 执行模式：全量扫描（每次必做）
 
-### 模式 A：首次全量生成
+**每次调用技能时，必须扫描全部源文件并重写全部文档。** 不做增量更新，不做 git diff 检测。
 
-当 `docs/architecture/` 或 `docs/features/` 目录不存在或为空时，执行全量扫描和生成。
+原因：文档必须反映代码的真实状态，增量更新容易遗漏隐式变化（如函数签名不变但行为变了、注释变了、依赖变了）。
 
-### 模式 B：增量更新（默认）
-
-当两个目录都已有文档时，执行增量更新：
-1. 检测哪些模块的代码发生了变化
-2. 只重写有变化的模块文档（架构 + 功能同步更新）
-3. 更新两个 README.md 中的模块列表
-4. 未变化的文档保持原样
+流程：
+1. 扫描模块映射表中所有源文件
+2. 读取每个源文件的完整内容
+3. 基于实际代码重写所有架构文档和功能文档
+4. 使用 Write 工具全量覆盖（不用 Edit 局部修改）
 
 ---
 
@@ -84,11 +84,11 @@ docs/
 |------|--------|
 | `README.md` | `package.json`, `entrypoints/background.ts`, `entrypoints/content/index.ts`, `entrypoints/content/App.vue`, 所有模块的关键导出文件 |
 | `browser-command.md` | `src/browser/types.ts`, `src/browser/skeleton.ts`, `src/browser/action-executor.ts`, `src/browser/local-html.ts`, `src/browser/index.ts` |
-| `input-pipeline.md` | `src/input/types.ts`, `src/input/router.ts`, `src/input/intent-detector.ts`, `src/input/pipeline.ts`, `src/input/tag-parser.ts`, `src/input/prompts.ts`, `src/input/index.ts` |
+| `input-pipeline.md` | `src/input/types.ts`, `src/input/router.ts`, `src/input/intent-detector.ts`, `src/input/pipeline.ts`, `src/input/tag-parser.ts`, `src/input/prompts/index.ts`, `src/input/prompts/common.ts`, `src/input/prompts/phase1.ts`, `src/input/prompts/phase2.ts`, `src/input/prompts/translate.ts`, `src/input/prompts/extract.ts`, `src/input/prompts/summarize.ts`, `src/input/index.ts`, `src/composables/usePipeline.ts` |
 | `ai-adapters.md` | `src/adapters/base.ts`, `src/adapters/openai.ts`, `src/adapters/qwen.ts`, `src/adapters/wenxin.ts`, `src/adapters/gemini.ts`, `src/adapters/doubao.ts`, `src/adapters/proxy.ts`, `src/adapters/index.ts` |
 | `state-management.md` | `src/stores/settings.ts`, `src/stores/conversations.ts`, `src/stores/voice.ts` |
 | `background-service.md` | `entrypoints/background.ts` |
-| `content-script.md` | `entrypoints/content/index.ts`, `entrypoints/content/App.vue`, `entrypoints/content/components/**/*.vue` |
+| `content-script.md` | `entrypoints/content/index.ts`, `entrypoints/content/App.vue`, `entrypoints/content/components/**/*.vue`, `src/composables/usePipeline.ts` |
 | `translation.md` | `src/browser/translate-service.ts`, `src/browser/translate-popup.ts`, `src/browser/translate-click.ts`, `src/browser/translate-parser.ts` |
 | `voice.md` | `src/voice/**/*` |
 | `storage.md` | `src/storage/index.ts` |
@@ -99,13 +99,13 @@ docs/
 | 文档 | 源文件 |
 |------|--------|
 | `README.md` | 所有功能文档 |
-| `browser-commands.md` | `src/browser/types.ts`（Command/SkeletonElement/ActionResult 类型）, `src/browser/action-executor.ts`（所有 action 实现）, `src/browser/skeleton.ts`（骨架提取逻辑）, `src/input/prompts.ts`（CAPABILITY_DOMAIN_LIST） |
+| `browser-commands.md` | `src/browser/types.ts`（Command/SkeletonElement/ActionResult 类型）, `src/browser/action-executor.ts`（所有 action 实现）, `src/browser/skeleton.ts`（骨架提取逻辑）, `src/input/prompts/common.ts`（CAPABILITY_DOMAIN_LIST） |
 | `automation-actions.md` | `src/automation/actions.ts`, `src/automation/selectors.ts`, `src/voice/commandParser.ts` |
-| `input-system.md` | `src/input/router.ts`, `src/input/intent-detector.ts`, `src/input/pipeline.ts`, `src/input/tag-parser.ts`, `src/input/prompts.ts`, `src/input/types.ts` |
+| `input-system.md` | `src/input/router.ts`, `src/input/intent-detector.ts`, `src/input/pipeline.ts`, `src/input/tag-parser.ts`, `src/input/prompts/*.ts`, `src/input/types.ts` |
 | `ai-providers.md` | `src/adapters/*.ts`, `src/types.ts`（Provider/ModelConfig/AppSettings）, `src/local-config.json` |
 | `voice-features.md` | `src/voice/recognition.ts`, `src/voice/sherpa-recognition.ts`, `src/voice/broadcast.ts`, `src/voice/session.ts`, `src/voice/commandParser.ts`, `src/stores/voice.ts` |
 | `file-features.md` | `src/utils/file-parsers.ts`, `src/utils/file-type.ts`, `src/utils/file-generators.ts`, `src/utils/file-tag-parser.ts`, `src/utils/echart-renderer.ts`, `src/utils/ocr.ts`, `src/utils/file.ts` |
-| `translation-features.md` | `src/browser/translate-service.ts`, `src/browser/translate-popup.ts`, `src/browser/translate-click.ts`, `src/browser/translate-parser.ts`, `src/browser/code-filter.ts`, `src/input/prompts.ts`（TRANSLATE_SYSTEM_PROMPT） |
+| `translation-features.md` | `src/browser/translate-service.ts`, `src/browser/translate-popup.ts`, `src/browser/translate-click.ts`, `src/browser/translate-parser.ts`, `src/browser/code-filter.ts`, `src/input/prompts/translate.ts` |
 
 ---
 
@@ -113,58 +113,13 @@ docs/
 
 当 skill 被调用时，按以下步骤执行：
 
-### 第一步：判断模式
+### 第一步：读取全部源文件
 
-检查 `docs/architecture/` 和 `docs/features/` 目录：
-- **任一不存在或为空** → 进入模式 A（全量生成）
-- **都已有文档** → 进入模式 B（增量更新）
+按模块映射表，使用并行 Agent 读取所有源文件的完整内容。必须覆盖映射表中的每一个文件，不遗漏。
 
-### 第二步：检测变化（仅模式 B）
+### 第二步：生成/更新文档
 
-对每个模块，执行以下操作：
-
-1. 使用 `git diff --name-only HEAD~1` 或检查文件内容，识别自上次文档更新以来哪些源文件发生了变化
-2. 构建变化映射：`{ 文档名: [变化的源文件列表] }`
-3. 如果没有检测到 git 历史，退化为全量读取源文件，与现有文档内容对比关键签名/结构是否匹配
-
-**变化检测策略（按优先级）：**
-
-```
-策略 1: git diff（最可靠）
-  - 检查 docs/ 中文档的最后 git 提交时间
-  - 对比源文件在该时间之后是否有新提交
-  - git log --since="<doc_last_commit_time>" -- <source_file>
-
-策略 2: 文件修改时间对比（fallback）
-  - 对比源文件的 mtime 与对应文档的 mtime
-  - 源文件更新 → 需要重新生成该文档
-
-策略 3: 内容结构对比（最终 fallback）
-  - 读取现有文档中的关键方法签名
-  - 读取源文件中的实际方法签名
-  - 不匹配 → 需要更新
-```
-
-**向用户报告变化摘要：**
-```
-检测到以下模块需要更新：
-  - input-pipeline.md（src/input/router.ts 新增了 redirect 方法）
-  - browser-commands.md（action-executor.ts 新增了 video action）
-  - translation.md（src/browser/translate-click.ts 重构）
-
-以下模块无需更新：
-  - ai-adapters.md, state-management.md, ...
-```
-
-### 第三步：读取源文件
-
-**模式 A：** 读取所有源文件（见模块映射表）
-
-**模式 B：** 只读取有变化的模块对应的源文件。对于两个 `README.md`，始终检查是否需要更新。
-
-### 第四步：生成/更新文档
-
-#### 4.1 架构文档（docs/architecture/）
+#### 2.1 架构文档（docs/architecture/）
 
 保持原有结构不变，每个文档包含：
 1. **目标** — 这个模块做什么
@@ -176,7 +131,7 @@ docs/
 7. **错误处理** — 如何处理错误
 8. **目录结构** — 文件组织
 
-#### 4.2 功能文档（docs/features/）— 新增
+#### 2.2 功能文档（docs/features/）
 
 每个功能文档遵循统一结构：
 
@@ -210,7 +165,7 @@ docs/
 ...
 ```
 
-#### 4.3 各功能文档的具体内容要求
+#### 2.3 各功能文档的具体内容要求
 
 ##### browser-commands.md — 浏览器命令参考
 
@@ -524,7 +479,7 @@ AI 回复中的文件标签：`[FILE:type:name]...[/FILE]`
 
 ---
 
-#### 4.4 README.md 生成规则
+#### 2.4 README.md 生成规则
 
 **架构 README（docs/architecture/README.md）：**
 - 项目概述、技术栈、分层架构图（Mermaid）
@@ -557,7 +512,7 @@ AI 回复中的文件标签：`[FILE:type:name]...[/FILE]`
 ...
 ```
 
-### 第五步：生成 Mermaid 图表
+### 第三步：生成 Mermaid 图表
 
 **架构文档** — 保持原有图表类型（架构图、序列图、类图）
 
@@ -566,45 +521,50 @@ AI 回复中的文件标签：`[FILE:type:name]...[/FILE]`
 - 状态图：展示状态转换（如语音会话状态机）
 - 决策图：展示路由/判断逻辑
 
-### 第六步：写入文档
+### 第四步：写入文档
 
-- **模式 A：** 使用 Write 工具创建所有文档
-- **模式 B：** 使用 Edit 工具对有变化的部分进行局部修改；如果变化超过 60%，退化为 Write 全量重写该文档
+使用 Write 工具**全量覆盖**所有文档（不用 Edit 局部修改），确保文档与代码完全同步。
 
-### 第七步：同步根目录 README.md
+### 第五步：同步根目录 README.md
 
 每次更新文档后，将 `docs/architecture/README.md` 的最新内容同步到项目根目录 `README.md`。根目录 README 是项目的门面，必须与架构文档保持一致。模块链接路径使用 `./docs/architecture/` 前缀。
 
 同时在根目录 README 中添加功能文档的链接：`📖 [功能文档](./docs/features/)`
 
-### 第八步：报告更新摘要
+### 第六步：报告更新摘要
 
 输出本次更新的总结：
 
 ```
 ✅ 文档更新完成
 
-更新模式：增量更新
+扫描范围：全部源文件（N 个文件）
+生成文档：架构文档 M 篇 + 功能文档 K 篇
 
-架构文档更新：
-  - input-pipeline.md（router.ts 新增 redirect 方法）
-  - translation.md（translate-click.ts 重构）
+架构文档：
+  - README.md
+  - browser-command.md
+  - input-pipeline.md
+  - ai-adapters.md
+  - state-management.md
+  - background-service.md
+  - content-script.md
+  - translation.md
+  - voice.md
+  - storage.md
+  - file-parsing.md
 
-功能文档更新：
-  - browser-commands.md（action-executor.ts 新增 video action）
-  - input-system.md（pipeline.ts 新增 need_input 处理）
+功能文档：
+  - README.md
+  - browser-commands.md
+  - automation-actions.md
+  - input-system.md
+  - ai-providers.md
+  - voice-features.md
+  - file-features.md
+  - translation-features.md
 
-跳过文档：ai-adapters.md, state-management.md, ...（共 N 个）
-README.md：已更新模块列表和功能索引
-
-变更详情：
-  browser-commands.md:
-    + 新增 video action 完整说明（7 个子操作）
-    + 新增 fullscreen 子操作
-
-  input-system.md:
-    ~ 更新 need_input 流程说明
-    ~ 更新最大步数（10 → 20）
+根目录 README.md：已同步
 ```
 
 ---
@@ -614,10 +574,11 @@ README.md：已更新模块列表和功能索引
 ### 架构文档
 * 使用 Mermaid 生成所有图表
 * 专注于设计和实现，不是 API 参考
-* 基于实际代码，不是设计文档
+* **基于实际代码，不是设计文档** — 必须读取源文件后生成
 * 每个文档应该独立完整、可读
 * 在有帮助的地方包含代码片段
 * 保持图表简单、聚焦
+* **方法签名、类型定义、常量值必须与代码完全一致**
 
 ### 功能文档（新增要求）
 * **完整性**：列出所有支持的功能/操作，不遗漏
@@ -649,13 +610,6 @@ README.md：已更新模块列表和功能索引
 1. 自动删除该孤立文档
 2. 从两个 README.md 中移除对应条目
 
-### 新增功能到现有模块
+### prompts 目录结构
 
-当现有模块新增了功能（如 action-executor.ts 新增了一种 action）：
-1. 更新架构文档（如有设计变化）
-2. 重点更新功能文档（新增功能的完整说明）
-3. 更新功能 README 的快速查找表
-
-### 无法判断变化
-
-如果 git diff 和文件修改时间都无法判断，退化为全量对比模式：读取每个模块的源文件，与现有文档对比关键结构，有差异则更新。
+如果 `src/input/prompts.ts` 不存在但 `src/input/prompts/` 目录存在，则按模块化目录结构生成文档（index.ts + 各子模块）。

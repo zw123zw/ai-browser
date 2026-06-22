@@ -1,0 +1,197 @@
+{
+  "app": {
+    "name": "LingBot",
+    "fullName": "LingBot Browser",
+    "subtitle": "AI Chat and Web Automation Extension"
+  },
+  "fab": {
+    "tooltip": "AI Voice Chat Assistant"
+  },
+  "emptyChat": {
+    "greeting": {
+      "night": "Good night",
+      "morning": "Good morning",
+      "noon": "Good afternoon",
+      "afternoon": "Good afternoon",
+      "evening": "Good evening"
+    },
+    "prompt": "What shall we talk about?",
+    "tags": "Voice Chat · Web Automation · Smart Translation · Smart Notes · OCR · Report Generation",
+    "suggestions": {
+      "automation": {
+        "title": "Web Action",
+        "desc": "Scroll to the bottom of the page"
+      },
+      "voice": {
+        "title": "Voice Assistant",
+        "desc": "Open Baidu and search for AI news"
+      },
+      "report": {
+        "title": "Report Generation",
+        "desc": "Generate a Vue3 Word report for me"
+      },
+      "analysis": {
+        "title": "Content Analysis",
+        "desc": "Analyze and summarize this page"
+      }
+    }
+  },
+  "drawer": {
+    "voiceTitle": "🎤 Voice Assistant",
+    "backToChat": "Back to text mode",
+    "clear": "Clear chat",
+    "settings": "Settings",
+    "close": "Close",
+    "clearConfirm": {
+      "title": "Clear Chat",
+      "desc": "Clear all history in the current conversation. Next chat will not carry previous context.",
+      "confirm": "Confirm Clear"
+    },
+    "cleared": "Chat cleared"
+  },
+  "settings": {
+    "title": "Settings",
+    "tabs": {
+      "ai": "Model Config",
+      "general": "General",
+      "user": "User"
+    },
+    "ai": {
+      "title": "Model Configuration",
+      "defaultModel": "Default Model",
+      "newModel": "+ New",
+      "export": "Export",
+      "import": "Import",
+      "quickFill": "Quick Fill",
+      "provider": "Provider",
+      "displayName": "Display Name",
+      "displayNamePlaceholder": "e.g. GPT-4o, DeepSeek Chat",
+      "requestUrl": "Request URL",
+      "apiKey": "API Key",
+      "authField": "Auth Field",
+      "modelName": "Model Name",
+      "modelNamePlaceholder": "e.g. gpt-4o, deepseek-chat, qwen-turbo",
+      "website": "Website",
+      "websitePlaceholder": "e.g. https://platform.openai.com/",
+      "delete": "Delete Model",
+      "cancel": "Cancel",
+      "save": "Save",
+      "saved": "Model configuration saved",
+      "unnamed": "Unnamed",
+      "exportSuccess": "Exported {count} model(s)",
+      "importSuccess": "Imported {count} model(s)",
+      "importError": "Invalid file format, expected JSON array",
+      "importNoValid": "No valid model configuration found",
+      "importPartial": "Imported {imported}, skipped {skipped} invalid",
+      "providers": {
+        "openai": "OpenAI Compatible",
+        "anthropic": "Anthropic",
+        "gemini": "Google Gemini",
+        "qwen": "Qwen",
+        "wenxin": "Wenxin",
+        "doubao": "Doubao",
+        "zhipu": "Zhipu",
+        "deepseek": "DeepSeek",
+        "moonshot": "Moonshot (Kimi)",
+        "grok": "Grok (xAI)",
+        "custom": "Custom"
+      }
+    },
+    "general": {
+      "theme": "Theme",
+      "shortcut": "Shortcut",
+      "shortcutRecord": "Click to record shortcut",
+      "shortcutRecording": "Press any key combo, Esc to cancel",
+      "shortcutHint": "Tip: Global extension shortcuts are configured at chrome://extensions/shortcuts; this sets the in-page shortcut.",
+      "shortcutClear": "Clear",
+      "automation": "Web Automation",
+      "automationOn": "Enabled: AI can control browser actions",
+      "automationOff": "Disabled: Chat and file generation only",
+      "automationHint": "When disabled, AI will not execute web operations (open links, click, type, etc.), only chat and file generation remain. Disabling will clear current session history.",
+      "automationOnTitle": "Enable Web Automation",
+      "automationOnDesc": "Enabling allows AI to control browser actions. Current session history will be cleared. Confirm?",
+      "automationOffTitle": "Disable Web Automation",
+      "automationOffDesc": "Disabling leaves only chat and file generation. Current session history will be cleared. Confirm?",
+      "autoSend": "Selection Action",
+      "autoSendOptions": {
+        "auto": { "label": "Auto Send", "desc": "Send selected text to AI automatically" },
+        "manual": { "label": "Manual Send", "desc": "Fill selected text into input box" },
+        "off": { "label": "Off", "desc": "Don't handle page text selection" }
+      },
+      "translate": "Translation",
+      "translateTargetLang": "Target Language",
+      "translateModes": {
+        "selection": { "label": "Selection", "desc": "Show translation popup on text selection" },
+        "auto": { "label": "Auto", "desc": "Automatically translate page text" },
+        "click": { "label": "Click", "desc": "Click paragraph to translate" },
+        "off": { "label": "Off", "desc": "Disable translation" }
+      },
+      "cancel": "Cancel",
+      "save": "Save",
+      "saved": "General settings saved",
+      "automationConfirm": "Confirm"
+    },
+    "user": {
+      "license": "License Key",
+      "licensePlaceholder": "Enter license key",
+      "activate": "Activate",
+      "activateNotOpen": "Activation not available yet",
+      "maxContext": "Context Messages",
+      "maxContextPlaceholder": "50",
+      "maxContextHint": "Number of history messages per AI request (5-200). Affects conversation continuity and token usage.",
+      "maxContextSaved": "Context message count saved",
+      "cache": "Cache Management",
+      "clearCache": "Clear Cache",
+      "cacheHint": "Clears session messages, logs, and input history. User preferences will not be lost.",
+      "clearCacheConfirm": {
+        "title": "Clear Cache",
+        "desc": "Will clear session messages, logs, and input history. User preferences will not be lost.",
+        "confirm": "Confirm Clear"
+      },
+      "cacheCleared": "Cache cleared",
+      "log": "Log Management",
+      "downloadLog": "Download Logs",
+      "logDownloaded": "Logs downloaded",
+      "version": "Version",
+      "language": "Language",
+      "docs": "Documentation",
+      "docsHint": "View User Guide",
+      "langZh": "中文",
+      "langEn": "English"
+    }
+  },
+  "inputBar": {
+    "placeholder": "Type a message, Shift+Enter for new line",
+    "send": "Send",
+    "stop": "Stop",
+    "voice": "Voice",
+    "attach": "Attach",
+    "reasoning": "Deep Think",
+    "commandPrefix": "/",
+    "automationOn": "Automation On",
+    "automationOff": "Automation Off"
+  },
+  "voice": {
+    "title": "Voice Assistant",
+    "listening": "Listening...",
+    "processing": "Recognizing...",
+    "error": "Voice recognition error",
+    "switchToText": "Switch to text mode"
+  },
+  "pipeline": {
+    "processing": "Processing...",
+    "error": "Processing failed",
+    "retry": "Retry",
+    "maxRetries": "Max retries reached"
+  },
+  "common": {
+    "confirm": "Confirm",
+    "cancel": "Cancel",
+    "close": "Close",
+    "save": "Save",
+    "delete": "Delete",
+    "loading": "Loading...",
+    "error": "Something went wrong",
+    "success": "Success"
+  }
+}

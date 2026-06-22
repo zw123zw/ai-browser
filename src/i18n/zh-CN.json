@@ -1,0 +1,197 @@
+{
+  "app": {
+    "name": "小灵",
+    "fullName": "LingBot Browser",
+    "subtitle": "AI 语音浏览器助手"
+  },
+  "fab": {
+    "tooltip": "AI 语音聊天助手"
+  },
+  "emptyChat": {
+    "greeting": {
+      "night": "夜深了",
+      "morning": "早上好",
+      "noon": "中午好",
+      "afternoon": "下午好",
+      "evening": "晚上好"
+    },
+    "prompt": "今天聊点什么？",
+    "tags": "语音对话 · 网页自动化 · 智能翻译 · 智能笔记 · OCR 识别 · 报告生成",
+    "suggestions": {
+      "automation": {
+        "title": "网页操作",
+        "desc": "滚动到页面底部"
+      },
+      "voice": {
+        "title": "语音助手",
+        "desc": "帮我打开百度，搜索 AI 新闻"
+      },
+      "report": {
+        "title": "报告生成",
+        "desc": "给我输出一份 Vue3 的 Word 报告"
+      },
+      "analysis": {
+        "title": "内容分析",
+        "desc": "分析总结这个页面"
+      }
+    }
+  },
+  "drawer": {
+    "voiceTitle": "🎤 语音助手",
+    "backToChat": "返回文字模式",
+    "clear": "清除对话",
+    "settings": "设置",
+    "close": "关闭",
+    "clearConfirm": {
+      "title": "清除对话",
+      "desc": "清除当前对话的所有历史记录，下次聊天将不携带之前的上下文。",
+      "confirm": "确认清除"
+    },
+    "cleared": "对话已清除"
+  },
+  "settings": {
+    "title": "设置",
+    "tabs": {
+      "ai": "模型配置",
+      "general": "通用配置",
+      "user": "用户配置"
+    },
+    "ai": {
+      "title": "模型配置",
+      "defaultModel": "默认模型",
+      "newModel": "+ 新建",
+      "export": "导出",
+      "import": "导入",
+      "quickFill": "快速填充",
+      "provider": "供应商",
+      "displayName": "显示名称",
+      "displayNamePlaceholder": "如：GPT-4o、DeepSeek Chat",
+      "requestUrl": "请求地址",
+      "apiKey": "API Key",
+      "authField": "认证字段",
+      "modelName": "主模型",
+      "modelNamePlaceholder": "如：gpt-4o、deepseek-chat、qwen-turbo",
+      "website": "官网地址",
+      "websitePlaceholder": "如：https://platform.openai.com/",
+      "delete": "删除模型",
+      "cancel": "取消",
+      "save": "保存",
+      "saved": "模型配置已保存",
+      "unnamed": "未命名",
+      "exportSuccess": "已导出 {count} 个模型配置",
+      "importSuccess": "已导入 {count} 个模型配置",
+      "importError": "文件格式错误，期望 JSON 数组",
+      "importNoValid": "未找到有效模型配置",
+      "importPartial": "已导入 {imported} 个，跳过 {skipped} 个无效项",
+      "providers": {
+        "openai": "OpenAI 兼容",
+        "anthropic": "Anthropic",
+        "gemini": "Google Gemini",
+        "qwen": "通义千问",
+        "wenxin": "文心一言",
+        "doubao": "豆包",
+        "zhipu": "智谱清言",
+        "deepseek": "DeepSeek",
+        "moonshot": "Moonshot (Kimi)",
+        "grok": "Grok (xAI)",
+        "custom": "自定义"
+      }
+    },
+    "general": {
+      "theme": "主题风格",
+      "shortcut": "快捷键",
+      "shortcutRecord": "点击录制快捷键",
+      "shortcutRecording": "按下任意组合键，Esc 取消",
+      "shortcutHint": "提示：浏览器扩展全局快捷键需在 chrome://extensions/shortcuts 配置；此处设置的是页面内监听的快捷键。",
+      "shortcutClear": "清除",
+      "automation": "网页自动化",
+      "automationOn": "已开启：AI 可控制浏览器操作页面",
+      "automationOff": "已关闭：仅聊天和文件生成",
+      "automationHint": "关闭后 AI 将不再执行网页操作指令（打开链接、点击、输入等），仅保留聊天和文件生成功能。关闭会自动清空当前会话历史。",
+      "automationOnTitle": "开启网页自动化",
+      "automationOnDesc": "开启后 AI 可控制浏览器操作页面，当前会话历史将被清空。确认开启？",
+      "automationOffTitle": "关闭网页自动化",
+      "automationOffDesc": "关闭后 AI 将仅保留聊天和文件生成功能，当前会话历史将被清空。确认关闭？",
+      "autoSend": "划词操作",
+      "autoSendOptions": {
+        "auto": { "label": "自动发送", "desc": "选中文字后直接发送给 AI 分析" },
+        "manual": { "label": "手动发送", "desc": "选中文字后填入聊天输入框，手动确认发送" },
+        "off": { "label": "关闭", "desc": "不处理页面选中文字" }
+      },
+      "translate": "翻译配置",
+      "translateTargetLang": "目标语言",
+      "translateModes": {
+        "selection": { "label": "划词翻译", "desc": "选中文字后弹出翻译浮层" },
+        "auto": { "label": "自动翻译", "desc": "页面文本自动翻译为目标语言" },
+        "click": { "label": "点击翻译", "desc": "点击段落翻译整块内容" },
+        "off": { "label": "关闭", "desc": "不启用翻译功能" }
+      },
+      "cancel": "取消",
+      "save": "保存",
+      "saved": "通用配置已保存",
+      "automationConfirm": "确认"
+    },
+    "user": {
+      "license": "激活码",
+      "licensePlaceholder": "请输入激活码",
+      "activate": "激活",
+      "activateNotOpen": "激活功能暂未开放",
+      "maxContext": "上下文消息数",
+      "maxContextPlaceholder": "50",
+      "maxContextHint": "AI 每次请求携带的历史消息条数（5-200），影响对话连贯性和 token 消耗。",
+      "maxContextSaved": "上下文消息数已保存",
+      "cache": "缓存管理",
+      "clearCache": "清除缓存",
+      "cacheHint": "清除会话消息、日志、输入历史，用户个性化设置不会丢失",
+      "clearCacheConfirm": {
+        "title": "清除缓存",
+        "desc": "将清除会话消息、日志和输入历史，用户个性化设置不会丢失。",
+        "confirm": "确认清除"
+      },
+      "cacheCleared": "缓存已清除",
+      "log": "日志管理",
+      "downloadLog": "下载日志",
+      "logDownloaded": "日志已下载",
+      "version": "版本号",
+      "language": "语言",
+      "docs": "使用文档",
+      "docsHint": "查看使用指南",
+      "langZh": "中文",
+      "langEn": "English"
+    }
+  },
+  "inputBar": {
+    "placeholder": "输入消息，Shift+Enter 换行",
+    "send": "发送",
+    "stop": "停止",
+    "voice": "语音",
+    "attach": "附件",
+    "reasoning": "深度思考",
+    "commandPrefix": "/",
+    "automationOn": "自动化已开启",
+    "automationOff": "自动化已关闭"
+  },
+  "voice": {
+    "title": "语音助手",
+    "listening": "正在聆听...",
+    "processing": "识别中...",
+    "error": "语音识别出错",
+    "switchToText": "切换到文字模式"
+  },
+  "pipeline": {
+    "processing": "处理中...",
+    "error": "处理失败",
+    "retry": "重试",
+    "maxRetries": "已达最大重试次数"
+  },
+  "common": {
+    "confirm": "确认",
+    "cancel": "取消",
+    "close": "关闭",
+    "save": "保存",
+    "delete": "删除",
+    "loading": "加载中...",
+    "error": "出错了",
+    "success": "操作成功"
+  }
+}

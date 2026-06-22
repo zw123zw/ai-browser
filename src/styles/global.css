@@ -1110,6 +1110,34 @@ table {
     color-mix(in srgb, var(--aib-primary) 30%, transparent);
   margin-bottom: 18px;
 }
+.aib-chat-empty-brand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 20px;
+}
+.aib-chat-empty-name {
+  font-size: 32px;
+  font-weight: 700;
+  background: linear-gradient(135deg, var(--aib-primary), color-mix(in srgb, var(--aib-primary) 70%, #fff));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  letter-spacing: 2px;
+}
+.aib-chat-empty-fullname {
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--aib-text-soft);
+  letter-spacing: 0.3px;
+}
+.aib-chat-empty-subtitle {
+  font-size: 13px;
+  color: var(--aib-text-soft);
+  letter-spacing: 1px;
+  opacity: 0.8;
+}
 .aib-chat-empty-title {
   font-size: 22px;
   font-weight: 600;

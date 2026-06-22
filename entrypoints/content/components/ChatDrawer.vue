@@ -4,6 +4,7 @@ import { useConversationsStore } from '@/src/stores/conversations';
 import { useSettingsStore } from '@/src/stores/settings';
 import { useToast } from '@/src/composables/useToast';
 import { abortPipeline } from '@/src/composables/usePipeline';
+import { useI18n } from '@/src/i18n';
 import ChatPanel from './ChatPanel.vue';
 import VoicePanel from './VoicePanel.vue';
 import ConfirmDialog from './ConfirmDialog.vue';
@@ -17,6 +18,7 @@ const emit = defineEmits<{
 const store = useConversationsStore();
 const settingsStore = useSettingsStore();
 const toast = useToast();
+const { t, locale } = useI18n();
 const showConfirm = ref(false);
 
 /** 当前模式：chat 或 voice */
@@ -88,7 +90,7 @@ async function doClear() {
   store.abort();
   await store.clearCurrent();
   showConfirm.value = false;
-  toast.success('对话已清除');
+  toast.success(t('drawer.cleared'));
 }
 
 const drawerClass = computed(() => ({ 'aib-open': props.open }));
@@ -103,24 +105,24 @@ const drawerClass = computed(() => ({ 'aib-open': props.open }));
       <div class="aib-header-left">
         <!-- 语音模式：返回按钮 + 标题 -->
         <template v-if="activeMode === 'voice'">
-          <button class="aib-back-btn" title="返回文字模式" @click="switchToChat">
+          <button class="aib-back-btn" :title="t('drawer.backToChat')" @click="switchToChat">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M19 12H5M12 19l-7-7 7-7" />
             </svg>
           </button>
-          <span class="aib-drawer-title">🎤 语音助手</span>
+          <span class="aib-drawer-title">{{ t('drawer.voiceTitle') }}</span>
         </template>
         <!-- 文字模式：始终显示品牌 logo -->
         <template v-else>
           <span class="aib-brand">
-            <span class="aib-brand-ai">ai</span><span class="aib-brand-sep">-</span><span class="aib-brand-browser">browser</span>
+            <span class="aib-brand-ai">{{ locale === 'zh-CN' ? t('app.name') : t('app.fullName') }}</span>
             <span class="aib-brand-shine" />
           </span>
         </template>
       </div>
       <div class="aib-header-actions">
         <template v-if="activeMode === 'chat'">
-          <button class="aib-icon-btn" title="清除对话" @click="askClear">
+          <button class="aib-icon-btn" :title="t('drawer.clear')" @click="askClear">
             <!-- eraser -->
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
               stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
@@ -130,7 +132,7 @@ const drawerClass = computed(() => ({ 'aib-open': props.open }));
             </svg>
           </button>
         </template>
-        <button class="aib-icon-btn" title="设置" @click="emit('open-settings')">
+        <button class="aib-icon-btn" :title="t('drawer.settings')" @click="emit('open-settings')">
           <!-- settings (gear) -->
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
             stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
@@ -139,7 +141,7 @@ const drawerClass = computed(() => ({ 'aib-open': props.open }));
           </svg>
         </button>
         <span class="aib-header-divider" />
-        <button class="aib-icon-btn" title="关闭" @click="emit('close')">
+        <button class="aib-icon-btn" :title="t('drawer.close')" @click="emit('close')">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <line x1="18" y1="6" x2="6" y2="18" />
@@ -156,9 +158,9 @@ const drawerClass = computed(() => ({ 'aib-open': props.open }));
     <!-- 清除对话确认 -->
     <ConfirmDialog
       :visible="showConfirm"
-      title="清除对话"
-      desc="清除当前对话的所有历史记录，下次聊天将不携带之前的上下文。"
-      confirm-text="确认清除"
+      :title="t('drawer.clearConfirm.title')"
+      :desc="t('drawer.clearConfirm.desc')"
+      :confirm-text="t('drawer.clearConfirm.confirm')"
       variant="danger"
       @confirm="doClear"
       @cancel="showConfirm = false"

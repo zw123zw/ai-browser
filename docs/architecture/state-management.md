@@ -1,416 +1,476 @@
 # 状态管理架构
 
-## 目标
+> AI Browser 的状态管理层基于 Pinia setup store + 自研 `defineStorageSync` 双向同步机制，实现 reactive ref 与 `chrome.storage.local` 的跨标签页同步。
 
-管理全局应用状态，支持跨标签页同步和持久化。通过 Pinia 提供响应式状态管理，结合自研 `defineStorageSync()` 工具实现 Pinia State 与 Chrome Storage 之间的自动双向同步，确保多标签页状态一致性。
-
-## 架构总览
+## 总体架构
 
 ```mermaid
 graph TB
-    subgraph Pinia Stores
-        S[useSettingsStore<br/>全局设置]
-        C[useConversationsStore<br/>会话数据]
-        V[useVoiceStore<br/>语音状态]
+    subgraph "Pinia Stores"
+        SS["useSettingsStore<br/>aib-settings"]
+        CS["useConversationsStore<br/>aib-conversations"]
+        VS["useVoiceStore<br/>voice"]
     end
 
-    subgraph Sync Layer
-        SS[defineStorageSync<br/>双向同步工具]
-        PL[plain<br/>剥离响应式]
+    subgraph "Storage Layer"
+        SS_Item["settingsStorage<br/>local:ai-browser-settings"]
+        CS_Item["conversationStorage<br/>local:ai-browser-conversation"]
     end
 
-    subgraph Chrome Storage API
-        CS1[local:aib-settings]
-        CS2[local:aib-conversation]
-        CS3[local:aib-fab-pos]
-        CS4[local:aib-drawer-open]
-        CS5[local:aib-input-history]
+    subgraph "defineStorageSync"
+        DS["watch(source) → debounce 200ms → plain() → setValue"]
+        WS["storage.watch() → echoWindow 500ms → applyRemote"]
     end
 
-    S -->|defineStorageSync| SS
-    C -->|defineStorageSync| SS
-    SS -->|watch local changes| PL
-    PL -->|debounced flush| CS1
-    PL -->|debounced flush| CS2
-    CS1 -->|storage.watch| SS
-    CS2 -->|storage.watch| SS
-    SS -->|applyRemote| S
-    SS -->|applyRemote| C
+    SS -->|"defineStorageSync"| DS
+    DS --> SS_Item
+    SS_Item --> WS
+    WS -->|"applyRemote → mergeSettings"| SS
 
-    style S fill:#4f46e5,color:#fff
-    style C fill:#4f46e5,color:#fff
-    style V fill:#4f46e5,color:#fff
-    style SS fill:#f59e0b,color:#fff
-    style PL fill:#f59e0b,color:#fff
+    CS -->|"defineStorageSync"| DS2["watch(conversation) → debounce 200ms → plain() → setValue"]
+    DS2 --> CS_Item
+    CS_Item --> WS2["storage.watch() → applyRemote"]
+    WS2 --> CS
+
+    VS -.->|"纯内存，无持久化"| VS
+
+    style VS fill:#f9f9f9,stroke-dasharray: 5 5
 ```
 
-## 核心设计决策
+## Storage Keys
 
-### 1. Pinia 作为响应式状态管理
+| Key | Store | 类型 | 说明 |
+|-----|-------|------|------|
+| `local:ai-browser-settings` | useSettingsStore | `AppSettings` | 全局设置（模型列表、API Key、主题等） |
+| `local:ai-browser-conversation` | useConversationsStore | `Conversation \| null` | 当前会话（单会话模式） |
+| `local:ai-browser-fab-pos` | — | `{ x: number; y: number }` | 悬浮按钮位置 |
+| `local:ai-browser-drawer-open` | — | `boolean` | 抽屉展开状态 |
+| `local:ai-browser-input-history` | — | `string[]` | 输入历史记录 |
+| `local:aib-queued-task` | — | `QueuedTask \| null` | 跨标签页排队任务 |
 
-采用 Pinia（Vue 3 官方状态管理库）管理全局状态。所有 Store 均使用 Composition API 风格（`defineStore` + `setup` 函数），与 Vue 3 组合式 API 保持一致的开发体验。
+---
 
-### 2. defineStorageSync() 自动双向同步
+## defineStorageSync — 双向同步原语
 
-自研 `defineStorageSync()` 工具封装了 Pinia State 与 Chrome Storage 之间的双向同步逻辑：
+源码：`src/utils/storage-sync.ts`
 
-- **本地变化 → Storage**：通过 Vue `watch()` 深度监听响应式数据，防抖（默认 200ms）后调用 `storage.setValue()` 写入
-- **Storage 变化 → 本地**：通过 `storage.watch()` 监听跨标签页的存储变更，调用 `applyRemote()` 回调应用到本地 State
-- **回声抑制**：本地写入后记录时间戳（`lastSelfWrite`），在 500ms 窗口内忽略自身触发的 `watch` 回调，避免死循环
-
-### 3. 单一会话模型
-
-会话管理采用单一会话模式（不再支持多会话切换）。整个应用生命周期内只有一个 `Conversation` 对象，简化了状态管理复杂度。保留了旧的多会话存储键 `aib-conversations` 用于数据迁移。
-
-### 4. 设置安全合并机制
-
-`mergeSettings()` 函数保证从 Storage 读取的数据始终与 `DEFAULT_SETTINGS` 合并，防止数据损坏导致应用异常：
-
-- `models` 必须为非空数组，否则回退到默认值
-- 每个模型必须有有效的 `id` 和 `label`（自动修复缺失字段）
-- `defaultModelId` 必须指向一个有效的模型，否则自动指向第一个模型
-
-### 5. 输入历史独立存储
-
-输入历史记录单独存储在 `aib-input-history`，不与会话数据耦合。采用上限 100 条 + 连续去重策略，避免存储膨胀。
-
-## 详细实现
-
-### useSettingsStore
-
-**文件**: `src/stores/settings.ts`
-
-管理全局应用设置，包括 AI 提供商配置、模型列表、UI 偏好等。
-
-**状态字段**:
-
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| `settings` | `Ref<AppSettings>` | 响应式设置对象 |
-| `ready` | `Ref<boolean>` | 初始化完成标志 |
-
-**AppSettings 结构**:
+### 核心接口
 
 ```typescript
-interface AppSettings {
-  provider: Provider;           // AI 协议: openai / anthropic / gemini / deepseek 等
-  baseUrl: string;              // API 请求地址
-  apiKey: string;               // API 密钥
-  authField?: string;           // 认证字段: bearer / api-key / access-token
-  models: ModelConfig[];        // 可用模型列表
-  defaultModelId: string;       // 默认模型 ID
-  drawerWidth: number;          // 抽屉宽度（vw 百分比，40-100）
-  primaryColor: string;         // 主题色（hex）
-  theme?: string;               // 主题 ID
-  shortcut: string;             // 唤起快捷键，如 "Ctrl+`"
-  maxContext?: number;          // 单会话最大上下文消息数
-  translateTargetLang?: string; // 翻译目标语言
-  translateMode?: string;       // 翻译模式: selection / auto / click / off
+interface SyncOptions<T> {
+  /** 响应式数据 ref */
+  source: Ref<T>;
+  /** wxt storage item */
+  storage: StorageItemLike<T>;
+  /** ready 标志，false 时不写入 */
+  ready: Ref<boolean>;
+  /** 来自远端的值 -> 应用到 source */
+  applyRemote: (nv: T) => void;
+  /** 防抖延时（ms），默认 200 */
+  debounce?: number;
+  /** 自我写入回声忽略窗口（ms），默认 500 */
+  echoWindow?: number;
 }
-```
 
-**核心方法**:
-
-```typescript
-// 初始化：从 Storage 加载设置，无数据则使用默认值并写入
-async function init(): Promise<void>
-
-// 更新设置：合并部分更新并立即持久化
-async function update(partial: Partial<AppSettings>): Promise<void>
-
-// 安全合并：保证数据完整性
-function mergeSettings(v: Partial<AppSettings>): AppSettings
-```
-
-**初始化流程**:
-
-```mermaid
-sequenceDiagram
-    participant App
-    participant Store as useSettingsStore
-    participant Storage as Chrome Storage
-
-    App->>Store: init()
-    Store->>Storage: settingsStorage.getValue()
-    alt 有有效数据
-        Storage-->>Store: AppSettings
-        Store->>Store: mergeSettings(data)
-    else 无数据（首次使用）
-        Store->>Store: mergeSettings(DEFAULT_SETTINGS)
-        Store->>Storage: settingsStorage.setValue(plain(settings))
-    end
-    Store->>Store: ready = true
-    Store-->>App: 完成
-```
-
-### useConversationsStore
-
-**文件**: `src/stores/conversations.ts`
-
-管理单一会话的完整生命周期，包括消息的发送、流式接收、中止、清除等操作。
-
-**状态字段**:
-
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| `conversation` | `Ref<Conversation \| null>` | 当前会话 |
-| `ready` | `Ref<boolean>` | 初始化完成标志 |
-| `contextCleared` | `Ref<boolean>` | 上下文已清除标志 |
-| `active` | `Computed<Conversation \| undefined>` | 兼容旧接口，指向唯一会话 |
-
-**Conversation 结构**:
-
-```typescript
-interface Conversation {
-  id: string;               // UUID
-  title: string;            // 会话标题（首条消息前 20 字符）
-  messages: ChatMessage[];  // 消息列表
-  modelId: string;          // 当前使用的模型 ID
-  scrollTop?: number;       // 滚动条位置
-  draftText?: string;       // 输入框草稿
-  draftAttachments?: Attachment[]; // 草稿附件
-  reasoningEnabled?: boolean; // 深度思考开关
-  createdAt: number;        // 创建时间
-  updatedAt: number;        // 更新时间
+interface StorageItemLike<T> {
+  setValue: (v: T) => Promise<void>;
+  watch: (cb: (nv: T | null) => void) => void;
 }
-```
 
-**核心方法**:
-
-```typescript
-// 初始化：加载会话数据，清理残留 streaming 消息
-async function init(): Promise<void>
-
-// 发送消息（流式）
-async function send(
-  text: string,
-  attachments?: Attachment[],
-  reasoningEnabled?: boolean
-): Promise<void>
-
-// 中止当前请求
-function abort(): void
-
-// 清除当前会话历史和上下文（中断 pipeline + 清空消息）
-async function clearCurrent(): Promise<void>
-
-// 彻底重置会话（清除缓存时使用，同时清空内存状态）
-async function resetConversation(): Promise<void>
-
-// 删除单条消息
-function deleteMessage(msgId: string): void
-```
-
-**send() 流程**:
-
-```mermaid
-sequenceDiagram
-    participant UI
-    participant Store as useConversationsStore
-    participant Adapter as AI Adapter
-    participant Storage as Chrome Storage
-
-    UI->>Store: send(text, attachments)
-    Store->>Store: 查找模型配置
-    Store->>Store: 校验 API Key
-
-    alt contextCleared == true
-        Store->>Store: 只发送最后一条用户消息
-        Store->>Store: contextCleared = false
-    else 正常模式
-        Store->>Store: enforceMaxContext()
-        Store->>Store: buildRequestMessages()
-    end
-
-    Store->>Store: 追加用户消息
-    Store->>Store: 创建 AI 占位消息（status: streaming）
-    Store->>Store: 记录输入历史
-
-    Store->>Adapter: adapter.chat(options, onChunk)
-
-    loop 流式接收
-        Adapter-->>Store: chunk.delta / chunk.reasoningDelta
-        Store->>Store: 累积 aiMsg.content / aiMsg.reasoning
-    end
-
-    alt 正常完成（chunk.done 或 adapter 结束）
-        Store->>Store: aiMsg.status = 'done'
-    else 中止
-        Store->>Store: aiMsg.status = 'aborted'
-    else 错误
-        Store->>Store: aiMsg.status = 'error'
-        Store->>Store: aiMsg.errorMessage = error.message
-    end
-
-    Note over Store,Storage: defineStorageSync 自动防抖持久化
-```
-
-### useVoiceStore
-
-**文件**: `src/stores/voice.ts`
-
-管理语音识别状态和语音对话历史。纯内存状态，不做持久化。
-
-**状态机**:
-
-```mermaid
-stateDiagram-v2
-    [*] --> idle
-    idle --> listening: 开始识别
-    listening --> processing: 识别完成
-    processing --> speaking: AI 回复 + 播报
-    speaking --> idle: 播报结束
-    processing --> idle: 无播报
-    listening --> idle: 取消
-```
-
-**核心字段**:
-
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| `status` | `VoiceStatus` | 语音识别底层状态 |
-| `sessionState` | `SessionState` | 会话状态机状态 |
-| `interimText` | `string` | 中间识别文本 |
-| `finalText` | `string` | 最终识别文本 |
-| `messages` | `VoiceMessage[]` | 语音对话历史 |
-| `isProcessing` | `boolean` | AI 处理中标志 |
-| `isSpeaking` | `boolean` | 语音播报中标志 |
-
-### defineStorageSync()
-
-**文件**: `src/utils/storage-sync.ts`
-
-将 Vue 响应式 Ref 与 Chrome Storage 进行双向同步的核心工具函数。
-
-**函数签名**:
-
-```typescript
 function defineStorageSync<T>(opts: SyncOptions<T>): {
   isApplyingRemote: () => boolean;
   markSelfWrite: () => void;
   flush: () => Promise<void>;
 }
+```
 
-interface SyncOptions<T> {
-  source: Ref<T>;                    // 响应式数据源
-  storage: StorageItemLike<T>;       // wxt storage item
-  ready: Ref<boolean>;               // 就绪标志，false 时不写入
-  applyRemote: (nv: T) => void;      // 远端值应用回调
-  debounce?: number;                 // 防抖延时（默认 200ms）
-  echoWindow?: number;               // 回声忽略窗口（默认 500ms）
+### 数据流
+
+```mermaid
+sequenceDiagram
+    participant Local as 本地 Tab
+    participant Sync as defineStorageSync
+    participant Storage as chrome.storage.local
+    participant Remote as 远端 Tab
+
+    Note over Local,Remote: 本地写入流程
+    Local->>Sync: source.value 变化 (deep watch)
+    Sync->>Sync: ready? applyingRemote? contextValid?
+    Sync->>Sync: debounce 200ms
+    Sync->>Sync: plain(source.value) — JSON.parse(JSON.stringify(toRaw(v)))
+    Sync->>Storage: setValue()
+    Sync->>Sync: lastSelfWrite = Date.now()
+
+    Note over Local,Remote: 远端接收流程
+    Storage->>Remote: storage.watch 回调
+    Remote->>Remote: Date.now() - lastSelfWrite < 500ms? → 忽略回声
+    Remote->>Remote: applyingRemote = true
+    Remote->>Remote: applyRemote(newValue)
+    Remote->>Remote: setTimeout(() → applyingRemote = false, 0)
+```
+
+### plain() — 去代理化
+
+```typescript
+export function plain<T>(v: T): T {
+  return JSON.parse(JSON.stringify(toRaw(v)));
 }
 ```
 
-**同步数据流**:
+Vue 3 的 `ref`/`reactive` 返回 Proxy 对象，直接序列化会报错。`plain()` 通过 `toRaw` 剥离 Proxy，再经 `JSON.parse(JSON.stringify(...))` 深拷贝得到纯净数据。
 
-```mermaid
-graph LR
-    subgraph 本地写入流程
-        A[source ref 变化] -->|Vue watch deep| B{ready?<br/>且非远端写入?}
-        B -->|是| C[防抖 200ms]
-        C --> D[plain 剥离响应式]
-        D --> E[storage.setValue]
-        E --> F[记录 lastSelfWrite]
-    end
+### 防回声机制
 
-    subgraph 远端同步流程
-        G[storage.watch 触发] --> H{距 lastSelfWrite<br/>< 500ms?}
-        H -->|是| I[忽略（回声）]
-        H -->|否| J[applyRemote 回调]
-        J --> K[source ref 更新]
-    end
+跨标签页同步的核心难题：Tab A 写入 storage → storage 变更事件同时触发 Tab A 和 Tab B → Tab A 收到自己的写入回声 → 再次写入 → 无限循环。
 
-    style A fill:#10b981,color:#fff
-    style G fill:#3b82f6,color:#fff
-    style I fill:#ef4444,color:#fff
-```
+解决方案：
 
-### plain() 辅助函数
+1. **写入时记录时间戳**：`lastSelfWrite = Date.now()`
+2. **收到远端变更时检查**：`Date.now() - lastSelfWrite < echoWindow` → 忽略
+3. **applyRemote 期间标记**：`applyingRemote = true`，跳过本地 watch 写入
+
+### flush() — 绕过防抖的立即写入
 
 ```typescript
-function plain<T>(v: T): T
+async function flush(): Promise<void> {
+  if (!isContextValid()) return;
+  if (timer) window.clearTimeout(timer);
+  lastSelfWrite = Date.now();
+  await storage.setValue(plain(source.value)).catch(() => {});
+}
 ```
 
-剥离 Vue 响应式代理（Proxy），返回纯净的 JavaScript 对象。实现方式为 `JSON.parse(JSON.stringify(toRaw(v)))`。在写入 Chrome Storage 前必须调用，避免 Proxy 对象序列化失败。
+用于 `update()` 等需要确保数据立即持久化的场景。
 
-## 存储键定义
+---
 
-所有存储键使用 `aib-` 命名空间，存储在 `local:` 域（仅本设备同步）。
+## useSettingsStore (aib-settings)
 
-| 存储键 | 类型 | 说明 | 持久化 |
-|--------|------|------|--------|
-| `local:ai-browser-settings` | `AppSettings` | 全局设置 | 是 |
-| `local:ai-browser-conversation` | `Conversation \| null` | 当前会话 | 是 |
-| `local:ai-browser-fab-pos` | `{ right: number, bottom: number }` | 悬浮按钮位置 | 是 |
-| `local:ai-browser-drawer-open` | `boolean` | 抽屉展开状态 | 是 |
-| `local:ai-browser-input-history` | `string[]` | 输入历史（上限 100 条） | 是 |
-| `local:aib-queued-task` | `QueuedTask \| null` | 跨标签页排队任务 | 否（用后即清） |
+源码：`src/stores/settings.ts`
 
-## 错误处理
+### 类型定义
 
-### 设置安全合并
+```typescript
+interface AppSettings {
+  provider: Provider;
+  baseUrl: string;
+  apiKey: string;
+  authField?: string;
+  models: ModelConfig[];
+  defaultModelId: string;
+  drawerWidth: number;
+  primaryColor: string;
+  theme?: string;
+  shortcut: string;
+  maxConversations?: number;
+  maxContext?: number;
+  autoSendSelection?: 'auto' | 'manual' | 'off';
+  translateTargetLang?: string;
+  translateMode?: 'selection' | 'auto' | 'click' | 'off';
+  automationEnabled?: boolean;
+}
 
-`mergeSettings()` 函数对所有从 Storage 读取的设置执行防御性合并：
+interface ModelConfig {
+  id: string;
+  label: string;
+  provider: Provider;
+  modelName: string;
+  reasoning?: boolean;
+  vision?: boolean;
+  baseUrl?: string;
+  apiKey?: string;
+  authField?: string;
+  website?: string;
+}
+```
+
+### Store 结构
+
+```typescript
+export const useSettingsStore = defineStore('aib-settings', () => {
+  const settings = ref<AppSettings>({ ...DEFAULT_SETTINGS });
+  const ready = ref(false);
+
+  function mergeSettings(v: Partial<AppSettings>): AppSettings { /* ... */ }
+  async function init() { /* ... */ }
+  async function update(partial: Partial<AppSettings>) { /* ... */ }
+
+  return { settings, ready, init, update };
+});
+```
+
+### mergeSettings() — 安全合并
 
 ```mermaid
 flowchart TD
-    A[读取 Storage 数据] --> B{是有效对象?}
-    B -->|否| C[使用 DEFAULT_SETTINGS]
-    B -->|是| D[与 DEFAULT_SETTINGS 合并]
-    D --> E{models 是非空数组?}
-    E -->|否| F[models 回退默认值]
-    E -->|是| G[修复缺失的 id/label]
-    G --> H{defaultModelId 有效?}
-    H -->|否| I[指向第一个模型]
-    H -->|是| J[返回合并结果]
-    F --> J
-    I --> J
-    C --> J
+    A["输入: Partial&lt;AppSettings&gt;"] --> B["merged = { ...DEFAULT_SETTINGS, ...v }"]
+    B --> C{"models 是非空数组?"}
+    C -->|否| D["merged.models = DEFAULT_SETTINGS.models"]
+    C -->|是| E["遍历 models: 补全 id/label"]
+    D --> E
+    E --> F{"defaultModelId 有效?<br/>在 models 中能找到?"}
+    F -->|否| G["defaultModelId = models[0].id"]
+    F -->|是| H["保持原值"]
+    G --> I["返回 merged"]
+    H --> I
 ```
 
-### 模型 ID 校验
+关键逻辑：
+- **models 数组验证**：非数组或空数组回退到 `DEFAULT_SETTINGS.models`
+- **id/label 自动修复**：`m.id || m.modelName || 'model-${i}'`
+- **defaultModelId 验证**：不存在则回退到 `models[0].id`
 
-- 模型缺少 `id` 时自动使用 `modelName` 或 `model-${index}` 作为兜底
-- 模型缺少 `label` 时自动使用 `modelName` 或 `模型 ${index + 1}` 作为兜底
-- `defaultModelId` 指向不存在的模型时自动重置为列表第一个模型
+### init() — 初始化流程
 
-### 上下文清除标记
+```mermaid
+flowchart TD
+    A["settingsStorage.getValue()"] --> B{"有有效数据?<br/>object + models 数组非空"}
+    B -->|是| C["settings = mergeSettings(v)"]
+    B -->|否| D["settings = mergeSettings(DEFAULT_SETTINGS)"]
+    D --> E["sync.markSelfWrite()"]
+    E --> F["settingsStorage.setValue(plain(settings))"]
+    C --> G["ready.value = true"]
+    F --> G
+```
 
-`contextCleared` 标志用于控制 `send()` 的上下文发送策略：
+首次加载时，`markSelfWrite()` 阻止后续 `defineStorageSync` 的 watch 将刚写入的默认值再次写入。
 
-- `clearCurrent()` 设置 `contextCleared = true`，同时中断 pipeline 和进行中的请求
-- 下次 `send()` 时仅发送当前用户消息，不携带历史上下文
-- 发送完成后自动重置 `contextCleared = false`
-- 后续消息恢复正常上下文携带
+### update() — 显式更新
 
-### 彻底重置会话
+```typescript
+async function update(partial: Partial<AppSettings>) {
+  settings.value = mergeSettings({ ...settings.value, ...partial });
+  await sync.flush();  // 立即持久化，不走 200ms 防抖
+}
+```
 
-`resetConversation()` 用于清除缓存等场景，与 `clearCurrent()` 的区别：
+---
 
-- `clearCurrent()`: 清空消息 + 标记 contextCleared，保留会话 ID
-- `resetConversation()`: 创建全新会话对象（新 ID），重置 contextCleared
+## useConversationsStore (aib-conversations)
 
-### 残留 streaming 消息清理
+源码：`src/stores/conversations.ts`
 
-`init()` 加载会话时自动清理残留的 `streaming` 状态消息。跨标签页导航时 JS 上下文被销毁，防抖写入可能未完成，导致消息停留在 `streaming` 状态。清理逻辑将其设为 `done`。
+### 类型定义
 
-### 流式请求错误处理
+```typescript
+interface Conversation {
+  id: string;
+  title: string;
+  messages: ChatMessage[];
+  modelId: string;
+  scrollTop?: number;
+  draftText?: string;
+  draftAttachments?: Attachment[];
+  reasoningEnabled?: boolean;
+  createdAt: number;
+  updatedAt: number;
+}
 
-| 状态 | 触发条件 | 处理 |
-|------|----------|------|
-| `done` | 正常完成 | 设置 status 为 done |
-| `aborted` | 用户主动中止或 `AbortError` | 设置 status 为 aborted |
-| `error` | 网络错误、API 错误等 | 设置 status 为 error，记录 errorMessage |
+interface ChatMessage {
+  id: string;
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  reasoning?: string;
+  attachments?: Attachment[];
+  timestamp: number;
+  status?: 'sending' | 'streaming' | 'done' | 'error' | 'aborted';
+  errorMessage?: string;
+  reasoningEnabled?: boolean;
+}
+```
 
-## 源文件索引
+### Store 结构
 
-| 文件 | 职责 |
-|------|------|
-| `src/stores/settings.ts` | 全局设置 Store，管理 AI 配置和 UI 偏好 |
-| `src/stores/conversations.ts` | 会话 Store，管理消息发送和流式接收、会话重置 |
-| `src/stores/voice.ts` | 语音 Store，管理语音识别状态（纯内存） |
-| `src/storage/index.ts` | 存储键定义和 Storage Item 创建（含 queuedTaskStorage） |
-| `src/storage/input-history.ts` | 输入历史记录管理（上限 100 条，连续去重） |
-| `src/utils/storage-sync.ts` | 双向同步工具 `defineStorageSync()` 和 `plain()` |
-| `src/utils/cache.ts` | 缓存大小检查和自动清除 |
-| `src/types.ts` | 核心类型定义：AppSettings, Conversation, ChatMessage 等 |
+```typescript
+export const useConversationsStore = defineStore('aib-conversations', () => {
+  const conversation = ref<Conversation | null>(null);
+  const ready = ref(false);
+  const contextCleared = ref(false);
+  let currentAborter: AbortController | null = null;
+
+  const active = computed(() => conversation.value ?? undefined);
+
+  async function init() { /* ... */ }
+  async function clearCurrent() { /* ... */ }
+  async function resetConversation() { /* ... */ }
+  function deleteMessage(msgId: string) { /* ... */ }
+  function updateScroll(top: number) { /* ... */ }
+  async function send(text, attachments?, reasoningEnabled?) { /* ... */ }
+  function abort() { /* ... */ }
+
+  return { conversation, active, ready, contextCleared, init, clearCurrent, resetConversation, deleteMessage, updateScroll, send, abort };
+});
+```
+
+### send() — 流式发送
+
+```mermaid
+sequenceDiagram
+    participant User as 用户
+    participant Store as ConversationsStore
+    participant Adapter as AI Adapter
+    participant Background as Background SW
+
+    User->>Store: send(text, attachments, reasoningEnabled)
+    Store->>Store: 查找 model 配置
+    Store->>Store: 推送 user 消息到 messages
+    Store->>Store: 创建 reactive aiMsg (status: 'streaming')
+    Store->>Store: pushInputHistory(text)
+    Store->>Store: contextCleared? → 只发当前消息 : enforceMaxContext + buildRequestMessages
+
+    Store->>Adapter: adapter.chat({ messages, signal }, onChunk)
+    Adapter->>Background: proxy-fetch-stream
+    Background-->>Adapter: stream-chunk (SSE)
+
+    loop 流式回调
+        Adapter->>Store: onChunk({ delta, reasoningDelta, done })
+        Store->>Store: aiMsg.content += delta
+        Store->>Store: aiMsg.reasoning += reasoningDelta
+    end
+
+    Store->>Store: aiMsg.status = 'done'
+
+    alt 中止
+        User->>Store: abort()
+        Store->>Store: currentAborter.abort()
+        Store->>Store: aiMsg.status = 'aborted'
+    end
+
+    alt 错误
+        Store->>Store: aiMsg.status = 'error'
+        Store->>Store: aiMsg.errorMessage = e.message
+    end
+```
+
+关键设计：
+- **reactive aiMsg**：用 `reactive()` 包装 AI 占位消息，确保流式更新触发 Vue 渲染
+- **contextCleared**：清除上下文后首次发送只携带当前用户消息，发送后重置标记
+- **enforceMaxContext**：消息数超过 `maxContext` 时从头部截断
+
+### clearCurrent() — 清除当前会话
+
+```typescript
+async function clearCurrent() {
+  await abortPipeline();           // 中断 pipeline 指令流
+  currentAborter?.abort();         // 中断 AI 请求
+  conversation.value.messages = [];
+  conversation.value.title = '新对话';
+  conversation.value.draftText = '';
+  conversation.value.draftAttachments = [];
+  contextCleared.value = true;     // 标记上下文已清除
+}
+```
+
+### resetConversation() — 彻底重置
+
+```typescript
+async function resetConversation() {
+  await abortPipeline();
+  currentAborter?.abort();
+  conversation.value = createDefaultConversation();  // 全新会话
+  contextCleared.value = false;
+}
+```
+
+### init() — 初始化与残留清理
+
+初始化时会清理跨标签页导航时残留的 `streaming` 状态消息：
+
+```typescript
+for (const msg of conversation.value.messages) {
+  if (msg.status === 'streaming') {
+    msg.status = 'done'  // 标记为完成
+  }
+}
+```
+
+---
+
+## useVoiceStore (voice)
+
+源码：`src/stores/voice.ts`
+
+纯内存 store，不持久化到 `chrome.storage`。
+
+### 状态机
+
+```mermaid
+stateDiagram-v2
+    [*] --> idle
+    idle --> listening: 开始语音识别
+    listening --> processing: 识别完成
+    processing --> speaking: AI 回复 + 播报
+    processing --> idle: 处理完成（无播报）
+    speaking --> idle: 播报结束
+    listening --> idle: 取消
+```
+
+### 类型定义
+
+```typescript
+type SessionState = 'idle' | 'listening' | 'processing' | 'speaking';
+
+interface VoiceMessage {
+  id: string;
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  actionResult?: {
+    action: string;
+    success: boolean;
+    message: string;
+  };
+  timestamp: number;
+}
+```
+
+### Store 结构
+
+```typescript
+export const useVoiceStore = defineStore('voice', () => {
+  const status = ref<VoiceStatus>('idle');
+  const sessionState = ref<SessionState>('idle');
+  const interimText = ref('');
+  const finalText = ref('');
+  const messages = ref<VoiceMessage[]>([]);
+  const isProcessing = ref(false);
+  const isSpeaking = ref(false);
+  const messageCount = computed(() => messages.value.length);
+
+  function setStatus(newStatus: VoiceStatus) { /* ... */ }
+  function setSessionState(state: SessionState) { /* ... */ }
+  function updateText(text: string, isFinal: boolean) { /* ... */ }
+  function addUserMessage(text: string): VoiceMessage { /* ... */ }
+  function addAssistantMessage(content: string, actionResult?): VoiceMessage { /* ... */ }
+  function addSystemMessage(content: string): VoiceMessage { /* ... */ }
+  function clearMessages() { /* ... */ }
+  function setProcessing(value: boolean) { /* ... */ }
+  function setSpeaking(value: boolean) { /* ... */ }
+
+  return { status, sessionState, interimText, finalText, messages, isProcessing, isSpeaking, messageCount, setStatus, setSessionState, updateText, addUserMessage, addAssistantMessage, addSystemMessage, clearMessages, setProcessing, setSpeaking };
+});
+```
+
+### 设计要点
+
+- **4 状态状态机**：idle → listening → processing → speaking → idle，无 evaluating 中间态
+- **VoiceMessage.actionResult**：自动化指令执行结果（action/success/message）
+- **interimText / finalText**：语音识别的中间结果和最终结果分离
+- **消息 ID**：使用 `Date.now().toString()`，非 uuid（轻量，内部使用）
+
+---
+
+## Store 间依赖关系
+
+```mermaid
+graph LR
+    CS["useConversationsStore"] -->|"useSettingsStore()<br/>查找模型配置"| SS["useSettingsStore"]
+    CS -->|"createAdapter(provider)"| AD["Adapter Layer"]
+    CS -->|"abortPipeline()"| PL["usePipeline"]
+    SS -->|"defineStorageSync"| ST["Storage Layer"]
+    CS -->|"defineStorageSync"| ST
+    VS["useVoiceStore"] -.->|"无依赖"| VS
+```
+
+- `useConversationsStore` 依赖 `useSettingsStore` 获取模型配置、API Key、maxContext 等
+- `useVoiceStore` 完全独立，纯内存操作
+- 两个持久化 store 各自通过 `defineStorageSync` 与 `chrome.storage.local` 同步

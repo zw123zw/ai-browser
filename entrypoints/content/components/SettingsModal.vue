@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue';
 import { v4 as uuid } from 'uuid';
+import MarkdownIt from 'markdown-it';
 import { useSettingsStore } from '@/src/stores/settings';
 import { useConversationsStore } from '@/src/stores/conversations';
 import { useToast } from '@/src/composables/useToast';
@@ -8,11 +9,15 @@ import { abortPipeline } from '@/src/composables/usePipeline';
 import type { ModelConfig, Provider } from '@/src/types';
 import { eventToShortcut } from '@/src/utils/shortcut';
 import { THEMES } from '@/src/themes';
+import { useI18n, type Locale } from '@/src/i18n';
 import ConfirmDialog from './ConfirmDialog.vue';
 
 const emit = defineEmits<{ (e: 'close'): void }>();
 const store = useSettingsStore();
 const toast = useToast();
+const { t, locale, setLocale } = useI18n();
+
+const appVersion = '1.3.1';
 
 // ========== License & 缓存 ==========
 const licenseKey = ref('');
@@ -47,7 +52,7 @@ const cacheBarClass = computed(() => {
 
 function activateLicense() {
   // TODO: 激活逻辑暂未实现
-  toast.info('激活功能暂未开放');
+  toast.info(t('settings.user.activateNotOpen'));
 }
 
 async function handleClearCache() {
@@ -63,7 +68,7 @@ async function confirmClearCache() {
   await convStore.resetConversation();
   const { clearCache } = await import('@/src/utils/cache');
   await clearCache();
-  toast.success('缓存已清除');
+  toast.success(t('settings.user.cacheCleared'));
   await loadCacheSize();
 }
 
@@ -72,10 +77,37 @@ onMounted(loadCacheSize);
 async function handleDownloadLogs() {
   const { downloadLogs } = await import('@/src/utils/log-storage');
   await downloadLogs();
-  toast.success('日志已下载');
+  toast.success(t('settings.user.logDownloaded'));
 }
 
 const tab = ref<'ai' | 'general' | 'user'>('ai');
+
+// ========== 使用文档 ==========
+const showDocs = ref(false);
+const docsHtml = ref('');
+const docsLoading = ref(false);
+const md = new MarkdownIt({ html: false, linkify: true, typographer: true });
+
+async function openDocs() {
+  showDocs.value = true;
+  docsLoading.value = true;
+  try {
+    const resp = await fetch(chrome.runtime.getURL('user-guide.md'));
+    if (resp.ok) {
+      docsHtml.value = md.render(await resp.text());
+    } else {
+      docsHtml.value = '<p>文档加载失败</p>';
+    }
+  } catch {
+    docsHtml.value = '<p>文档加载失败</p>';
+  }
+  docsLoading.value = false;
+}
+
+function closeDocs() {
+  showDocs.value = false;
+  docsHtml.value = '';
+}
 
 // ========== 模型配置 ==========
 
@@ -267,7 +299,7 @@ function applyPreset(presetKey: string) {
 async function saveModel() {
   const modelData: ModelConfig = {
     id: form.id || uuid(),
-    label: form.label || form.modelName || '未命名模型',
+    label: form.label || form.modelName || t('settings.ai.unnamed'),
     provider: form.provider,
     modelName: form.modelName,
     baseUrl: form.baseUrl,
@@ -302,7 +334,7 @@ async function saveModel() {
     baseUrl: modelData.baseUrl || '',
     apiKey: modelData.apiKey || '',
   });
-  toast.success('模型配置已保存');
+  toast.success(t('settings.ai.saved'));
 }
 
 // 删除当前模型（支持全部删除）
@@ -368,18 +400,18 @@ const generalForm = reactive({
   maxContext: store.settings.maxContext || 50,
 });
 
-const autoSendOptions = [
-  { value: 'auto' as const, label: '自动发送', desc: '选中文字后直接发送给 AI 分析' },
-  { value: 'manual' as const, label: '手动发送', desc: '选中文字后填入聊天输入框，手动确认发送' },
-  { value: 'off' as const, label: '关闭', desc: '不处理页面选中文字' },
-];
+const autoSendOptions = computed(() => [
+  { value: 'auto' as const, label: t('settings.general.autoSendOptions.auto.label'), desc: t('settings.general.autoSendOptions.auto.desc') },
+  { value: 'manual' as const, label: t('settings.general.autoSendOptions.manual.label'), desc: t('settings.general.autoSendOptions.manual.desc') },
+  { value: 'off' as const, label: t('settings.general.autoSendOptions.off.label'), desc: t('settings.general.autoSendOptions.off.desc') },
+]);
 
-const translateModeOptions = [
-  { value: 'selection' as const, label: '划词翻译', desc: '选中文字后弹出翻译浮层' },
-  { value: 'auto' as const, label: '自动翻译', desc: '页面文本自动翻译为目标语言' },
-  { value: 'click' as const, label: '点击翻译', desc: '点击段落翻译整块内容' },
-  { value: 'off' as const, label: '关闭', desc: '不启用翻译功能' },
-];
+const translateModeOptions = computed(() => [
+  { value: 'selection' as const, label: t('settings.general.translateModes.selection.label'), desc: t('settings.general.translateModes.selection.desc') },
+  { value: 'auto' as const, label: t('settings.general.translateModes.auto.label'), desc: t('settings.general.translateModes.auto.desc') },
+  { value: 'click' as const, label: t('settings.general.translateModes.click.label'), desc: t('settings.general.translateModes.click.desc') },
+  { value: 'off' as const, label: t('settings.general.translateModes.off.label'), desc: t('settings.general.translateModes.off.desc') },
+]);
 
 const translateLangOptions = [
   { value: '中文', label: '中文' },
@@ -445,7 +477,7 @@ async function saveGeneral() {
     translateTargetLang: generalForm.translateTargetLang,
     translateMode: generalForm.translateMode,
   });
-  toast.success('通用配置已保存');
+  toast.success(t('settings.general.saved'));
   emit('close');
 }
 
@@ -461,14 +493,14 @@ async function saveAndClearHistory() {
   });
   const convStore = useConversationsStore();
   await convStore.resetConversation();
-  toast.success('通用配置已保存，会话已清空');
+  toast.success(t('settings.general.saved'));
   emit('close');
 }
 
 // 保存上下文消息数
 async function saveMaxContext() {
   await store.update({ maxContext: generalForm.maxContext });
-  toast.success('上下文消息数已保存');
+  toast.success(t('settings.user.maxContextSaved'));
 }
 
 // 导出模型配置为 JSON 文件
@@ -511,7 +543,7 @@ function importModels(e: Event) {
     try {
       const data = JSON.parse(reader.result as string);
       if (!Array.isArray(data)) {
-        toast.error('文件格式错误，期望 JSON 数组');
+        toast.error(t('settings.ai.importError'));
         return;
       }
 
@@ -545,7 +577,7 @@ function importModels(e: Event) {
       }
 
       if (imported === 0) {
-        toast.error('未找到有效模型配置');
+        toast.error(t('settings.ai.importNoValid'));
         return;
       }
 
@@ -566,7 +598,7 @@ function importModels(e: Event) {
         toast.success(`已导入 ${imported} 个模型配置`);
       }
     } catch {
-      toast.error('文件格式错误，请确认是 JSON 数组');
+      toast.error(t('settings.ai.importError'));
     }
   };
   reader.readAsText(file);
@@ -574,10 +606,10 @@ function importModels(e: Event) {
 </script>
 
 <template>
-  <div class="aib-modal-mask">
+  <div v-show="!showDocs" class="aib-modal-mask">
     <div class="aib-modal aib-modal-settings">
       <div class="aib-modal-header">
-        <span>设置</span>
+        <span>{{ t('settings.title') }}</span>
         <button class="aib-modal-close aib-modal-close-inline" @click="emit('close')">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -597,7 +629,7 @@ function importModels(e: Event) {
               stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
               <path d="M12 2a3 3 0 0 0-3 3v1a3 3 0 0 0-3 3H5a3 3 0 0 0 0 6h1a3 3 0 0 0 3 3v1a3 3 0 0 0 6 0v-1a3 3 0 0 0 3-3h1a3 3 0 0 0 0-6h-1a3 3 0 0 0-3-3V5a3 3 0 0 0-3-3z"/>
             </svg>
-            模型配置
+            {{ t('settings.tabs.ai') }}
           </button>
           <button
             :class="['aib-settings-tab', { 'aib-tab-active': tab === 'general' }]"
@@ -608,7 +640,7 @@ function importModels(e: Event) {
               <circle cx="12" cy="12" r="3" />
               <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
             </svg>
-            通用配置
+            {{ t('settings.tabs.general') }}
           </button>
           <button
             :class="['aib-settings-tab', { 'aib-tab-active': tab === 'user' }]"
@@ -619,7 +651,7 @@ function importModels(e: Event) {
               <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
               <circle cx="12" cy="7" r="4"/>
             </svg>
-            用户配置
+            {{ t('settings.tabs.user') }}
           </button>
         </aside>
 
@@ -627,11 +659,11 @@ function importModels(e: Event) {
           <!-- ========== 模型配置 ========== -->
           <div v-show="tab === 'ai'" class="aib-modal-body">
             <!-- 标题 -->
-            <div class="aib-section-title">模型配置</div>
+            <div class="aib-section-title">{{ t('settings.ai.title') }}</div>
 
             <!-- 默认模型选择（按钮式） -->
             <div class="aib-form-row">
-              <label>默认模型</label>
+              <label>{{ t('settings.ai.defaultModel') }}</label>
               <div class="aib-model-chips">
                 <button
                   v-for="m in localModels"
@@ -639,10 +671,10 @@ function importModels(e: Event) {
                   :class="['aib-chip', { 'aib-chip-active': selectedModelId === m.id }]"
                   @click="selectModel(m.id)"
                 >
-                  {{ m.label || m.modelName || '未命名' }}
+                  {{ m.label || m.modelName || t('settings.ai.unnamed') }}
                 </button>
                 <button class="aib-chip aib-chip-new" @click="createNewModel">
-                  + 新建
+                  {{ t('settings.ai.newModel') }}
                 </button>
                 <button class="aib-chip aib-chip-tool" @click="exportModels" title="导出配置">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -650,7 +682,7 @@ function importModels(e: Event) {
                     <polyline points="7 10 12 15 17 10"/>
                     <line x1="12" y1="15" x2="12" y2="3"/>
                   </svg>
-                  导出
+                  {{ t('settings.ai.export') }}
                 </button>
                 <button class="aib-chip aib-chip-tool" @click="triggerImport" title="导入配置">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -658,7 +690,7 @@ function importModels(e: Event) {
                     <polyline points="17 8 12 3 7 8"/>
                     <line x1="12" y1="3" x2="12" y2="15"/>
                   </svg>
-                  导入
+                  {{ t('settings.ai.import') }}
                 </button>
                 <input
                   ref="fileInputRef"
@@ -672,7 +704,7 @@ function importModels(e: Event) {
 
             <!-- 快速填充 -->
             <div class="aib-form-row">
-              <label>快速填充</label>
+              <label>{{ t('settings.ai.quickFill') }}</label>
               <div class="aib-preset-grid">
                 <button
                   v-for="(preset, key) in providerPresets"
@@ -687,35 +719,35 @@ function importModels(e: Event) {
 
             <!-- 供应商 -->
             <div class="aib-form-row">
-              <label>供应商</label>
+              <label>{{ t('settings.ai.provider') }}</label>
               <select v-model="form.provider" class="aib-select">
                 <option value="openai">OpenAI 兼容</option>
                 <option value="anthropic">Anthropic</option>
                 <option value="gemini">Google Gemini</option>
-                <option value="qwen">通义千问</option>
-                <option value="wenxin">文心一言</option>
-                <option value="doubao">豆包</option>
-                <option value="zhipu">智谱清言</option>
+                <option value="qwen">{{ t('settings.ai.providers.qwen') }}</option>
+                <option value="wenxin">{{ t('settings.ai.providers.wenxin') }}</option>
+                <option value="doubao">{{ t('settings.ai.providers.doubao') }}</option>
+                <option value="zhipu">{{ t('settings.ai.providers.zhipu') }}</option>
                 <option value="deepseek">DeepSeek</option>
                 <option value="moonshot">Moonshot (Kimi)</option>
                 <option value="grok">Grok (xAI)</option>
-                <option value="custom">自定义</option>
+                <option value="custom">{{ t('settings.ai.providers.custom') }}</option>
               </select>
             </div>
 
             <!-- 显示名称 -->
             <div class="aib-form-row">
-              <label>显示名称</label>
+              <label>{{ t('settings.ai.displayName') }}</label>
               <input
                 v-model="form.label"
                 class="aib-input"
-                placeholder="如：GPT-4o、DeepSeek Chat"
+                :placeholder="t('settings.ai.displayNamePlaceholder')"
               />
             </div>
 
             <!-- 请求地址 -->
             <div class="aib-form-row">
-              <label>请求地址</label>
+              <label>{{ t('settings.ai.requestUrl') }}</label>
               <input
                 v-model="form.baseUrl"
                 class="aib-input"
@@ -736,7 +768,7 @@ function importModels(e: Event) {
                 <button
                   class="aib-btn aib-btn-toggle"
                   @click="showApiKey = !showApiKey"
-                  :title="showApiKey ? '隐藏' : '显示'"
+                  :title="showApiKey ? t('common.close') : t('common.confirm')"
                 >
                   <svg v-if="!showApiKey" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
@@ -752,7 +784,7 @@ function importModels(e: Event) {
 
             <!-- 认证字段 -->
             <div class="aib-form-row">
-              <label>认证字段</label>
+              <label>{{ t('settings.ai.authField') }}</label>
               <select v-model="form.authField" class="aib-select">
                 <option v-for="a in authFields" :key="a.value" :value="a.value">
                   {{ a.label }}
@@ -762,21 +794,21 @@ function importModels(e: Event) {
 
             <!-- 主模型 -->
             <div class="aib-form-row">
-              <label>主模型</label>
+              <label>{{ t('settings.ai.modelName') }}</label>
               <input
                 v-model="form.modelName"
                 class="aib-input"
-                placeholder="如：gpt-4o、deepseek-chat、qwen-turbo"
+                :placeholder="t('settings.ai.modelNamePlaceholder')"
               />
             </div>
 
             <!-- 官网地址 -->
             <div class="aib-form-row">
-              <label>官网地址</label>
+              <label>{{ t('settings.ai.website') }}</label>
               <input
                 v-model="form.website"
                 class="aib-input"
-                placeholder="如：https://platform.openai.com/"
+                :placeholder="t('settings.ai.websitePlaceholder')"
               />
             </div>
 
@@ -787,12 +819,12 @@ function importModels(e: Event) {
                 class="aib-btn aib-btn-danger"
                 @click="deleteModel"
               >
-                删除模型
+                {{ t('settings.ai.delete') }}
               </button>
               <div style="flex:1" />
-              <button class="aib-btn" @click="emit('close')">取消</button>
+              <button class="aib-btn" @click="emit('close')">{{ t('settings.ai.cancel') }}</button>
               <button class="aib-btn aib-btn-primary" @click="saveModel">
-                保存
+                {{ t('settings.ai.save') }}
               </button>
             </div>
           </div>
@@ -800,7 +832,7 @@ function importModels(e: Event) {
           <!-- ========== 通用配置 ========== -->
           <div v-show="tab === 'general'" class="aib-modal-body">
             <div class="aib-form-row">
-              <label>主题风格</label>
+              <label>{{ t('settings.general.theme') }}</label>
               <div class="aib-theme-grid">
                 <div
                   v-for="t in THEMES"
@@ -822,7 +854,7 @@ function importModels(e: Event) {
             </div>
 
             <div class="aib-form-row">
-              <label>快捷键</label>
+              <label>{{ t('settings.general.shortcut') }}</label>
               <div class="aib-shortcut-row">
                 <div
                   ref="shortcutInputRef"
@@ -832,21 +864,21 @@ function importModels(e: Event) {
                   @keydown="onShortcutKeydown"
                   @blur="recording = false"
                 >
-                  <span v-if="recording" class="aib-text-faint">按下任意组合键，Esc 取消</span>
+                  <span v-if="recording" class="aib-text-faint">{{ t('settings.general.shortcutRecording') }}</span>
                   <span v-else-if="generalForm.shortcut" class="aib-shortcut-keys">
                     <kbd v-for="(k, i) in generalForm.shortcut.split('+')" :key="i" class="aib-kbd">{{ k }}</kbd>
                   </span>
-                  <span v-else class="aib-text-faint">点击录制快捷键</span>
+                  <span v-else class="aib-text-faint">{{ t('settings.general.shortcutRecord') }}</span>
                 </div>
-                <button class="aib-btn" @click="clearShortcut">清除</button>
+                <button class="aib-btn" @click="clearShortcut">{{ t('settings.general.shortcutClear') }}</button>
               </div>
               <div class="aib-text-faint" style="font-size: 12px;">
-                提示：浏览器扩展全局快捷键需在 chrome://extensions/shortcuts 配置；此处设置的是页面内监听的快捷键。
+                {{ t('settings.general.shortcutHint') }}
               </div>
             </div>
 
             <div class="aib-form-row">
-              <label>网页自动化</label>
+              <label>{{ t('settings.general.automation') }}</label>
               <div class="aib-switch-row">
                 <button
                   :class="['aib-switch', { 'aib-switch-on': generalForm.automationEnabled }]"
@@ -855,16 +887,16 @@ function importModels(e: Event) {
                   <span class="aib-switch-thumb" />
                 </button>
                 <span class="aib-text-faint" style="font-size: 13px;">
-                  {{ generalForm.automationEnabled ? '已开启：AI 可控制浏览器操作页面' : '已关闭：仅聊天和文件生成' }}
+                  {{ generalForm.automationEnabled ? t('settings.general.automationOn') : t('settings.general.automationOff') }}
                 </span>
               </div>
               <div class="aib-text-faint" style="font-size: 12px;">
-                关闭后 AI 将不再执行网页操作指令（打开链接、点击、输入等），仅保留聊天和文件生成功能。关闭会自动清空当前会话历史。
+                {{ t('settings.general.automationHint') }}
               </div>
             </div>
 
             <div class="aib-form-row">
-              <label>划词操作</label>
+              <label>{{ t('settings.general.autoSend') }}</label>
               <div class="aib-radio-group">
                 <div
                   v-for="opt in autoSendOptions"
@@ -885,10 +917,10 @@ function importModels(e: Event) {
 
             <!-- 翻译配置 -->
             <div class="aib-form-row">
-              <label>翻译配置</label>
+              <label>{{ t('settings.general.translate') }}</label>
               <div class="aib-translate-section">
                 <div class="aib-form-row-inner">
-                  <span class="aib-translate-label">目标语言</span>
+                  <span class="aib-translate-label">{{ t('settings.general.translateTargetLang') }}</span>
                   <select v-model="generalForm.translateTargetLang" class="aib-select aib-select-sm">
                     <option v-for="lang in translateLangOptions" :key="lang.value" :value="lang.value">
                       {{ lang.label }}
@@ -916,30 +948,30 @@ function importModels(e: Event) {
 
             <div class="aib-tab-footer">
               <div style="flex:1" />
-              <button class="aib-btn" @click="emit('close')">取消</button>
-              <button class="aib-btn aib-btn-primary" @click="saveGeneral">保存</button>
+              <button class="aib-btn" @click="emit('close')">{{ t('settings.general.cancel') }}</button>
+              <button class="aib-btn aib-btn-primary" @click="saveGeneral">{{ t('settings.general.save') }}</button>
             </div>
           </div>
 
           <!-- ========== 用户配置 ========== -->
           <div v-show="tab === 'user'" class="aib-modal-body">
             <div class="aib-form-row">
-              <label>激活码</label>
+              <label>{{ t('settings.user.license') }}</label>
               <div class="aib-input-group">
                 <input
                   v-model="licenseKey"
                   class="aib-input aib-input-with-btn"
-                  placeholder="请输入激活码"
+                  :placeholder="t('settings.user.licensePlaceholder')"
                 />
                 <button class="aib-btn-activate" @click="activateLicense">
-                  激活
+                  {{ t('settings.user.activate') }}
                 </button>
               </div>
             </div>
 
             <!-- 上下文消息数 -->
             <div class="aib-form-row">
-              <label>上下文消息数</label>
+              <label>{{ t('settings.user.maxContext') }}</label>
               <div class="aib-input-group">
                 <input
                   v-model.number="generalForm.maxContext"
@@ -951,14 +983,14 @@ function importModels(e: Event) {
                   placeholder="50"
                   @change="generalForm.maxContext = Math.max(5, Math.min(200, Math.round(generalForm.maxContext || 50)))"
                 />
-                <button class="aib-btn-activate" @click="saveMaxContext">保存</button>
+                <button class="aib-btn-activate" @click="saveMaxContext">{{ t('settings.general.save') }}</button>
               </div>
-              <span class="aib-text-faint">AI 每次请求携带的历史消息条数（5-200），影响对话连贯性和 token 消耗。</span>
+              <span class="aib-text-faint">{{ t('settings.user.maxContextHint') }}</span>
             </div>
 
             <!-- 缓存管理 -->
             <div class="aib-form-row">
-              <label>缓存管理</label>
+              <label>{{ t('settings.user.cache') }}</label>
               <div class="aib-cache-actions">
                 <button class="aib-btn aib-btn-icon aib-btn-danger" @click="handleClearCache">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -967,7 +999,7 @@ function importModels(e: Event) {
                     <line x1="10" y1="11" x2="10" y2="17"/>
                     <line x1="14" y1="11" x2="14" y2="17"/>
                   </svg>
-                  清除缓存
+                  {{ t('settings.user.clearCache') }}
                 </button>
                 <div class="aib-cache-info">
                   <div class="aib-cache-size">
@@ -976,7 +1008,7 @@ function importModels(e: Event) {
                       <div class="aib-cache-bar-fill" :class="cacheBarClass" :style="{ width: cachePercent + '%' }" />
                     </div>
                   </div>
-                  <span class="aib-text-faint">清除会话消息、日志、输入历史，用户个性化设置不会丢失</span>
+                  <span class="aib-text-faint">{{ t('settings.user.cacheHint') }}</span>
                 </div>
               </div>
             </div>
@@ -984,7 +1016,7 @@ function importModels(e: Event) {
             <!-- 日志管理（仅测试包可见） -->
             <template v-if="logEnabled">
               <div class="aib-form-row">
-                <label>日志管理</label>
+                <label>{{ t('settings.user.log') }}</label>
                 <div class="aib-cache-actions">
                   <button class="aib-btn aib-btn-icon" @click="handleDownloadLogs">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -992,13 +1024,86 @@ function importModels(e: Event) {
                       <polyline points="7 10 12 15 17 10"/>
                       <line x1="12" y1="15" x2="12" y2="3"/>
                     </svg>
-                    下载日志
+                    {{ t('settings.user.downloadLog') }}
                   </button>
                 </div>
               </div>
             </template>
+
+            <!-- 语言设置 -->
+            <div class="aib-form-row">
+              <label>{{ t('settings.user.language') }}</label>
+              <div class="aib-radio-group">
+                <div
+                  :class="['aib-radio-card', { 'aib-radio-active': locale === 'zh-CN' }]"
+                  @click="setLocale('zh-CN'); store.update({ locale: 'zh-CN' })"
+                >
+                  <div class="aib-radio-dot">
+                    <span v-if="locale === 'zh-CN'" class="aib-radio-dot-fill" />
+                  </div>
+                  <div class="aib-radio-body">
+                    <span class="aib-radio-label">{{ t('settings.user.langZh') }}</span>
+                  </div>
+                </div>
+                <div
+                  :class="['aib-radio-card', { 'aib-radio-active': locale === 'en-US' }]"
+                  @click="setLocale('en-US'); store.update({ locale: 'en-US' })"
+                >
+                  <div class="aib-radio-dot">
+                    <span v-if="locale === 'en-US'" class="aib-radio-dot-fill" />
+                  </div>
+                  <div class="aib-radio-body">
+                    <span class="aib-radio-label">{{ t('settings.user.langEn') }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 使用文档 -->
+            <div class="aib-form-row">
+              <label>{{ t('settings.user.docs') }}</label>
+              <button class="aib-docs-link" @click="openDocs">
+                {{ t('settings.user.docsHint') }}
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                  <polyline points="15 3 21 3 21 9"/>
+                  <line x1="10" y1="14" x2="21" y2="3"/>
+                </svg>
+              </button>
+            </div>
+
+            <!-- 版本号 -->
+            <div class="aib-version-footer">
+              v{{ appVersion }}
+            </div>
           </div>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 使用文档查看器（替代设置弹框） -->
+  <div v-if="showDocs" class="aib-modal-mask" @click.self="closeDocs">
+    <div class="aib-modal aib-docs-modal">
+      <div class="aib-modal-header">
+        <button class="aib-back-btn" @click="closeDocs">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M19 12H5M12 19l-7-7 7-7" />
+          </svg>
+          {{ t('common.close') }}
+        </button>
+        <span>{{ t('settings.user.docs') }}</span>
+        <button class="aib-modal-close aib-modal-close-inline" @click="closeDocs">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
+        </button>
+      </div>
+      <div class="aib-docs-body">
+        <div v-if="docsLoading" class="aib-docs-loading">{{ t('common.loading') }}</div>
+        <div v-else class="aib-docs-content" v-html="docsHtml" />
       </div>
     </div>
   </div>
@@ -1006,9 +1111,9 @@ function importModels(e: Event) {
   <!-- 清除缓存确认弹窗 -->
   <ConfirmDialog
     :visible="showClearCacheConfirm"
-    title="清除缓存"
-    desc="将清除会话消息、日志和输入历史，用户个性化设置不会丢失。"
-    confirm-text="确认清除"
+    :title="t('settings.user.clearCacheConfirm.title')"
+    :desc="t('settings.user.clearCacheConfirm.desc')"
+    :confirm-text="t('settings.user.clearCacheConfirm.confirm')"
     variant="danger"
     @confirm="confirmClearCache"
     @cancel="showClearCacheConfirm = false"
@@ -1027,11 +1132,11 @@ function importModels(e: Event) {
   <!-- 切换自动化确认弹窗 -->
   <ConfirmDialog
     :visible="showAutomationConfirm"
-    :title="pendingAutomationValue ? '开启网页自动化' : '关闭网页自动化'"
+    :title="pendingAutomationValue ? t('settings.general.automationOnTitle') : t('settings.general.automationOffTitle')"
     :desc="pendingAutomationValue
-      ? '开启后 AI 可控制浏览器操作页面，当前会话历史将被清空。确认开启？'
-      : '关闭后 AI 将仅保留聊天和文件生成功能，当前会话历史将被清空。确认关闭？'"
-    confirm-text="确认"
+      ? t('settings.general.automationOnDesc')
+      : t('settings.general.automationOffDesc')"
+    :confirm-text="t('settings.general.automationConfirm')"
     variant="primary"
     @confirm="confirmToggleAutomation"
     @cancel="cancelToggleAutomation"
@@ -1624,5 +1729,102 @@ function importModels(e: Event) {
 .aib-select-sm:focus {
   border-color: var(--aib-primary);
   outline: none;
+}
+
+/* 使用文档链接 */
+.aib-docs-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  color: var(--aib-primary);
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  padding: 0;
+  transition: opacity 0.15s;
+}
+.aib-docs-link:hover {
+  opacity: 0.8;
+  text-decoration: underline;
+}
+
+/* 文档查看器 */
+.aib-docs-modal {
+  width: 90vw;
+  max-width: 860px;
+  height: 85vh;
+  display: flex;
+  flex-direction: column;
+  border-radius: 16px;
+  overflow: hidden;
+}
+.aib-docs-modal .aib-modal-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.aib-back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: none;
+  border: none;
+  color: var(--aib-text-soft);
+  font-size: 13px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-family: inherit;
+  transition: all 0.15s;
+}
+.aib-back-btn:hover {
+  background: var(--aib-bg-hover);
+  color: var(--aib-primary);
+}
+.aib-docs-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px 32px;
+}
+.aib-docs-loading {
+  text-align: center;
+  color: var(--aib-text-soft);
+  padding: 60px 0;
+}
+.aib-docs-content {
+  font-size: 14px;
+  line-height: 1.8;
+  color: var(--aib-text);
+}
+.aib-docs-content h1 { font-size: 22px; margin: 28px 0 14px; font-weight: 700; color: var(--aib-text); }
+.aib-docs-content h1:first-child { margin-top: 0; }
+.aib-docs-content h2 { font-size: 17px; margin: 24px 0 10px; font-weight: 600; color: var(--aib-text); border-bottom: 1px solid var(--aib-border); padding-bottom: 8px; }
+.aib-docs-content h3 { font-size: 15px; margin: 18px 0 8px; font-weight: 600; color: var(--aib-text); }
+.aib-docs-content p { margin: 8px 0; }
+.aib-docs-content ul, .aib-docs-content ol { padding-left: 24px; margin: 8px 0; }
+.aib-docs-content li { margin: 4px 0; }
+.aib-docs-content code { background: var(--aib-bg-card); padding: 2px 6px; border-radius: 4px; font-size: 13px; font-family: 'SF Mono', 'Fira Code', monospace; }
+.aib-docs-content pre { background: var(--aib-bg-card); padding: 14px 18px; border-radius: 10px; overflow-x: auto; margin: 14px 0; border: 1px solid var(--aib-border); }
+.aib-docs-content pre code { background: none; padding: 0; border: none; }
+.aib-docs-content table { width: 100%; border-collapse: collapse; margin: 14px 0; font-size: 13px; }
+.aib-docs-content th, .aib-docs-content td { border: 1px solid var(--aib-border); padding: 10px 14px; text-align: left; }
+.aib-docs-content th { background: var(--aib-bg-card); font-weight: 600; }
+.aib-docs-content a { color: var(--aib-primary); text-decoration: none; }
+.aib-docs-content a:hover { text-decoration: underline; }
+.aib-docs-content blockquote { border-left: 3px solid var(--aib-primary); padding: 8px 14px; margin: 14px 0; color: var(--aib-text-soft); background: var(--aib-bg-card); border-radius: 0 8px 8px 0; }
+.aib-docs-content hr { border: none; border-top: 1px solid var(--aib-border); margin: 20px 0; }
+.aib-docs-content img { max-width: 100%; border-radius: 8px; margin: 10px 0; }
+
+/* 版本号 */
+.aib-version-footer {
+  padding-top: 16px;
+  margin-top: 8px;
+  border-top: 1px solid var(--aib-border);
+  font-size: 12px;
+  color: var(--aib-text-soft);
+  text-align: center;
+  opacity: 0.7;
 }
 </style>

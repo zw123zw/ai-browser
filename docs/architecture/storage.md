@@ -103,6 +103,7 @@ interface AppSettings {
   autoSendSelection?: 'auto' | 'manual' | 'off'  // 划词操作模式
   translateTargetLang?: string    // 翻译目标语言
   translateMode?: 'selection' | 'auto' | 'click' | 'off'  // 翻译模式
+  automationEnabled?: boolean     // 网页自动化开关（默认 true）
 }
 ```
 
@@ -283,6 +284,16 @@ function defineStorageSync<T>(opts: {
 - **plain 化**：写入前通过 `JSON.parse(JSON.stringify(toRaw(v)))` 去除 Vue 代理
 - **显式 flush**：提供 `flush()` 方法绕过防抖立即写入（用于关键操作）
 
+### plain() 工具函数
+
+```typescript
+function plain<T>(v: T): T {
+  return JSON.parse(JSON.stringify(toRaw(v)));
+}
+```
+
+剥离 Vue 响应式代理，确保写入 storage 的是纯 JSON 可序列化对象。`toRaw()` 移除 Proxy 包装，`JSON.stringify/parse` 深拷贝去除不可序列化字段。
+
 ## 关键类型与接口
 
 ```typescript
@@ -324,7 +335,7 @@ src/storage/
 └── input-history.ts    # pushInputHistory() 输入历史管理
 
 src/utils/
-└── storage-sync.ts     # defineStorageSync() 双向同步工具
+└── storage-sync.ts     # defineStorageSync() 双向同步工具 + plain()
 
 src/
 ├── local-config.json   # 默认模型配置（构建时导入）

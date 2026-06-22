@@ -43,6 +43,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   translateTargetLang: '中文',
   translateMode: 'off',
   automationEnabled: true,
+  locale: 'zh-CN',
   models: localModels,
 };
 

@@ -1,154 +1,496 @@
-# AI 适配器架构
+# AI 适配器 (AI Adapters)
 
-## 目标
+> 工厂+策略模式：统一 `chat()` 接口，11 家供应商，Background 代理流式请求。
 
-统一多 AI 提供者的协议差异，提供一致的流式对话接口。适配器层将不同供应商的 API 格式（OpenAI、Anthropic、Gemini、通义千问、文心一言、豆包等）抽象为统一的 `chat()` 方法，使上层业务代码无需关心底层协议细节。
-
-## 架构总览
+## 模块概览
 
 ```mermaid
-classDiagram
-    class BaseAdapter {
-        <<abstract>>
-        +chat(opts, onChunk)* void
-        #parseSSE(response) AsyncGenerator~string~
-        #buildAuthHeaders(apiKey, provider, url) Record~string,string~
-    }
+graph TB
+    subgraph Factory["工厂"]
+        CA[createAdapter -- provider -> BaseAdapter]
+    end
 
-    class OpenAIAdapter {
-        +chat(opts, onChunk) void
-        -buildUrl(baseUrl, modelName, provider) string
-        -processChunk(data, provider, onChunk, state) void
-    }
+    subgraph Adapters["适配器"]
+        OA[OpenAIAdapter -- OpenAI + Anthropic]
+        GA[GeminiAdapter -- Google Gemini]
+        QA[QwenAdapter -- 通义千问]
+        WA[WenxinAdapter -- 文心一言]
+        DA[DoubaoAdapter -- 豆包]
+    end
 
-    class GeminiAdapter {
-        +chat(opts, onChunk) void
-        -extractSystem(messages) string
-        -toContents(messages) array
-    }
+    subgraph Base["基类"]
+        BA[BaseAdapter -- abstract chat + parseSSE]
+    end
 
-    class WenxinAdapter {
-        +chat(opts, onChunk) void
-        -accessToken string
-        -fetchAccessToken(apiKey, secretKey) string
-        -patchMessageForWenxin(messages) array
-    }
+    subgraph Proxy["代理层"]
+        PF[proxyFetch -- 非流式]
+        PFS[proxyFetchStream -- 流式]
+    end
 
-    class QwenAdapter {
-        +chat(opts, onChunk) void
-    }
+    subgraph Background["Background SW"]
+        Fetch[fetch -> ReadableStream]
+        Chunk[stream-chunk]
+        End[stream-end]
+        Error[stream-error]
+        Abort[abort-stream]
+    end
 
-    class DoubaoAdapter {
-        +chat(opts, onChunk) void
-    }
-
-    BaseAdapter <|-- OpenAIAdapter
-    BaseAdapter <|-- GeminiAdapter
-    BaseAdapter <|-- QwenAdapter
-    BaseAdapter <|-- WenxinAdapter
-    BaseAdapter <|-- DoubaoAdapter
+    CA --> OA
+    CA --> GA
+    CA --> QA
+    CA --> WA
+    CA --> DA
+    OA --> BA
+    GA --> BA
+    QA --> BA
+    WA --> BA
+    DA --> BA
+    OA --> PFS
+    GA --> PFS
+    QA --> PFS
+    WA --> PFS
+    DA --> PFS
+    PFS --> Background
+    PF --> Background
 ```
 
-## 核心设计决策
+## BaseAdapter -- 基类
 
-### 1. 工厂模式
-
-`createAdapter(provider)` 工厂函数根据 provider 类型返回对应的适配器实例：
+**源码**: `src/adapters/base.ts`
 
 ```typescript
-// src/adapters/index.ts
-export function createAdapter(provider: string): BaseAdapter {
+export abstract class BaseAdapter {
+  abstract readonly name: string
+
+  abstract chat(
+    opts: ChatRequestOptions,
+    onChunk: (chunk: StreamChunk) => void
+  ): Promise<void>
+
+  protected async *parseSSE(response: Response): AsyncGenerator<string, void, unknown>
+}
+```
+
+`parseSSE` 是通用 SSE 解析工具：将 `ReadableStream` 解析为一行行 `data: ...`，遇到 `[DONE]` 终止。
+
+## createAdapter -- 工厂函数
+
+**源码**: `src/adapters/index.ts`
+
+```typescript
+export function createAdapter(provider: Provider): BaseAdapter {
   switch (provider) {
-    case 'gemini':   return new GeminiAdapter();
-    case 'wenxin':   return new WenxinAdapter();
-    case 'doubao':   return new DoubaoAdapter();
-    default:         return new OpenAIAdapter(); // 其余全部走 OpenAI 兼容
+    case 'qwen':      return new QwenAdapter()
+    case 'wenxin':    return new WenxinAdapter()
+    case 'gemini':    return new GeminiAdapter()
+    case 'doubao':    return new DoubaoAdapter()
+    case 'openai':
+    case 'zhipu':
+    case 'deepseek':
+    case 'moonshot':
+    case 'anthropic':
+    case 'grok':
+    case 'custom':
+    default:           return new OpenAIAdapter()
   }
 }
 ```
 
-**设计要点**：大多数供应商（OpenAI、Anthropic、DeepSeek、Moonshot、智谱、Grok、通义千问、自定义）均采用 OpenAI 兼容协议，只有 Gemini、文心一言、豆包等少数需要独立适配器。
+大部分模型兼容 OpenAI 协议，直接使用 `OpenAIAdapter`。只有特殊协议的模型需要单独适配器。
 
-### 2. 后台代理解决 CORS
+## Provider 类型
 
-Chrome 扩展的 Content Script 受同源策略限制，无法直接调用第三方 API。通过 `proxyFetchStream()` 将请求转发给 Background Service Worker：
+**源码**: `src/types.ts`
 
 ```typescript
-// src/adapters/proxy.ts
-export async function proxyFetchStream(
-  init: RequestInit & { url: string },
-  onChunk: (chunk: string) => void,
-): Promise<void>
+export type Provider =
+  | 'openai'        // OpenAI 兼容
+  | 'anthropic'     // Anthropic Claude
+  | 'gemini'        // Google Gemini
+  | 'custom'        // 自定义
+  | 'qwen'          // 通义千问（阿里）
+  | 'wenxin'        // 文心一言（百度）
+  | 'zhipu'         // 智谱清言
+  | 'deepseek'      // DeepSeek
+  | 'moonshot'      // Moonshot (Kimi)
+  | 'doubao'        // 豆包（字节火山引擎）
+  | 'grok'          // Grok (xAI)
 ```
 
-**回退机制**：如果 `chrome.runtime` 不可用（如 Side Panel 中），自动降级为 `fetch()` 直连。
+## OpenAIAdapter -- OpenAI + Anthropic
 
-### 3. SSE 流式解析
-
-`parseSSE()` 是 `BaseAdapter` 提供的 protected 工具方法，基于 Generator 模式逐行解析 Server-Sent Events：
+**源码**: `src/adapters/openai.ts`
 
 ```typescript
-// src/adapters/base.ts
-protected async *parseSSE(response: Response): AsyncGenerator<string> {
-  // 按 UTF-8 解码流 → 逐行扫描 "data:" 前缀 → yield 数据行
+export class OpenAIAdapter extends BaseAdapter {
+  readonly name = 'openai'
+  async chat(opts: ChatRequestOptions, onChunk: (chunk: StreamChunk) => void): Promise<void>
 }
 ```
 
-### 4. OpenAIAdapter 双协议支持
+### 协议检测
 
-`OpenAIAdapter` 不仅处理 OpenAI 格式，还自动适配 Anthropic Claude 协议：
-
-- **协议检测**：通过 `options.provider === 'anthropic'` 或 URL 中包含 `anthropic` 判断
-- **URL 构建**：OpenAI 用 `/v1/chat/completions`，Anthropic 用 `/v1/messages`
-- **请求体转换**：Anthropic 将 system 消息提取到顶层 `system` 字段，而非 messages 数组
-- **响应解析**：OpenAI 的 `choices[0].delta` vs Anthropic 的 `content_block_delta`
-- **思考内容**：OpenAI 用 `reasoning_content` 字段，Anthropic 用 `thinking` content block
-
-## 模块结构
-
-```
-src/adapters/
-├── index.ts      # createAdapter() 工厂
-├── base.ts       # BaseAdapter 抽象基类 + parseSSE()
-├── openai.ts     # OpenAI + Anthropic + DeepSeek + Moonshot + 智谱 + Grok
-├── gemini.ts     # Google Gemini (Generative Language API)
-├── qwen.ts       # 通义千问（阿里，OpenAI 兼容封装）
-├── wenxin.ts     # 文心一言（百度，独立协议 + access_token 认证）
-├── doubao.ts     # 豆包（字节火山引擎，OpenAI 兼容 + endpoint_id）
-└── proxy.ts      # proxyFetch() / proxyFetchStream() 后台代理
+```typescript
+const isAnthropic = opts.provider === 'anthropic' || base.includes('/anthropic')
 ```
 
-## 数据流
+### URL 拼接
+
+| 条件 | URL |
+|---|---|
+| baseUrl 已包含完整路径（`/chat/completions` 或 `/messages`） | 直接使用 |
+| Anthropic | `{base}/v1/messages` |
+| OpenAI 兼容 | `{base}/chat/completions` |
+
+### 请求差异
+
+| 字段 | OpenAI | Anthropic |
+|---|---|---|
+| Headers | `Authorization: Bearer {apiKey}` | `x-api-key: {apiKey}`, `anthropic-version: 2023-06-01` |
+| Body | `{ model, messages, stream }` | `{ model, messages, max_tokens: 8192, stream }` |
+
+### Chunk 解析 -- processChunk
+
+```typescript
+const processChunk = (data: string) => {
+  const json = JSON.parse(data)
+
+  if (isAnthropic) {
+    switch (json.type) {
+      case 'content_block_delta':
+        if (json.delta?.type === 'text_delta')     -> onChunk({ delta: json.delta.text })
+        if (json.delta?.type === 'thinking_delta')  -> onChunk({ reasoningDelta: json.delta.thinking })
+        break
+      case 'message_delta':  -> fireDone()
+      case 'message_stop':   -> fireDone()
+    }
+  } else {
+    // OpenAI 格式
+    const delta = choice.delta || choice.message || {}
+    const reasoning = delta.reasoning_content ?? delta.reasoning ?? delta.thinking
+    const content = delta.content ?? delta.text
+    if (choice.finish_reason) fireDone()
+  }
+}
+```
+
+### 推理内容（Thinking）
+
+| 供应商 | 字段 |
+|---|---|
+| OpenAI | `delta.reasoning_content` / `delta.reasoning` / `delta.thinking` |
+| Anthropic | `delta.type === 'thinking_delta'` -> `delta.thinking` |
+
+### 附件处理
+
+```typescript
+private collectFileTexts(m: ChatMessage): string {
+  return m.attachments
+    .filter(a => a.content)
+    .map(a => {
+      if (a.type === 'image') return `[图片文字识别: ${a.name}]\n${a.content}`
+      return `[文件: ${a.name}]\n\`\`\`${a.lang || ''}\n${a.content}\n\`\`\``
+    })
+    .join('\n\n')
+}
+```
+
+## GeminiAdapter -- Google Gemini
+
+**源码**: `src/adapters/gemini.ts`
+
+```typescript
+export class GeminiAdapter extends BaseAdapter {
+  readonly name = 'gemini'
+  async chat(opts: ChatRequestOptions, onChunk: (chunk: StreamChunk) => void): Promise<void>
+}
+```
+
+### API 端点
+
+```
+{baseUrl}/v1beta/models/{modelName}:streamGenerateContent?alt=sse
+```
+
+### 请求结构
+
+```typescript
+{
+  contents: messages.map(m => ({
+    role: m.role === 'assistant' ? 'model' : 'user',
+    parts: [{ text: m.content }],
+  })),
+  generationConfig: { maxOutputTokens: 8192 },
+  systemInstruction: { parts: [{ text: systemPrompt }] },  // system 消息独立字段
+}
+```
+
+Headers: `x-goog-api-key: {apiKey}`
+
+### Chunk 解析
+
+```typescript
+const processChunk = (data: string) => {
+  const json = JSON.parse(data)
+  const candidate = json.candidates?.[0]
+  for (const part of candidate.content?.parts || []) {
+    if (part.text) {
+      if (part.thought) {
+        onChunk({ reasoningDelta: part.text })  // Gemini 2.0+ thinking model
+      } else {
+        onChunk({ delta: part.text })
+      }
+    }
+  }
+  if (candidate.finishReason && candidate.finishReason !== 'FINISH_REASON_UNSPECIFIED') {
+    fireDone()
+  }
+}
+```
+
+## QwenAdapter -- 通义千问
+
+**源码**: `src/adapters/qwen.ts`
+
+```typescript
+export class QwenAdapter extends BaseAdapter {
+  readonly name = 'qwen'
+  async chat(opts: ChatRequestOptions, onChunk: (chunk: StreamChunk) => void): Promise<void>
+}
+```
+
+### API 端点
+
+```
+{baseUrl}/services/aigc/text-generation/generation
+```
+
+### 请求结构
+
+```typescript
+{
+  model: modelName,
+  input: {
+    messages: filteredMessages,      // 不含 system
+    system: systemPrompt,            // system 独立字段
+  },
+  parameters: {
+    result_format: 'message',
+    incremental_output: true,
+  },
+}
+```
+
+Headers: `Authorization: Bearer {apiKey}`
+
+### Chunk 解析
+
+```typescript
+const processChunk = (data: string) => {
+  const json = JSON.parse(data)
+  const choice = json.output?.choices?.[0]
+  if (choice?.message?.content) {
+    onChunk({ delta: choice.message.content })
+  }
+  if (choice?.finish_reason) fireDone()
+}
+```
+
+## WenxinAdapter -- 文心一言
+
+**源码**: `src/adapters/wenxin.ts`
+
+```typescript
+export class WenxinAdapter extends BaseAdapter {
+  readonly name = 'wenxin'
+  async chat(opts: ChatRequestOptions, onChunk: (chunk: StreamChunk) => void): Promise<void>
+}
+```
+
+### API 端点
+
+```
+{baseUrl}/chat/completions
+```
+
+### 请求结构
+
+```typescript
+{
+  messages: requestMessages,   // role 只有 user/assistant
+  stream: true,
+}
+```
+
+Headers: `{ 'Content-Type': 'application/json' }`（无 Authorization）
+
+### Chunk 解析
+
+```typescript
+const processChunk = (data: string) => {
+  const json = JSON.parse(data)
+  if (json.error_code) throw new Error(`文心一言错误: ${json.error_msg}`)
+  if (json.result) onChunk({ delta: json.result })   // result 字段（非 choices）
+  if (json.is_end) fireDone()                          // is_end 标记结束
+}
+```
+
+## DoubaoAdapter -- 豆包
+
+**源码**: `src/adapters/doubao.ts`
+
+```typescript
+export class DoubaoAdapter extends BaseAdapter {
+  readonly name = 'doubao'
+  async chat(opts: ChatRequestOptions, onChunk: (chunk: StreamChunk) => void): Promise<void>
+}
+```
+
+OpenAI 兼容协议。
+
+### API 端点
+
+```
+{baseUrl}/chat/completions
+```
+
+### 请求结构
+
+```typescript
+{
+  model: modelName,
+  messages: requestMessages,
+  stream: true,
+}
+```
+
+Headers: `Authorization: Bearer {apiKey}`
+
+### Chunk 解析
+
+与 OpenAI 格式一致：`choices[0].delta.content`，`choice.finish_reason` 触发 done。
+
+## proxyFetchStream -- 流式代理
+
+**源码**: `src/adapters/proxy.ts`
+
+```typescript
+export async function proxyFetchStream(
+  options: ProxyRequestOptions,
+  onChunk: (chunk: string) => void
+): Promise<void>
+```
+
+### 通信协议
+
+```typescript
+export interface ProxyRequestOptions {
+  url: string
+  method?: string
+  headers?: Record<string, string>
+  body?: string
+  signal?: AbortSignal
+}
+```
+
+### 流程
 
 ```mermaid
 sequenceDiagram
     participant CS as Content Script
-    participant BG as Background Service Worker
-    participant API as AI Provider API
+    participant BG as Background SW
+    participant API as AI Provider
 
-    CS->>CS: createAdapter(provider)
-    CS->>BG: chrome.runtime.sendMessage({ type: 'proxy-request' })
-    BG->>API: fetch(url, { headers, body })
-    API-->>BG: SSE stream (data: {...}\n\n)
-    BG-->>CS: chrome.runtime.sendMessage({ type: 'proxy-chunk' })
-    CS->>CS: parseSSE() → onChunk({ delta, reasoningDelta, done })
-    CS->>UI: 更新消息状态与内容
+    CS->>BG: chrome.runtime.sendMessage -- type: 'proxy-fetch-stream'
+    BG->>API: fetch(url, { stream: true })
+
+    BG-->>CS: { success: true, requestId }
+
+    loop 流式传输
+        BG-->>CS: { type: 'stream-chunk', requestId, chunk }
+        CS->>CS: onChunk(chunk)
+    end
+
+    BG-->>CS: { type: 'stream-end', requestId }
+
+    opt 用户取消
+        CS->>BG: { type: 'abort-stream', requestId }
+        BG->>API: AbortController.abort()
+    end
 ```
 
-## 关键方法签名
+### 消息类型
+
+| 类型 | 方向 | 字段 | 说明 |
+|---|---|---|---|
+| `proxy-fetch-stream` | CS -> BG | url, method, headers, body | 发起流式请求 |
+| `stream-chunk` | BG -> CS | requestId, chunk | 流式数据块 |
+| `stream-end` | BG -> CS | requestId | 流结束 |
+| `stream-error` | BG -> CS | requestId, error | 流错误 |
+| `abort-stream` | CS -> BG | requestId | 中止请求 |
+
+### AbortSignal 支持
 
 ```typescript
-// 工厂函数
-function createAdapter(provider: string): BaseAdapter
+// 注册监听器（先于 sendMessage，避免竞态）
+chrome.runtime.onMessage.addListener(chunkListener)
 
-// 抽象基类
-abstract class BaseAdapter {
-  abstract chat(opts: ChatRequestOptions, onChunk: (chunk: StreamChunk) => void): Promise<void>
-  protected async *parseSSE(response: Response): AsyncGenerator<string>
+// 监听 abort signal
+if (options.signal) {
+  options.signal.addEventListener('abort', () => {
+    chrome.runtime.sendMessage({ type: 'abort-stream', requestId })
+  }, { once: true })
 }
+```
 
-// 请求选项
-interface ChatRequestOptions {
+### 错误处理
+
+- 代理请求失败 -> 回退到直接请求（`fetch()`）
+- 直接请求也失败 -> 抛出错误
+- AbortSignal 触发 -> `DOMException('AbortError')`
+- requestId 赋值前已 abort -> 立即中止并 reject
+
+## proxyFetch -- 非流式代理
+
+**源码**: `src/adapters/proxy.ts`
+
+```typescript
+export async function proxyFetch(options: ProxyRequestOptions): Promise<ProxyResponse>
+```
+
+```typescript
+export interface ProxyResponse {
+  success: boolean
+  data?: any
+  status?: number
+  error?: string
+}
+```
+
+通过 `chrome.runtime.sendMessage({ type: 'proxy-fetch' })` 发送，Background 返回完整响应。
+
+## 适配器对比
+
+| 适配器 | API 端点 | Auth | System 消息 | 结束标记 | 推理内容 |
+|---|---|---|---|---|---|
+| OpenAI | `/chat/completions` | Bearer token | messages 数组 | `finish_reason` | `reasoning_content` |
+| Anthropic | `/v1/messages` | x-api-key | messages 数组 | `message_stop` | `thinking_delta` |
+| Gemini | `/v1beta/models/{m}:streamGenerateContent` | x-goog-api-key | `systemInstruction` 字段 | `FINISH_REASON_*` | `part.thought` |
+| Qwen | `/services/aigc/text-generation/generation` | Bearer token | `input.system` 字段 | `finish_reason` | - |
+| Wenxin | `/chat/completions` | 无 | messages 数组 | `is_end` | - |
+| Doubao | `/chat/completions` | Bearer token | messages 数组 | `finish_reason` | - |
+| Zhipu | `/chat/completions` | Bearer token | messages 数组 | `finish_reason` | `reasoning_content` |
+| DeepSeek | `/chat/completions` | Bearer token | messages 数组 | `finish_reason` | `reasoning_content` |
+| Moonshot | `/chat/completions` | Bearer token | messages 数组 | `finish_reason` | - |
+| Grok | `/chat/completions` | Bearer token | messages 数组 | `finish_reason` | - |
+| Custom | `/chat/completions` | Bearer token | messages 数组 | `finish_reason` | - |
+
+## ChatRequestOptions 接口
+
+**源码**: `src/types.ts`
+
+```typescript
+export interface ChatRequestOptions {
   baseUrl: string
   apiKey: string
   modelName: string
@@ -156,57 +498,16 @@ interface ChatRequestOptions {
   messages: ChatMessage[]
   signal?: AbortSignal
 }
-
-// 流式数据块
-interface StreamChunk {
-  delta?: string          // 增量文本
-  reasoningDelta?: string // 增量思考文本
-  done?: boolean          // 是否完成
-}
-
-// 后台代理
-async function proxyFetchStream(
-  init: RequestInit & { url: string },
-  onChunk: (chunk: string) => void,
-): Promise<void>
 ```
 
-## 错误处理
+## StreamChunk 接口
 
-1. **代理回退**：`proxyFetchStream()` 失败时自动降级为 `fetch()` 直连
-2. **HTTP 错误解析**：尝试从响应体 JSON 中提取 `error.message`，提供有意义的错误提示
-3. **中止支持**：所有适配器通过 `AbortSignal` 支持请求取消，避免内存泄漏和无效回调
-4. **流异常捕获**：`parseSSE()` 中读取流失败时抛出 "读取流失败" 异常
-5. **缓冲区保护**：SSE 解析器通过 `buffer.slice(0, 1024 * 1024)` 防止畸形数据导致内存溢出
-6. **JSON 容错**：所有适配器的 chunk 解析均包裹在 try-catch 中，单条畸形数据不影响后续处理
-7. **百度 access_token 错误**：`WenxinAdapter` 当 HTTP 200 但响应体包含错误码时，重置 token 并重试
+**源码**: `src/types.ts`
 
-## 支持的提供者
-
-| Provider | 适配器 | 协议 | 认证方式 |
-|----------|--------|------|----------|
-| `openai` | OpenAIAdapter | OpenAI | Bearer token |
-| `anthropic` | OpenAIAdapter | Anthropic | x-api-key |
-| `gemini` | GeminiAdapter | Google Generative Language | x-goog-api-key |
-| `qwen` | QwenAdapter | OpenAI 兼容 | Bearer token |
-| `wenxin` | WenxinAdapter | 百度独立协议 | access_token (OAuth) |
-| `zhipu` | OpenAIAdapter | OpenAI 兼容 | Bearer token |
-| `deepseek` | OpenAIAdapter | OpenAI 兼容 | Bearer token |
-| `moonshot` | OpenAIAdapter | OpenAI 兼容 | Bearer token |
-| `doubao` | DoubaoAdapter | OpenAI 兼容 | Bearer token (endpoint_id) |
-| `grok` | OpenAIAdapter | OpenAI 兼容 | Bearer token |
-| `custom` | OpenAIAdapter | OpenAI 兼容 | Bearer token |
-
-## 认证机制
-
-适配器支持多种认证字段，通过 `buildAuthHeaders()` 统一处理：
-
-| authField | Header | 适用场景 |
-|-----------|--------|----------|
-| `bearer` | `Authorization: Bearer <key>` | 默认，大多数供应商 |
-| `api-key` | `Authorization: <key>` | Azure OpenAI |
-| `x-api-key` | `x-api-key: <key>` | Anthropic / AWS Bedrock |
-| `access-token` | `access-token: <key>` | 百度文心一言 |
-| `authorization` | `Authorization: <key>` | 通用 |
-
-若用户未指定 `authField`，系统根据 provider 自动选择默认值。
+```typescript
+export interface StreamChunk {
+  delta?: string              // 增量文本
+  reasoningDelta?: string     // 增量思考文本
+  done?: boolean              // 完成标记
+}
+```

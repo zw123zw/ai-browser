@@ -10,6 +10,7 @@ import { matchShortcut } from '@/src/utils/shortcut';
 import { getThemeById } from '@/src/themes';
 import { drawerOpenStorage } from '@/src/storage';
 import { executeAutomationAction } from '@/src/automation/actions';
+import { initI18n, useI18n } from '@/src/i18n';
 import { Logger } from '@/src/utils/logger';
 
 const log = new Logger('App');
@@ -20,6 +21,7 @@ const rootEl = ref<HTMLElement | null>(null);
 
 const settingsStore = useSettingsStore();
 const convStore = useConversationsStore();
+const { setLocale } = useI18n();
 
 function toggle() {
   open.value = !open.value;
@@ -114,6 +116,11 @@ watch(
   () => applyTheme()
 );
 
+watch(
+  () => settingsStore.settings.locale,
+  (val) => { if (val) setLocale(val as 'zh-CN' | 'en-US'); }
+);
+
 // 同步抽屉展开状态到持久化存储（跨页面/标签页保持）
 let syncingFromRemote = false;
 watch(open, async (val) => {
@@ -128,6 +135,7 @@ onMounted(async () => {
   } catch (error) {
     log.error('Store 初始化失败:', error);
   }
+  initI18n(settingsStore.settings.locale || 'zh-CN');
   applyTheme();
 
   // 从持久化存储恢复抽屉展开状态（异步读取，确保从磁盘加载）

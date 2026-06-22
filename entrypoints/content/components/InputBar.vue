@@ -4,6 +4,7 @@ import { fileToDataURL } from '@/src/utils/file';
 import { parseFile, ocrAttachment, removeFromFileCache } from '@/src/utils/file-parsers';
 import { getFileTypeIcon, formatFileSize } from '@/src/utils/file-type';
 import { useToast } from '@/src/composables/useToast';
+import { useI18n } from '@/src/i18n';
 import { Logger } from '@/src/utils/logger';
 import { inputHistoryStorage } from '@/src/storage';
 import { CAPABILITY_DOMAIN_LIST } from '@/src/input/prompts/common';
@@ -13,6 +14,7 @@ import type { Conversation, ModelConfig, Attachment } from '@/src/types';
 const ocrProgressMap = ref<Record<string, number>>({});
 
 const log = new Logger('InputBar');
+const { t } = useI18n();
 
 const props = defineProps<{
   conversation: Conversation | null | undefined;
@@ -111,7 +113,7 @@ const isStreaming = computed(() => {
 /** 输入框 placeholder */
 const placeholder = computed(() => {
   if (props.waitingInputPrompt) return `💬 ${props.waitingInputPrompt}`;
-  return '输入消息... (Enter 发送，Shift+Enter 换行)';
+  return t('inputBar.placeholder');
 });
 
 function onSendOrAbort() {
@@ -559,7 +561,7 @@ onUnmounted(() => document.removeEventListener('click', onDocClick, true));
 
     <div class="aib-input-toolbar">
       <div class="aib-toolbar-left">
-        <button class="aib-tool-btn" title="上传文件" @click="fileInput?.click()">
+        <button class="aib-tool-btn" :title="t('inputBar.attach')" @click="fileInput?.click()">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
@@ -575,7 +577,7 @@ onUnmounted(() => document.removeEventListener('click', onDocClick, true));
 
         <div ref="modelMenuRef" class="aib-model-pill-wrap">
           <button class="aib-tool-pill" @click="modelMenuOpen = !modelMenuOpen">
-            {{ currentModel?.label || '选择模型' }}
+            {{ currentModel?.label || t('settings.ai.defaultModel') }}
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
               stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
               <polyline points="6 9 12 15 18 9" />
@@ -596,7 +598,7 @@ onUnmounted(() => document.removeEventListener('click', onDocClick, true));
       </div>
 
       <div class="aib-toolbar-right">
-        <button class="aib-tool-btn" title="语音模式" @click="emit('switch-voice')">
+        <button class="aib-tool-btn" :title="t('inputBar.voice')" @click="emit('switch-voice')">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
@@ -609,7 +611,7 @@ onUnmounted(() => document.removeEventListener('click', onDocClick, true));
           class="aib-send-btn"
           :class="{ 'aib-send-btn-stop': isStreaming }"
           :disabled="!isStreaming && !text.trim() && !attachments.length"
-          :title="isStreaming ? '停止生成' : '发送'"
+          :title="isStreaming ? t('inputBar.stop') : t('inputBar.send')"
           @click="onSendOrAbort"
         >
           <svg v-if="isStreaming" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"

@@ -1,0 +1,1005 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Voice Browser Assistant 使用指南</title>
+<style>
+:root {
+  --primary: #4f46e5;
+  --primary-soft: #818cf8;
+  --primary-glow: rgba(79,70,229,0.15);
+  --bg: #ffffff;
+  --bg-soft: #f8fafc;
+  --bg-card: #ffffff;
+  --border: #e2e8f0;
+  --text: #1e293b;
+  --text-soft: #64748b;
+  --text-faint: #94a3b8;
+  --sidebar-w: 260px;
+  --header-h: 56px;
+  --success: #10b981;
+  --warning: #f59e0b;
+  --danger: #ef4444;
+  --info: #3b82f6;
+}
+[data-theme="dark"] {
+  --bg: #0f172a;
+  --bg-soft: #1e293b;
+  --bg-card: #1e293b;
+  --border: #334155;
+  --text: #e2e8f0;
+  --text-soft: #94a3b8;
+  --text-faint: #64748b;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; scroll-padding-top: calc(var(--header-h) + 16px); }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  background: var(--bg); color: var(--text); line-height: 1.7; font-size: 15px;
+}
+a { color: var(--primary); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* Header */
+.header {
+  position: fixed; top: 0; left: 0; right: 0; height: var(--header-h);
+  background: var(--bg-card); border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; padding: 0 24px; z-index: 100;
+  backdrop-filter: blur(8px);
+}
+.header-brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 18px; }
+.header-brand .logo { width: 32px; height: 32px; background: var(--primary); border-radius: 8px; display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 900; font-size: 14px; }
+.header-version { font-size: 12px; color: var(--text-faint); background: var(--bg-soft); padding: 2px 8px; border-radius: 4px; margin-left: 8px; }
+.header-actions { margin-left: auto; display: flex; align-items: center; gap: 12px; }
+.search-box { position: relative; }
+.search-box input {
+  width: 220px; padding: 6px 12px 6px 32px; border: 1px solid var(--border);
+  border-radius: 6px; background: var(--bg-soft); color: var(--text); font-size: 13px;
+  outline: none; transition: border-color .2s;
+}
+.search-box input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-glow); }
+.search-box .search-icon { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--text-faint); font-size: 14px; pointer-events: none; }
+.theme-toggle {
+  width: 36px; height: 36px; border: 1px solid var(--border); border-radius: 8px;
+  background: var(--bg-soft); cursor: pointer; display: flex; align-items: center; justify-content: center;
+  font-size: 16px; transition: background .2s;
+}
+.theme-toggle:hover { background: var(--border); }
+.menu-toggle { display: none; width: 36px; height: 36px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-soft); cursor: pointer; align-items: center; justify-content: center; font-size: 18px; }
+
+/* Sidebar */
+.sidebar {
+  position: fixed; top: var(--header-h); left: 0; bottom: 0; width: var(--sidebar-w);
+  background: var(--bg-card); border-right: 1px solid var(--border);
+  overflow-y: auto; padding: 16px 0; z-index: 90;
+}
+.sidebar::-webkit-scrollbar { width: 4px; }
+.sidebar::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+.nav-section { padding: 0 16px; margin-bottom: 4px; }
+.nav-section-title { font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--text-faint); letter-spacing: .5px; padding: 8px 0 4px; }
+.nav-link {
+  display: block; padding: 6px 12px; font-size: 13px; color: var(--text-soft);
+  border-radius: 6px; transition: all .15s; line-height: 1.4;
+}
+.nav-link:hover { background: var(--bg-soft); color: var(--text); text-decoration: none; }
+.nav-link.active { background: var(--primary-glow); color: var(--primary); font-weight: 600; }
+
+/* Main */
+.main {
+  margin-left: var(--sidebar-w); margin-top: var(--header-h);
+  max-width: 860px; padding: 32px 48px 80px;
+}
+
+/* Typography */
+h1 { font-size: 32px; font-weight: 800; margin: 0 0 8px; line-height: 1.2; }
+h1 .subtitle { display: block; font-size: 15px; font-weight: 400; color: var(--text-soft); margin-top: 8px; }
+h2 { font-size: 24px; font-weight: 700; margin: 48px 0 16px; padding-bottom: 8px; border-bottom: 2px solid var(--border); }
+h3 { font-size: 18px; font-weight: 600; margin: 32px 0 12px; }
+h4 { font-size: 15px; font-weight: 600; margin: 24px 0 8px; }
+p { margin: 0 0 12px; }
+ul, ol { margin: 0 0 12px; padding-left: 24px; }
+li { margin-bottom: 4px; }
+hr { border: none; border-top: 1px solid var(--border); margin: 32px 0; }
+strong { font-weight: 600; }
+code { background: var(--bg-soft); padding: 1px 5px; border-radius: 4px; font-size: 13px; font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace; }
+
+/* Tables */
+table { width: 100%; border-collapse: collapse; margin: 12px 0 20px; font-size: 14px; }
+th { background: var(--bg-soft); font-weight: 600; text-align: left; padding: 10px 12px; border: 1px solid var(--border); }
+td { padding: 8px 12px; border: 1px solid var(--border); vertical-align: top; }
+tr:nth-child(even) td { background: var(--bg-soft); }
+
+/* Code blocks */
+pre { background: #1e293b; color: #e2e8f0; padding: 16px; border-radius: 8px; overflow-x: auto; margin: 12px 0 20px; position: relative; }
+pre code { background: none; padding: 0; color: inherit; font-size: 13px; }
+.code-copy-btn {
+  position: absolute; top: 8px; right: 8px; background: rgba(255,255,255,.1);
+  border: none; color: #94a3b8; padding: 4px 8px; border-radius: 4px; cursor: pointer;
+  font-size: 12px; transition: all .2s;
+}
+.code-copy-btn:hover { background: rgba(255,255,255,.2); color: #fff; }
+.code-copy-btn.copied { color: var(--success); }
+
+/* Blockquotes / tips / warnings */
+blockquote {
+  border-left: 4px solid var(--primary); padding: 12px 16px; margin: 12px 0 20px;
+  background: var(--primary-glow); border-radius: 0 8px 8px 0; font-size: 14px;
+}
+blockquote.warning { border-left-color: var(--warning); background: rgba(245,158,11,.08); }
+blockquote.danger { border-left-color: var(--danger); background: rgba(239,68,68,.08); }
+
+/* Screenshot placeholder */
+.screenshot {
+  border: 2px dashed var(--border); border-radius: 8px; padding: 24px; margin: 12px 0 20px;
+  text-align: center; color: var(--text-faint); font-size: 13px; background: var(--bg-soft);
+}
+.screenshot::before { content: "📸 "; font-size: 16px; }
+
+/* Trigger tips */
+.trigger-tip { border-left: 4px solid var(--info); padding: 12px 16px; margin: 12px 0 20px; background: rgba(59,130,246,.06); border-radius: 0 8px 8px 0; font-size: 14px; }
+.trigger-tip strong { color: var(--info); }
+
+/* Search highlight */
+mark { background: #fef08a; color: #1e293b; padding: 1px 2px; border-radius: 2px; }
+
+/* Footer */
+.footer {
+  margin-top: 48px; padding-top: 24px; border-top: 1px solid var(--border);
+  text-align: center; color: var(--text-faint); font-size: 13px;
+}
+
+/* Responsive */
+@media (max-width: 900px) {
+  .sidebar { transform: translateX(-100%); transition: transform .3s; }
+  .sidebar.open { transform: translateX(0); box-shadow: 4px 0 24px rgba(0,0,0,.15); }
+  .main { margin-left: 0; padding: 24px 20px 60px; }
+  .menu-toggle { display: flex; }
+  .search-box input { width: 160px; }
+  .sidebar-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.3); z-index: 85; }
+  .sidebar-overlay.show { display: block; }
+}
+@media (max-width: 640px) {
+  h1 { font-size: 24px; }
+  h2 { font-size: 20px; }
+  table { font-size: 13px; }
+  th, td { padding: 6px 8px; }
+}
+
+/* Print */
+@media print {
+  .header, .sidebar, .menu-toggle, .search-box, .theme-toggle, .sidebar-overlay { display: none !important; }
+  .main { margin-left: 0; max-width: 100%; padding: 0; }
+  body { font-size: 12px; }
+  h2 { page-break-before: always; }
+  h2:first-of-type { page-break-before: avoid; }
+  pre { white-space: pre-wrap; word-break: break-all; }
+  .screenshot { border-style: solid; }
+}
+</style>
+</head>
+<body>
+<!-- Header -->
+<header class="header">
+  <button class="menu-toggle" onclick="toggleSidebar()" aria-label="菜单">☰</button>
+  <div class="header-brand">
+    <svg class="logo" width="32" height="32" viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg" style="border-radius:8px;background:var(--primary);padding:4px">
+      <path d="M40 4L72 20V60L40 76L8 60V20L40 4Z" stroke="#fff" stroke-width="2" fill="rgba(255,255,255,.1)"/>
+      <path d="M40 16L60 26V54L40 64L20 54V26L40 16Z" stroke="#fff" stroke-width="1.5" fill="rgba(255,255,255,.05)"/>
+      <rect x="34" y="34" width="12" height="12" rx="2" fill="#fff"/>
+      <circle cx="40" cy="40" r="3" fill="var(--primary)"/>
+    </svg>
+    <span>AI Voice Browser Assistant</span>
+    <span class="header-version">v1.3.1</span>
+  </div>
+  <div class="header-actions">
+    <div class="search-box">
+      <span class="search-icon">🔍</span>
+      <input type="text" id="searchInput" placeholder="搜索内容..." oninput="doSearch(this.value)">
+    </div>
+    <button class="theme-toggle" onclick="toggleTheme()" aria-label="切换主题">🌙</button>
+  </div>
+</header>
+
+<!-- Sidebar Overlay -->
+<div class="sidebar-overlay" id="sidebarOverlay" onclick="toggleSidebar()"></div>
+
+<!-- Sidebar -->
+<nav class="sidebar" id="sidebar">
+  <div class="nav-section">
+    <div class="nav-section-title">开始使用</div>
+    <a class="nav-link" href="#s1">🚀 快速开始</a>
+  </div>
+  <div class="nav-section">
+    <div class="nav-section-title">核心功能</div>
+    <a class="nav-link" href="#s2">💬 AI 对话</a>
+    <a class="nav-link" href="#s3">🌐 网页自动化</a>
+    <a class="nav-link" href="#s4">🎤 语音控制</a>
+    <a class="nav-link" href="#s5">🌍 智能翻译</a>
+  </div>
+  <div class="nav-section">
+    <div class="nav-section-title">进阶功能</div>
+    <a class="nav-link" href="#s6">📎 文件处理</a>
+    <a class="nav-link" href="#s7">📊 图表与文件输出</a>
+  </div>
+  <div class="nav-section">
+    <div class="nav-section-title">配置与自定义</div>
+    <a class="nav-link" href="#s8">⚙️ 设置说明</a>
+    <a class="nav-link" href="#s9">🎨 主题</a>
+    <a class="nav-link" href="#s10">⌨️ 快捷命令</a>
+  </div>
+  <div class="nav-section">
+    <div class="nav-section-title">帮助</div>
+    <a class="nav-link" href="#s11">💡 使用技巧</a>
+    <a class="nav-link" href="#s12">❓ 常见问题</a>
+  </div>
+</nav>
+
+<!-- Main Content -->
+<main class="main" id="content">
+<h1>AI Browser 使用指南
+  <span class="subtitle">Chrome 扩展：AI 驱动的浏览器助手，集成对话、自动化、语音、翻译和文件处理。</span>
+</h1>
+
+<!-- ==================== 1. 快速开始 ==================== -->
+<h2 id="s1">🚀 快速开始</h2>
+
+<h3>1.1 安装扩展</h3>
+<ol>
+  <li>下载扩展包并解压到本地文件夹</li>
+  <li>打开 Chrome，地址栏输入 <code>chrome://extensions/</code></li>
+  <li>开启右上角「开发者模式」开关</li>
+  <li>点击「加载已解压的扩展程序」按钮</li>
+  <li>选择解压后的文件夹，确认加载</li>
+</ol>
+<div class="screenshot">chrome://extensions/ 页面，开发者模式开关和加载按钮</div>
+<p>安装成功后，浏览器右上角工具栏会出现 AI Browser 图标。</p>
+
+<h3>1.2 首次配置 AI 模型</h3>
+<ol>
+  <li>点击工具栏中的 AI Browser 图标，打开侧边栏</li>
+  <li>点击侧边栏右上角的 ⚙️ 齿轮图标进入设置</li>
+  <li>在「模型配置」标签页中，点击「+ 新建」按钮</li>
+  <li>点击提供商预设按钮（如 DeepSeek、OpenAI 等），自动填充大部分字段</li>
+  <li>填写你的 API Key</li>
+  <li>点击「保存」按钮</li>
+</ol>
+<blockquote><strong>提示：</strong> 设置页提供 10 个一键预设：OpenAI、Anthropic、DeepSeek、MiMo、Qwen、Kimi、智谱、百度、MiniMax、硅基流动。点击即可自动填充 API 地址等字段，只需填写 API Key 即可。</blockquote>
+
+<h3>1.3 打开侧边栏</h3>
+<table>
+  <thead><tr><th>方式</th><th>操作</th><th>说明</th></tr></thead>
+  <tbody>
+    <tr><td>工具栏图标</td><td>点击浏览器右上角的 AI Browser 图标</td><td>最常用</td></tr>
+    <tr><td>键盘快捷键</td><td>按 <code>Ctrl+`</code></td><td>默认快捷键，可在设置中自定义</td></tr>
+    <tr><td>浮动按钮</td><td>点击页面右下角的浮动按钮</td><td>任何页面都可用</td></tr>
+  </tbody>
+</table>
+<blockquote><strong>注意：</strong> 侧边栏的状态会在所有标签页间同步。在一个标签页打开侧边栏，其他标签页也会自动打开。</blockquote>
+
+<h3>1.4 浮动按钮</h3>
+<p>页面右下角有一个 48×48 像素的浮动按钮，可以：</p>
+<ul>
+  <li><strong>点击</strong> — 打开/关闭侧边栏</li>
+  <li><strong>拖拽</strong> — 按住拖动到页面任意位置（移动超过 3px 才算拖拽，否则视为点击）</li>
+  <li><strong>位置记忆</strong> — 拖拽后的新位置会自动保存，刷新页面后仍在原位</li>
+</ul>
+<blockquote><strong>提示：</strong> 浮动按钮悬停时会显示工具提示，提示当前设置的快捷键。</blockquote>
+
+<h3>1.5 调整侧边栏宽度</h3>
+<ul>
+  <li>将鼠标移到侧边栏左边缘，光标变为 <code>↔</code> 拖拽手柄</li>
+  <li>左右拖动调整宽度（最小 60px，最大 95% 视口宽度）</li>
+  <li>宽度设置自动同步到所有标签页</li>
+</ul>
+
+<!-- ==================== 2. AI 对话 ==================== -->
+<h2 id="s2">💬 AI 对话</h2>
+
+<h3>2.1 支持的 AI 提供商</h3>
+<p>AI Browser 支持 11 个 AI 提供商，覆盖国内外主流大模型：</p>
+<table>
+  <thead><tr><th>提供商</th><th>代表模型</th></tr></thead>
+  <tbody>
+    <tr><td>OpenAI</td><td>GPT-4o、GPT-4、GPT-3.5</td></tr>
+    <tr><td>Anthropic</td><td>Claude 3.5 Sonnet、Claude 4</td></tr>
+    <tr><td>Google Gemini</td><td>Gemini 1.5 Pro、Gemini 2.0</td></tr>
+    <tr><td>DeepSeek</td><td>DeepSeek-V3、DeepSeek-R1</td></tr>
+    <tr><td>Qwen (通义千问)</td><td>Qwen-Max、Qwen-Plus</td></tr>
+    <tr><td>Kimi (Moonshot)</td><td>Moonshot-v1-128k</td></tr>
+    <tr><td>智谱 (ChatGLM)</td><td>GLM-4</td></tr>
+    <tr><td>文心一言</td><td>ERNIE-4.0</td></tr>
+    <tr><td>豆包</td><td>Doubao-pro</td></tr>
+    <tr><td>Grok</td><td>Grok-2</td></tr>
+    <tr><td>自定义</td><td>任何 OpenAI 兼容的 API</td></tr>
+  </tbody>
+</table>
+
+<h3>2.2 发送消息</h3>
+<ol>
+  <li>在侧边栏底部的输入框中输入文字</li>
+  <li>按 <strong>Enter</strong> 发送消息</li>
+  <li>AI 会实时流式输出回复（逐字显示）</li>
+</ol>
+<table>
+  <thead><tr><th>按键</th><th>效果</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Enter</strong></td><td>发送消息</td></tr>
+    <tr><td><strong>Shift+Enter</strong></td><td>换行（不发送）</td></tr>
+  </tbody>
+</table>
+<p>发送后输入框旁的按钮会变成 ⏹ 停止按钮，点击可中断 AI 回复。</p>
+<div class="trigger-tip"><strong>💡 试试这样说：</strong><br>"你好，介绍一下你自己" · "帮我写一封请假邮件" · "用 Python 写一个快速排序" · "解释一下什么是量子计算"</div>
+
+<h3>2.3 切换模型</h3>
+<ol>
+  <li>点击输入框下方工具栏中的<strong>模型名称药丸</strong>（显示当前模型名称）</li>
+  <li>在弹出的下拉列表中选择其他模型</li>
+  <li>点击后立即切换，后续消息使用新模型</li>
+</ol>
+<blockquote><strong>提示：</strong> 下拉列表中会显示所有已配置的模型。如果列表为空，需要先在设置中添加模型。</blockquote>
+
+<h3>2.4 深度思考模式</h3>
+<p>部分模型支持深度思考（如 DeepSeek-R1、Claude 3.7+）：</p>
+<ol>
+  <li>点击输入框下方的 💡 灯泡图标</li>
+  <li>图标高亮表示已开启</li>
+  <li>发送消息后，AI 会先展示思考过程（显示为可折叠的「💭 深度思考」区块）</li>
+  <li>思考完成后输出正式回答</li>
+</ol>
+<blockquote><strong>注意：</strong> 深度思考模式仅对支持 reasoning 的模型生效。如果当前模型不支持，切换不会有任何效果。</blockquote>
+<div class="trigger-tip"><strong>💡 试试这样说：</strong><br>"分析一下 React 和 Vue 的优缺点，需要深度分析" · "帮我设计一个电商系统的架构，需要详细思考"</div>
+
+<h3>2.5 文件附件</h3>
+<p><strong>上传方式：</strong></p>
+<table>
+  <thead><tr><th>方式</th><th>操作</th></tr></thead>
+  <tbody>
+    <tr><td>点击上传</td><td>点击输入框左侧的 📎 回形针图标，在文件选择器中选择文件（支持多选）</td></tr>
+    <tr><td>粘贴图片</td><td>将截图或复制的图片粘贴到输入框</td></tr>
+    <tr><td>粘贴 URL</td><td>粘贴网页链接，自动抓取页面内容</td></tr>
+    <tr><td>粘贴本地路径</td><td>粘贴如 <code>C:\Users\...\file.txt</code> 的本地路径，自动读取文件</td></tr>
+  </tbody>
+</table>
+
+<p><strong>支持的文件格式和大小限制：</strong></p>
+<table>
+  <thead><tr><th>类型</th><th>格式</th><th>大小限制</th><th>处理方式</th></tr></thead>
+  <tbody>
+    <tr><td>图片</td><td>jpg, png, gif, webp, bmp, svg</td><td>20 MB</td><td>自动 OCR 识别中英文文字</td></tr>
+    <tr><td>文本</td><td>txt, log, csv, tsv, readme 等</td><td>2 MB</td><td>直接读取文本内容</td></tr>
+    <tr><td>代码</td><td>js, ts, py, java, go, html, css, vue 等 60+ 种</td><td>2 MB</td><td>读取内容 + 自动检测编程语言</td></tr>
+    <tr><td>PDF</td><td>pdf</td><td>10 MB</td><td>逐页提取文字（扫描件无文字）</td></tr>
+    <tr><td>Word</td><td>doc, docx</td><td>10 MB</td><td>提取纯文本</td></tr>
+    <tr><td>Excel</td><td>xls, xlsx, csv, tsv</td><td>10 MB</td><td>导出为 CSV 格式</td></tr>
+  </tbody>
+</table>
+<blockquote><strong>注意：</strong> 超过大小限制的文件会显示错误提示。粘贴的文本超过 500KB 会被截断，并在卡片上显示截断警告。</blockquote>
+<div class="trigger-tip"><strong>💡 试试这样说：</strong><br>（上传截图后）"提取图片中的文字并翻译成英文" · （上传 PDF 后）"总结这篇文档的要点" · （上传代码后）"检查这段代码的问题并给出改进建议"</div>
+
+<h3>2.6 选中文字自动发送</h3>
+<table>
+  <thead><tr><th>模式</th><th>行为</th></tr></thead>
+  <tbody>
+    <tr><td><strong>自动发送</strong>（默认）</td><td>选中文字自动填入输入框并直接发送给 AI</td></tr>
+    <tr><td><strong>手动发送</strong></td><td>选中文字填入输入框，需要手动按 Enter 发送</td></tr>
+    <tr><td><strong>关闭</strong></td><td>选中文字不做任何操作</td></tr>
+  </tbody>
+</table>
+<p>在设置 → 通用配置 →「选中文字操作」中切换。</p>
+
+<h3>2.7 消息管理</h3>
+<table>
+  <thead><tr><th>操作</th><th>方式</th><th>说明</th></tr></thead>
+  <tbody>
+    <tr><td>清空对话</td><td>点击侧边栏头部的 🗑️ 图标</td><td>弹出确认对话框，确认后清空所有消息</td></tr>
+    <tr><td>删除单条消息</td><td>右键点击消息 → 选择「删除」</td><td>只删除这一条消息</td></tr>
+    <tr><td>复制消息内容</td><td>右键点击消息 → 选择「复制内容」</td><td>复制到剪贴板</td></tr>
+    <tr><td>中断 AI 回复</td><td>点击输入框旁的 ⏹ 停止按钮</td><td>停止当前流式输出</td></tr>
+    <tr><td>滚动到底部</td><td>向上滚动后，点击右下角 ⬇ 按钮</td><td>快速回到最新消息</td></tr>
+  </tbody>
+</table>
+<blockquote><strong>注意：</strong> 清空对话后，下次发送消息时不会携带任何历史上下文，相当于开始一个全新的对话。</blockquote>
+
+<h3>2.8 消息内容交互</h3>
+<ul>
+  <li><strong>代码块：</strong> 每个代码块右上角有 📋 复制按钮，点击后变为 ✅ 确认标记（1.5 秒后恢复）</li>
+  <li><strong>表格：</strong> AI 回复中的表格右上角有 📥 下载按钮，点击可导出为 Excel 文件</li>
+  <li><strong>深度思考区块：</strong> 可折叠的「💭 深度思考」区块，点击标题展开/折叠</li>
+  <li><strong>错误状态：</strong> 请求失败 → 红色错误横幅；手动停止 → 黄色横幅</li>
+</ul>
+
+<h3>2.9 输入历史</h3>
+<ol>
+  <li>在<strong>空输入框</strong>中按 <strong>↑</strong> 键 → 浏览历史输入（从新到旧）</li>
+  <li>按 <strong>↓</strong> 键 → 前进到更新的历史</li>
+  <li>到达最新条目时恢复之前的草稿</li>
+  <li>最多保存 100 条历史记录</li>
+</ol>
+
+<h3>2.10 上下文管理</h3>
+<ul>
+  <li>AI 每次请求会携带最近 N 条消息作为上下文</li>
+  <li>默认 50 条，可在设置 → 用户配置中调整（范围 5-200）</li>
+  <li>超过限制时，最早的消息会被自动裁剪</li>
+  <li>裁剪不影响对话记录，只是不发送给 AI</li>
+</ul>
+<blockquote><strong>提示：</strong> 上下文越多，AI 回答越有连贯性，但消耗的 token 也越多。建议根据使用场景调整。</blockquote>
+
+<!-- ==================== 3. 网页自动化 ==================== -->
+<h2 id="s3">🌐 网页自动化</h2>
+
+<h3>3.1 工作原理</h3>
+<p>AI Browser 会自动分析当前页面的结构（按钮、链接、输入框等），将信息发送给 AI，AI 根据你的指令生成操作命令并逐步执行。</p>
+<blockquote><strong>注意：</strong> 网页自动化需要在设置中开启「网页自动化」开关（默认开启）。关闭后 AI 仅作为聊天助手，不会执行任何页面操作。</blockquote>
+
+<h3>3.2 自然语言操作</h3>
+<p>不需要记忆命令，直接用自然语言描述你想做的事：</p>
+<blockquote>
+  "滚动到页面底部"<br>
+  "点击搜索按钮"<br>
+  "在搜索框中输入 Vue3 教程"<br>
+  "帮我打开百度搜索 AI 新闻"<br>
+  "总结一下这个页面的内容"<br>
+  "把页面上的表格下载为 Excel"<br>
+  "帮我登录，用户名是 admin，密码是 123456"
+</blockquote>
+<p>AI 会自动：分析页面结构 → 确定操作 → 逐步执行 → 遇错自动重试（最多 5 次）→ 最多执行 20 步。</p>
+<div class="trigger-tip"><strong>💡 试试这样说：</strong><br>"滚动到页面底部" · "点击搜索按钮" · "在搜索框中输入 Vue3 教程" · "帮我打开百度搜索 AI 新闻" · "总结一下这个页面的内容" · "把表格下载为 Excel" · "帮我登录，用户名是 admin，密码是 123456" · "点击第三个搜索结果"</div>
+
+<h3>3.3 快速命令（即时执行）</h3>
+<table>
+  <thead><tr><th>命令</th><th>说明</th><th>示例</th></tr></thead>
+  <tbody>
+    <tr><td><code>/navigate</code></td><td>打开指定 URL</td><td><code>/navigate https://github.com</code></td></tr>
+    <tr><td><code>/scroll</code></td><td>滚动页面</td><td><code>/scroll down</code>、<code>/scroll auto</code></td></tr>
+    <tr><td><code>/newTab</code></td><td>新建标签页</td><td><code>/newTab</code></td></tr>
+    <tr><td><code>/closeTab</code></td><td>关闭当前标签页</td><td><code>/closeTab</code></td></tr>
+    <tr><td><code>/nextTab</code></td><td>下一个标签页</td><td><code>/nextTab</code></td></tr>
+    <tr><td><code>/prevTab</code></td><td>上一个标签页</td><td><code>/prevTab</code></td></tr>
+    <tr><td><code>/switchTab</code></td><td>按关键词切换标签页</td><td><code>/switchTab github</code></td></tr>
+    <tr><td><code>/keyboard</code></td><td>模拟按键</td><td><code>/keyboard Enter</code></td></tr>
+    <tr><td><code>/wait</code></td><td>等待指定毫秒</td><td><code>/wait 2000</code></td></tr>
+  </tbody>
+</table>
+
+<h3>3.4 页面操作命令</h3>
+<table>
+  <thead><tr><th>命令</th><th>说明</th><th>示例</th></tr></thead>
+  <tbody>
+    <tr><td><code>/search</code></td><td>网页搜索</td><td><code>/search AI 新闻</code></td></tr>
+    <tr><td><code>/click</code></td><td>点击页面元素</td><td><code>/click 登录按钮</code></td></tr>
+    <tr><td><code>/type</code></td><td>在输入框中输入文字</td><td><code>/type 搜索框 hello world</code></td></tr>
+    <tr><td><code>/clear</code></td><td>清空输入框</td><td><code>/clear 搜索框</code></td></tr>
+    <tr><td><code>/select</code></td><td>选择下拉菜单选项</td><td><code>/select 国家下拉框 中国</code></td></tr>
+    <tr><td><code>/focus</code></td><td>聚焦到元素</td><td><code>/focus 邮箱输入框</code></td></tr>
+    <tr><td><code>/hover</code></td><td>鼠标悬停在元素上</td><td><code>/hover 菜单项</code></td></tr>
+    <tr><td><code>/download</code></td><td>提取页面数据并导出文件</td><td><code>/download</code></td></tr>
+    <tr><td><code>/summarize</code></td><td>分析总结页面内容</td><td><code>/summarize</code></td></tr>
+  </tbody>
+</table>
+
+<h3>3.5 控制命令</h3>
+<table>
+  <thead><tr><th>命令</th><th>说明</th></tr></thead>
+  <tbody>
+    <tr><td><code>/stop</code></td><td>停止当前操作</td></tr>
+    <tr><td><code>/pause</code></td><td>暂停当前操作</td></tr>
+    <tr><td><code>/resume</code></td><td>恢复暂停的操作</td></tr>
+  </tbody>
+</table>
+
+<h3>3.6 滚动控制</h3>
+<table>
+  <thead><tr><th>方向</th><th>说明</th><th>示例</th></tr></thead>
+  <tbody>
+    <tr><td><code>up</code></td><td>向上滚动（默认滚动 80% 视口高度）</td><td><code>/scroll up</code></td></tr>
+    <tr><td><code>down</code></td><td>向下滚动</td><td><code>/scroll down</code></td></tr>
+    <tr><td><code>top</code></td><td>滚动到页面/容器顶部</td><td><code>/scroll top</code></td></tr>
+    <tr><td><code>bottom</code></td><td>滚动到页面/容器底部</td><td><code>/scroll bottom</code></td></tr>
+    <tr><td><code>auto</code></td><td>开始自动滚动（持续向下）</td><td><code>/scroll auto</code></td></tr>
+    <tr><td><code>stop</code></td><td>停止自动滚动</td><td><code>/scroll stop</code></td></tr>
+    <tr><td><code>pause</code></td><td>暂停自动滚动</td><td><code>/scroll pause</code></td></tr>
+    <tr><td><code>resume</code></td><td>恢复自动滚动</td><td><code>/scroll resume</code></td></tr>
+  </tbody>
+</table>
+<p><strong>自动滚动特性：</strong> 刷新页面或切换标签页后仍保持滚动状态；鼠标滚轮向上暂停、向下恢复；到达底部自动停止。</p>
+
+<h3>3.7 视频控制</h3>
+<blockquote>
+  "播放视频" / "暂停视频"<br>
+  "把音量调到 50%"<br>
+  "静音" / "取消静音"<br>
+  "快进 30 秒" / "后退 10 秒"<br>
+  "跳到 2 分钟的位置"<br>
+  "2 倍速播放"
+</blockquote>
+<blockquote class="warning"><strong>注意：</strong> 全屏操作需要用户手势，AI 无法直接触发。可以改为"点击视频的全屏按钮"。</blockquote>
+<div class="trigger-tip"><strong>💡 试试这样说：</strong><br>"播放视频" · "暂停视频" · "把音量调到 50%" · "静音" · "快进 30 秒" · "跳到 2 分钟的位置" · "2 倍速播放"</div>
+
+<h3>3.8 标签页管理</h3>
+<p>支持中英文别名匹配：</p>
+<table>
+  <thead><tr><th>关键词</th><th>匹配网站</th></tr></thead>
+  <tbody>
+    <tr><td>bilibili / B站</td><td>bilibili.com</td></tr>
+    <tr><td>taobao / 淘宝</td><td>taobao.com</td></tr>
+    <tr><td>jd / 京东</td><td>jd.com</td></tr>
+    <tr><td>baidu / 百度</td><td>baidu.com</td></tr>
+    <tr><td>google</td><td>google.com</td></tr>
+    <tr><td>github</td><td>github.com</td></tr>
+    <tr><td>zhihu / 知乎</td><td>zhihu.com</td></tr>
+    <tr><td>weibo / 微博</td><td>weibo.com</td></tr>
+    <tr><td>douyin / 抖音</td><td>douyin.com</td></tr>
+    <tr><td>youtube / 油管</td><td>youtube.com</td></tr>
+    <tr><td>twitter / X / 推特</td><td>twitter.com</td></tr>
+  </tbody>
+</table>
+<div class="trigger-tip"><strong>💡 试试这样说：</strong><br>"打开新标签页" · "关闭当前标签页" · "切换到 B 站" · "帮我切换到 GitHub 标签页"</div>
+
+<h3>3.9 数据提取</h3>
+<ul>
+  <li><strong><code>/download</code></strong> — 提取页面文本数据，AI 自动格式化后生成可下载文件</li>
+  <li><strong><code>/summarize</code></strong> — 提取页面全文，AI 进行分析总结，输出结构化摘要</li>
+</ul>
+<div class="trigger-tip"><strong>💡 试试这样说：</strong><br>"把这个页面的内容总结一下" · "提取页面上的所有链接" · "把页面上的商品信息整理成表格" · "下载这个页面的数据为 Excel"</div>
+
+<h3>3.10 跨标签页任务恢复</h3>
+<p>当自动化操作涉及页面跳转时：当前执行进度自动保存 → 新页面打开后自动恢复 → 已完成步骤跳过 → 30 秒过期保护。</p>
+
+<h3>3.11 批量命令</h3>
+<p>AI 可以在一次回复中返回多个命令，按顺序依次执行。单个命令失败不会阻塞后续命令。</p>
+
+<!-- ==================== 4. 语音控制 ==================== -->
+<h2 id="s4">🎤 语音控制</h2>
+
+<h3>4.1 开启语音模式</h3>
+<ol>
+  <li>点击输入框左侧的 🎤 麦克风图标</li>
+  <li>侧边栏从聊天面板切换到语音面板</li>
+  <li>点击中央的大麦克风按钮开始语音识别</li>
+</ol>
+
+<h3>4.2 语音识别引擎</h3>
+<table>
+  <thead><tr><th>引擎</th><th>类型</th><th>特点</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Sherpa-ONNX</strong>（优先）</td><td>本地离线</td><td>无需网络，完全在浏览器内运行，支持中英双语</td></tr>
+    <tr><td><strong>Web Speech API</strong>（备选）</td><td>在线</td><td>浏览器原生 API，需要网络连接</td></tr>
+  </tbody>
+</table>
+
+<h3>4.3 交互流程</h3>
+<pre><code>空闲 → 点击麦克风 → 聆听中 → AI 处理中 → 语音播报 → 空闲</code></pre>
+<p>播报完成后自动回到聆听状态，无需重复点击麦克风。</p>
+<table>
+  <thead><tr><th>状态</th><th>指示器颜色</th><th>状态文字</th></tr></thead>
+  <tbody>
+    <tr><td>空闲</td><td>灰色圆点</td><td>"点击麦克风开始"</td></tr>
+    <tr><td>聆听中</td><td>绿色脉冲圆点</td><td>"正在聆听..."</td></tr>
+    <tr><td>处理中</td><td>主题色脉冲圆点</td><td>"处理中..."</td></tr>
+    <tr><td>播报中</td><td>紫色脉冲圆点</td><td>"播报中..."</td></tr>
+  </tbody>
+</table>
+
+<h3>4.4 语音命令</h3>
+<table>
+  <thead><tr><th>你说</th><th>AI 做什么</th></tr></thead>
+  <tbody>
+    <tr><td>"打开百度"</td><td>新标签页打开百度</td></tr>
+    <tr><td>"搜索 AI 新闻"</td><td>打开百度搜索</td></tr>
+    <tr><td>"在站内搜索 Vue 教程"</td><td>在当前网站的搜索框输入并搜索</td></tr>
+    <tr><td>"打开第三个"</td><td>点击搜索结果中的第 3 个</td></tr>
+    <tr><td>"下一页" / "上一页"</td><td>翻页</td></tr>
+    <tr><td>"播放视频" / "暂停视频"</td><td>控制页面上的视频</td></tr>
+    <tr><td>"今天天气怎么样"</td><td>AI 直接回答（不涉及页面操作）</td></tr>
+  </tbody>
+</table>
+<blockquote><strong>注意：</strong> 关闭「网页自动化」后，语音模式变为纯聊天模式。AI 仅进行简短对话回复，不执行任何浏览器操作。</blockquote>
+<div class="trigger-tip"><strong>💡 试试这样说：</strong><br>"打开百度" · "搜索 AI 新闻" · "在站内搜索 Vue 教程" · "打开第三个" · "下一页" · "播放视频" · "今天天气怎么样"</div>
+
+<!-- ==================== 5. 智能翻译 ==================== -->
+<h2 id="s5">🌍 智能翻译</h2>
+
+<h3>5.1 翻译模式</h3>
+<table>
+  <thead><tr><th>模式</th><th>怎么用</th><th>适合场景</th></tr></thead>
+  <tbody>
+    <tr><td><strong>划词翻译</strong></td><td>选中文字后自动弹出翻译浮窗</td><td>阅读时偶尔查词</td></tr>
+    <tr><td><strong>自动翻译</strong></td><td>自动翻译进入视口的所有文本</td><td>浏览外文网站</td></tr>
+    <tr><td><strong>点击翻译</strong></td><td>点击文本段落触发翻译</td><td>按需翻译特定段落</td></tr>
+    <tr><td><strong>关闭</strong></td><td>不启用翻译功能</td><td>不需要翻译</td></tr>
+  </tbody>
+</table>
+
+<h3>5.2 划词翻译</h3>
+<ol>
+  <li>在页面上选中一段文字</li>
+  <li>自动弹出翻译浮窗，显示加载动画</li>
+  <li>翻译完成后显示译文</li>
+  <li>可点击「复制」按钮复制译文</li>
+  <li>点击浮窗外部或滚动页面自动关闭</li>
+</ol>
+
+<h3>5.3 自动翻译</h3>
+<ul>
+  <li>新进入视口的文本会自动触发翻译</li>
+  <li>相同的文本只翻译一次，结果应用到所有匹配位置</li>
+  <li>行内 <code>&lt;code&gt;</code> 元素会自动保留不翻译</li>
+  <li>新动态加载的内容也会自动翻译</li>
+</ul>
+
+<h3>5.4 点击翻译</h3>
+<ol>
+  <li>开启点击翻译模式</li>
+  <li>点击页面上的文本段落</li>
+  <li>该段落自动翻译并替换显示</li>
+  <li>再次点击 → 恢复原文</li>
+  <li>第三次点击 → 重新显示译文</li>
+</ol>
+<p><strong>特殊处理：</strong> 点击表格行 → 翻译整个表格；点击列表项 → 翻译整个列表。</p>
+
+<h3>5.5 翻译目标语言</h3>
+<p>支持 8 种目标语言：中文（默认）、English、日本語、한국어、Français、Deutsch、Español、Русский。</p>
+
+<h3>5.6 代码保护</h3>
+<p>翻译时自动识别并跳过代码内容：<code>&lt;pre&gt;</code>、<code>&lt;code&gt;</code>、<code>&lt;samp&gt;</code> 标签整体跳过；含 <code>hljs</code>、<code>language-</code> 等类名的元素跳过；行内代码替换为占位符，翻译后恢复。</p>
+
+<!-- ==================== 6. 文件处理 ==================== -->
+<h2 id="s6">📎 文件处理</h2>
+
+<h3>6.1 上传文件</h3>
+<p><strong>方式一：点击上传</strong> — 点击输入框左侧的 📎 回形针图标，选择文件（支持多选）。</p>
+<p><strong>方式二：粘贴</strong> — 粘贴图片、网页 URL 或本地文件路径。</p>
+
+<h3>6.2 图片 OCR</h3>
+<p>上传图片后自动进行 OCR 文字识别：支持简体中文和英文；识别进度显示在图片缩略图上；超时 30 秒；结果随消息发送给 AI。</p>
+<div class="trigger-tip"><strong>💡 试试这样说：</strong><br>（上传截图后）"提取图片中的文字" · "把图片里的英文翻译成中文"</div>
+
+<h3>6.3 文件预览</h3>
+<table>
+  <thead><tr><th>文件类型</th><th>预览方式</th></tr></thead>
+  <tbody>
+    <tr><td>图片</td><td>全尺寸显示</td></tr>
+    <tr><td>文本/代码</td><td>语法高亮显示（支持 60+ 种语言）</td></tr>
+    <tr><td>Markdown</td><td>渲染为富文本</td></tr>
+    <tr><td>PDF/Word/Excel</td><td>提取的文字内容</td></tr>
+    <tr><td>其他</td><td>显示"此文件类型无法预览内容"</td></tr>
+  </tbody>
+</table>
+<p>按 Escape 键或点击遮罩层关闭。内容超过 500KB 时显示截断警告。</p>
+
+<h3>6.4 文件下载</h3>
+<p>预览窗口中的下载按钮支持智能格式处理：优先下载原始文件；否则根据类型重新生成（xlsx/docx/pdf/txt）。</p>
+
+<!-- ==================== 7. 图表生成与文件输出 ==================== -->
+<h2 id="s7">📊 图表生成与文件输出</h2>
+
+<h3>7.1 AI 生成文件（[FILE] 标签系统）</h3>
+<p>AI 可以在回复中嵌入可下载的文件，自动生成文件卡片，支持预览和下载。</p>
+<table>
+  <thead><tr><th>类型</th><th>格式</th><th>说明</th></tr></thead>
+  <tbody>
+    <tr><td>文本</td><td>.txt、.md、.html、.css、.js、.py 等</td><td>直接保存为文本文件</td></tr>
+    <tr><td>数据</td><td>.csv、.tsv</td><td>直接保存，可被 Excel 打开</td></tr>
+    <tr><td>Excel</td><td>.xlsx</td><td>从 CSV 数据自动生成</td></tr>
+    <tr><td>JSON</td><td>.json</td><td>格式化后保存</td></tr>
+    <tr><td>PDF</td><td>.pdf</td><td>从 Markdown 内容生成</td></tr>
+    <tr><td>图表</td><td>.chart</td><td>ECharts 配置，自动渲染为图表预览</td></tr>
+  </tbody>
+</table>
+<div class="trigger-tip"><strong>💡 试试这样说：</strong><br>"给我生成一份 Vue3 学习笔记的 Markdown 文件" · "把分析结果保存为 Excel 表格" · "生成一份 PDF 格式的项目报告" · "输出一份 JSON 格式的配置文件"</div>
+
+<h3>7.2 支持的图表类型</h3>
+<table>
+  <thead><tr><th>类型</th><th>说明</th></tr></thead>
+  <tbody>
+    <tr><td>柱状图</td><td>带圆角的柱状图，适合对比数据</td></tr>
+    <tr><td>折线图</td><td>多系列平滑折线图，适合趋势展示</td></tr>
+    <tr><td>饼图</td><td>支持实心和环形（甜甜圈），适合占比展示</td></tr>
+    <tr><td>雷达图</td><td>蛛网图，适合多维度对比</td></tr>
+  </tbody>
+</table>
+<div class="trigger-tip"><strong>💡 试试这样说：</strong><br>"用柱状图展示各季度销售额：Q1 120万，Q2 150万，Q3 180万，Q4 200万" · "画一个饼图展示市场份额：A公司35%，B公司25%，C公司20%，D公司20%" · "用折线图展示最近7天的气温变化"</div>
+
+<h3>7.3 图表操作</h3>
+<ul>
+  <li><strong>下载 PNG</strong> — 导出为 2 倍分辨率的 PNG 图片</li>
+  <li><strong>下载 JSON</strong> — 导出图表配置文件（可重新导入使用）</li>
+</ul>
+
+<!-- ==================== 8. 设置说明 ==================== -->
+<h2 id="s8">⚙️ 设置说明</h2>
+<p>点击侧边栏右上角的 ⚙️ 齿轮图标打开设置页面。设置分为三个标签页。</p>
+
+<h3>8.1 模型配置</h3>
+<h4>添加新模型</h4>
+<ol>
+  <li>点击模型列表中的「+ 新建」按钮</li>
+  <li>点击提供商预设按钮自动填充，或手动选择提供商</li>
+  <li>填写必填字段：显示名称、API 地址、API Key、模型名称</li>
+  <li>点击「保存」</li>
+</ol>
+<p><strong>提供商预设：</strong> OpenAI · Anthropic · DeepSeek · MiMo · Qwen · Kimi · 智谱 · 百度 · MiniMax · 硅基流动</p>
+
+<h4>模型管理操作</h4>
+<table>
+  <thead><tr><th>操作</th><th>方式</th></tr></thead>
+  <tbody>
+    <tr><td>编辑模型</td><td>点击模型芯片选中 → 修改字段 → 保存</td></tr>
+    <tr><td>删除模型</td><td>选中模型 → 点击「删除模型」按钮</td></tr>
+    <tr><td>新建模型</td><td>点击「+ 新建」→ 填写字段 → 保存</td></tr>
+    <tr><td>导出配置</td><td>点击「导出」→ 下载 JSON 文件</td></tr>
+    <tr><td>导入配置</td><td>点击「导入」→ 选择 JSON 文件 → 自动合并</td></tr>
+  </tbody>
+</table>
+
+<h4>认证方式</h4>
+<table>
+  <thead><tr><th>方式</th><th>说明</th><th>适用场景</th></tr></thead>
+  <tbody>
+    <tr><td>Bearer Token</td><td><code>Authorization: Bearer {key}</code></td><td>大多数 API</td></tr>
+    <tr><td>API Key</td><td>自定义 Header</td><td>部分 API</td></tr>
+    <tr><td>Access Token</td><td>URL 参数</td><td>特殊 API</td></tr>
+    <tr><td>Authorization Header</td><td>自定义 Header</td><td>特殊 API</td></tr>
+  </tbody>
+</table>
+
+<h3>8.2 通用配置</h3>
+<table>
+  <thead><tr><th>设置项</th><th>说明</th></tr></thead>
+  <tbody>
+    <tr><td>主题选择</td><td>10 款主题，点击即时切换</td></tr>
+    <tr><td>快捷键设置</td><td>点击录制键盘组合，可自定义</td></tr>
+    <tr><td>网页自动化开关</td><td>开启/关闭 AI 网页操作能力（切换会清空对话历史）</td></tr>
+    <tr><td>选中文字操作</td><td>自动发送 / 手动发送 / 关闭</td></tr>
+    <tr><td>翻译目标语言</td><td>下拉选择 8 种语言</td></tr>
+    <tr><td>翻译模式</td><td>划词翻译 / 自动翻译 / 点击翻译 / 关闭</td></tr>
+  </tbody>
+</table>
+
+<h3>8.3 用户配置</h3>
+<table>
+  <thead><tr><th>设置项</th><th>说明</th></tr></thead>
+  <tbody>
+    <tr><td>上下文消息数</td><td>5-200（默认 50），影响对话连贯性和 token 消耗</td></tr>
+    <tr><td>缓存管理</td><td>显示使用量（X.XMB / 30MB），可清除缓存</td></tr>
+    <tr><td>激活码</td><td>暂未开放</td></tr>
+  </tbody>
+</table>
+<p><strong>清除缓存会清除：</strong> 会话消息、日志、输入历史。<strong>不会清除：</strong> 模型配置、主题、快捷键等个性化配置。</p>
+
+<!-- ==================== 9. 主题 ==================== -->
+<h2 id="s9">🎨 主题</h2>
+
+<h3>深色主题（5 款）</h3>
+<table>
+  <thead><tr><th>主题名</th><th>主色调</th><th>风格描述</th></tr></thead>
+  <tbody>
+    <tr><td>赛博朋克</td><td><span style="display:inline-block;width:14px;height:14px;background:#00e5ff;border-radius:3px;vertical-align:middle"></span> #00e5ff 青色</td><td>科技感、未来感</td></tr>
+    <tr><td>暗金</td><td><span style="display:inline-block;width:14px;height:14px;background:#d4a853;border-radius:3px;vertical-align:middle"></span> #d4a853 金色</td><td>奢华、高端</td></tr>
+    <tr><td>紫晶</td><td><span style="display:inline-block;width:14px;height:14px;background:#a855f7;border-radius:3px;vertical-align:middle"></span> #a855f7 紫色</td><td>梦幻、神秘</td></tr>
+    <tr><td>午夜</td><td><span style="display:inline-block;width:14px;height:14px;background:#0090FF;border-radius:3px;vertical-align:middle"></span> #0090FF 蓝色</td><td>静谧、沉稳</td></tr>
+    <tr><td>翡翠</td><td><span style="display:inline-block;width:14px;height:14px;background:#10b981;border-radius:3px;vertical-align:middle"></span> #10b981 绿色</td><td>清新、自然</td></tr>
+  </tbody>
+</table>
+
+<h3>浅色主题（5 款）</h3>
+<table>
+  <thead><tr><th>主题名</th><th>主色调</th><th>风格描述</th></tr></thead>
+  <tbody>
+    <tr><td>经典</td><td><span style="display:inline-block;width:14px;height:14px;background:#4f46e5;border-radius:3px;vertical-align:middle"></span> #4f46e5 靛蓝</td><td>默认主题，简洁大方</td></tr>
+    <tr><td>玫瑰金</td><td><span style="display:inline-block;width:14px;height:14px;background:#b76e79;border-radius:3px;vertical-align:middle"></span> #b76e79 玫瑰色</td><td>优雅、温柔</td></tr>
+    <tr><td>樱花</td><td><span style="display:inline-block;width:14px;height:14px;background:#db2777;border-radius:3px;vertical-align:middle"></span> #db2777 粉色</td><td>柔美、活泼</td></tr>
+    <tr><td>珍珠</td><td><span style="display:inline-block;width:14px;height:14px;background:#b8860b;border-radius:3px;vertical-align:middle"></span> #b8860b 暗金色</td><td>典雅、内敛</td></tr>
+    <tr><td>晴空</td><td><span style="display:inline-block;width:14px;height:14px;background:#0ea5e9;border-radius:3px;vertical-align:middle"></span> #0ea5e9 天蓝色</td><td>明朗、开阔</td></tr>
+  </tbody>
+</table>
+
+<!-- ==================== 10. 快捷命令 ==================== -->
+<h2 id="s10">⌨️ 快捷命令</h2>
+
+<h3>10.1 命令选择器</h3>
+<ol>
+  <li>输入 <code>/</code> → 弹出命令列表</li>
+  <li>继续输入关键词 → 模糊过滤命令</li>
+  <li>按 <strong>↑/↓</strong> 键或鼠标悬停 → 导航命令列表</li>
+  <li>按 <strong>Tab</strong> 或 <strong>Enter</strong> 键 → 选中命令</li>
+  <li>按 <strong>Escape</strong> 键 → 关闭菜单</li>
+</ol>
+<blockquote><strong>注意：</strong> 命令选择器仅在「网页自动化」开启时可用。</blockquote>
+
+<h3>10.2 键盘快捷键</h3>
+<table>
+  <thead><tr><th>快捷键</th><th>说明</th></tr></thead>
+  <tbody>
+    <tr><td><code>Ctrl+`</code></td><td>打开/关闭侧边栏（默认，可自定义）</td></tr>
+    <tr><td><code>Enter</code></td><td>发送消息</td></tr>
+    <tr><td><code>Shift+Enter</code></td><td>换行</td></tr>
+    <tr><td><code>↑</code>（空输入框）</td><td>浏览输入历史（从新到旧）</td></tr>
+    <tr><td><code>↓</code>（历史模式）</td><td>前进到更新的历史</td></tr>
+    <tr><td><code>↑/↓</code>（命令菜单）</td><td>导航命令列表</td></tr>
+    <tr><td><code>Tab</code>（命令菜单）</td><td>选中命令</td></tr>
+    <tr><td><code>Escape</code></td><td>关闭命令菜单 / 关闭预览</td></tr>
+  </tbody>
+</table>
+
+<!-- ==================== 11. 使用技巧 ==================== -->
+<h2 id="s11">💡 使用技巧</h2>
+
+<h3>对话效率</h3>
+<ul>
+  <li><strong>指令越明确越好</strong> — "点击页面上的登录按钮" 比 "帮我操作一下" 效果好得多</li>
+  <li><strong>复杂任务拆分多步</strong> — 分步执行比一步到位更可靠</li>
+  <li><strong>利用上下文</strong> — AI 记得之前的对话，可以说"接着刚才的继续"</li>
+  <li><strong>中断重来</strong> — AI 执行方向不对？点停止按钮中断，重新描述需求</li>
+</ul>
+
+<h3>文件处理</h3>
+<ul>
+  <li><strong>OCR + 翻译</strong> — 上传截图后要求"提取图片中的文字并翻译成英文"</li>
+  <li><strong>PDF 分析</strong> — 上传 PDF 后要求"总结这篇文档的要点"</li>
+  <li><strong>代码审查</strong> — 上传代码文件后要求"检查这段代码的问题并给出改进建议"</li>
+</ul>
+
+<h3>翻译</h3>
+<ul>
+  <li><strong>划词翻译</strong>适合偶尔查词，<strong>自动翻译</strong>适合整页阅读</li>
+  <li><strong>点击翻译</strong>最轻量，按需翻译不干扰阅读</li>
+  <li>翻译会自动过滤代码块，技术文档翻译更准确</li>
+</ul>
+
+<h3>设置</h3>
+<ul>
+  <li><strong>模型导入导出</strong> — 团队共享模型配置的最便捷方式</li>
+  <li><strong>上下文消息数</strong> — 日常对话建议 20-50，长文档分析可调高</li>
+  <li><strong>缓存管理</strong> — 定期清理保持扩展流畅</li>
+</ul>
+
+<!-- ==================== 12. 常见问题 ==================== -->
+<h2 id="s12">❓ 常见问题</h2>
+
+<h3>Q: 打开侧边栏后没有任何反应？</h3>
+<p>检查：① 是否已配置至少一个 AI 模型 ② API Key 是否正确 ③ API 地址是否可访问 ④ 网络连接是否正常。</p>
+
+<h3>Q: AI 回复很慢？</h3>
+<p>减少「上下文消息数」设置；切换到更快的模型；检查网络延迟。</p>
+
+<h3>Q: 网页自动化无法点击某些元素？</h3>
+<p>元素可能在 iframe 中（暂不支持跨 iframe 操作）、被遮挡、或需要先手动触发。尝试用更精确的描述重试。</p>
+
+<h3>Q: 翻译不准确？</h3>
+<p>检查翻译目标语言设置；可以切换到「点击翻译」模式按需翻译。</p>
+
+<h3>Q: 语音识别不准确？</h3>
+<p>确保已授予麦克风权限；安静环境下效果更好；说话尽量清晰。</p>
+
+<h3>Q: 文件上传失败？</h3>
+<p>检查大小限制：图片 20 MB、文本/代码 2 MB、PDF/Office 10 MB。</p>
+
+<h3>Q: 怎么切换 AI 模型？</h3>
+<p>点击输入框下方的模型名称药丸，在下拉列表中选择。</p>
+
+<h3>Q: 怎么调侧边栏宽度？</h3>
+<p>拖动侧边栏左边缘的蓝色把手。最小 60px，最大 95% 视口宽度。</p>
+
+<h3>Q: 怎么备份模型配置？</h3>
+<p>设置 → 模型配置 → 点击「导出」下载 JSON 文件。恢复时点击「导入」。</p>
+
+<h3>Q: 清除缓存会丢失什么？</h3>
+<p><strong>会清除：</strong> 会话消息、日志、输入历史。<strong>不会清除：</strong> 模型配置、主题、快捷键等个性化配置。</p>
+
+<h3>Q: 浮动按钮挡住了页面内容？</h3>
+<p>拖拽浮动按钮到其他位置，位置会自动保存。</p>
+
+<h3>Q: 命令选择器不弹出？</h3>
+<p>确保「网页自动化」开关已开启，且输入框中以 <code>/</code> 开头。</p>
+
+<!-- Footer -->
+<div class="footer">
+  <p><strong>AI Voice Browser Assistant</strong> 使用指南 · v1.3.1 · MIT License</p>
+  <p>作者：zwf1110 · <a href="https://github.com/zwf1110/browser-ai-chat" target="_blank">GitHub</a> · <a href="https://github.com/zwf1110/browser-ai-chat/releases" target="_blank">下载插件</a></p>
+  <p>生成日期：2026-06-23</p>
+</div>
+</main>
+
+<script>
+// Theme toggle
+function toggleTheme() {
+  const html = document.documentElement;
+  const isDark = html.getAttribute('data-theme') === 'dark';
+  html.setAttribute('data-theme', isDark ? '' : 'dark');
+  document.querySelector('.theme-toggle').textContent = isDark ? '🌙' : '☀️';
+  localStorage.setItem('aib-guide-theme', isDark ? '' : 'dark');
+}
+(function() {
+  const saved = localStorage.getItem('aib-guide-theme');
+  if (saved === 'dark') {
+    document.documentElement.setAttribute('data-theme', 'dark');
+    document.querySelector('.theme-toggle').textContent = '☀️';
+  }
+})();
+
+// Sidebar toggle (mobile)
+function toggleSidebar() {
+  document.getElementById('sidebar').classList.toggle('open');
+  document.getElementById('sidebarOverlay').classList.toggle('show');
+}
+
+// Active nav link tracking
+(function() {
+  const links = document.querySelectorAll('.nav-link');
+  const sections = [];
+  links.forEach(l => {
+    const id = l.getAttribute('href').slice(1);
+    const el = document.getElementById(id);
+    if (el) sections.push({ id, el, link: l });
+  });
+  function update() {
+    let current = sections[0];
+    for (const s of sections) {
+      if (s.el.getBoundingClientRect().top <= 100) current = s;
+    }
+    links.forEach(l => l.classList.remove('active'));
+    if (current) current.link.classList.add('active');
+  }
+  window.addEventListener('scroll', update, { passive: true });
+  update();
+})();
+
+// Search
+function doSearch(query) {
+  // Remove old highlights
+  document.querySelectorAll('mark.search-hl').forEach(m => {
+    const parent = m.parentNode;
+    parent.replaceChild(document.createTextNode(m.textContent), m);
+    parent.normalize();
+  });
+  if (!query || query.length < 2) return;
+  const main = document.getElementById('content');
+  const walker = document.createTreeWalker(main, NodeFilter.SHOW_TEXT, null);
+  const re = new RegExp(query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+  let first = null;
+  while (walker.nextNode()) {
+    const node = walker.currentNode;
+    if (node.parentNode.tagName === 'MARK' || node.parentNode.tagName === 'SCRIPT' || node.parentNode.tagName === 'STYLE') continue;
+    const text = node.textContent;
+    if (!re.test(text)) continue;
+    re.lastIndex = 0;
+    const frag = document.createDocumentFragment();
+    let last = 0;
+    let m;
+    while ((m = re.exec(text)) !== null) {
+      frag.appendChild(document.createTextNode(text.slice(last, m.index)));
+      const mark = document.createElement('mark');
+      mark.className = 'search-hl';
+      mark.textContent = m[0];
+      frag.appendChild(mark);
+      if (!first) first = mark;
+      last = re.lastIndex;
+    }
+    frag.appendChild(document.createTextNode(text.slice(last)));
+    node.parentNode.replaceChild(frag, node);
+  }
+  if (first) first.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+// Copy buttons for code blocks
+document.querySelectorAll('pre').forEach(pre => {
+  const btn = document.createElement('button');
+  btn.className = 'code-copy-btn';
+  btn.textContent = '复制';
+  btn.onclick = function() {
+    const code = pre.querySelector('code') || pre;
+    navigator.clipboard.writeText(code.textContent).then(() => {
+      btn.textContent = '已复制';
+      btn.classList.add('copied');
+      setTimeout(() => { btn.textContent = '复制'; btn.classList.remove('copied'); }, 1500);
+    });
+  };
+  pre.style.position = 'relative';
+  pre.appendChild(btn);
+});
+</script>
+</body>
+</html>

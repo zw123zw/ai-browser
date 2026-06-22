@@ -15,10 +15,7 @@
 
 
 
-项目主题适配 语言设置 中/英文  扩张器logo图标
-小灵 LingBot Browser
-AI 语音浏览器助手
-AI Chat and Web Automation Extension
+项目主题适配
 
 
 

@@ -129,6 +129,8 @@ export interface AppSettings {
   translateMode?: 'selection' | 'auto' | 'click' | 'off';
   /** 网页自动化开关（默认 true）：关闭后移除所有自动化提示词，退化为纯聊天 */
   automationEnabled?: boolean;
+  /** 界面语言：zh-CN=中文, en-US=英文 */
+  locale?: 'zh-CN' | 'en-US';
   /** @deprecated 已废弃，改用 translateMode */
   selectionTranslate?: boolean;
   /** @deprecated 已废弃，改用 translateMode */

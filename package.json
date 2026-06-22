@@ -1,21 +1,21 @@
 {
-  "name": "ai-voice-browser-assistant",
-  "description": "AI 语音浏览器助手 - 支持语音控制 + 网页自动化 + 多模型切换",
+  "name": "lingbot-browser",
+  "description": "小灵 LingBot Browser - AI 语音浏览器助手 | AI Chat and Web Automation Extension",
   "private": true,
-  "version": "0.1.1",
+  "version": "1.3.1",
   "type": "module",
   "author": {
-    "name": "zwf1110",
-    "url": "https://github.com/zwf1110"
+    "name": "zw123zw",
+    "url": "https://github.com/zw123zw"
   },
   "license": "MIT",
-  "homepage": "https://github.com/zwf1110/browser-ai-chat#readme",
+  "homepage": "https://github.com/zw123zw/ai-browser#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/zwf1110/browser-ai-chat.git"
+    "url": "git+https://github.com/zw123zw/ai-browser.git"
   },
   "bugs": {
-    "url": "https://github.com/zwf1110/browser-ai-chat/issues"
+    "url": "https://github.com/zw123zw/ai-browser/issues"
   },
   "keywords": [
     "browser-extension",
@@ -28,10 +28,10 @@
     "manifest-v3"
   ],
   "scripts": {
-    "dev": "wxt",
-    "build": "bash -c \"D=$(date +%Y%m%d-%H%M%S) && bash scripts/build-check.sh && rm -rf .output && wxt build && mv .output/chrome-mv3 .output/ai-browser-prod-$D && cross-env VITE_LOG_ENABLED=true wxt build && mv .output/chrome-mv3 .output/ai-browser-test-$D\"",
-    "build:prod": "bash -c \"D=$(date +%Y%m%d-%H%M%S) && bash scripts/build-check.sh && wxt build && mv .output/chrome-mv3 .output/ai-browser-prod-$D\"",
-    "build:debug": "bash -c \"D=$(date +%Y%m%d-%H%M%S) && bash scripts/build-check.sh && cross-env VITE_LOG_ENABLED=true wxt build && mv .output/chrome-mv3 .output/ai-browser-test-$D\"",
+    "dev": "bash -c \"cp docs/user-guide/user-guide.md public/user-guide.md && wxt\"",
+    "build": "bash -c \"D=$(date +%Y%m%d-%H%M%S) && cp docs/user-guide/user-guide.md public/user-guide.md && bash scripts/build-check.sh && rm -rf .output && wxt build && mv .output/chrome-mv3 .output/ai-browser-prod-$D && cross-env VITE_LOG_ENABLED=true wxt build && mv .output/chrome-mv3 .output/ai-browser-test-$D\"",
+    "build:prod": "bash -c \"D=$(date +%Y%m%d-%H%M%S) && cp docs/user-guide/user-guide.md public/user-guide.md && bash scripts/build-check.sh && wxt build && mv .output/chrome-mv3 .output/ai-browser-prod-$D\"",
+    "build:debug": "bash -c \"D=$(date +%Y%m%d-%H%M%S) && cp docs/user-guide/user-guide.md public/user-guide.md && bash scripts/build-check.sh && cross-env VITE_LOG_ENABLED=true wxt build && mv .output/chrome-mv3 .output/ai-browser-test-$D\"",
     "compile": "vue-tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",

@@ -2,9 +2,11 @@
 import { onMounted, onUnmounted, reactive, ref } from 'vue';
 import { fabPosStorage, type FabPos } from '@/src/storage';
 import { useSettingsStore } from '@/src/stores/settings';
+import { useI18n } from '@/src/i18n';
 
 const emit = defineEmits<{ (e: 'click'): void }>();
 const settingsStore = useSettingsStore();
+const { t } = useI18n();
 
 const FAB_SIZE = 48;
 const PADDING = 8;
@@ -93,7 +95,7 @@ onUnmounted(() => {
     :style="{ right: pos.right + 'px', bottom: pos.bottom + 'px' }"
     @mousedown="onMouseDown"
   >
-    <span class="aib-fab-tip">AI 语音助手 ({{ settingsStore.settings.shortcut || 'Ctrl+`' }})</span>
+    <span class="aib-fab-tip">{{ t('fab.tooltip') }} ({{ settingsStore.settings.shortcut || 'Ctrl+`' }})</span>
     <!-- Logo - 科技芯片 -->
     <svg class="aib-fab-svg" width="24" height="24" viewBox="0 0 24 24" fill="none">
       <!-- 外层八角科技框 -->

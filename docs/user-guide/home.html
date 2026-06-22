@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="AI 语音浏览器助手 - 支持语音控制 + 网页自动化 + 多模型切换">
+<meta name="keywords" content="browser-extension, chrome-extension, ai, voice, automation, wxt, vue3, manifest-v3">
+<title>AI Voice Browser Assistant</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{--cyan:#00e5ff;--magenta:#ff00ff;--blue:#0090FF;--bg:#0a0e1a;--bg-card:rgba(15,20,40,0.85);--text:#e0e6f0;--text-soft:#8892a8;--glow-cyan:0 0 20px rgba(0,229,255,.4),0 0 60px rgba(0,229,255,.15);--glow-magenta:0 0 20px rgba(255,0,255,.4),0 0 60px rgba(255,0,255,.15)}
+html{scroll-behavior:smooth}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--text);line-height:1.7;overflow-x:hidden}
+a{color:var(--cyan);text-decoration:none;transition:color .3s}
+a:hover{color:#fff;text-shadow:var(--glow-cyan)}
+
+/* Canvas background */
+#starfield{position:fixed;top:0;left:0;width:100%;height:100%;z-index:0;pointer-events:none}
+
+/* Scan line */
+body::after{content:'';position:fixed;top:0;left:0;width:100%;height:4px;background:linear-gradient(90deg,transparent,rgba(0,229,255,.15),transparent);animation:scanline 4s linear infinite;z-index:1;pointer-events:none}
+@keyframes scanline{0%{top:-4px}100%{top:100vh}}
+
+/* Hex grid overlay */
+.hex-grid{position:fixed;top:0;left:0;width:100%;height:100%;z-index:0;pointer-events:none;opacity:.03;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='49' viewBox='0 0 28 49'%3E%3Cg fill-rule='evenodd'%3E%3Cg fill='%2300e5ff' fill-opacity='1'%3E%3Cpath d='M13.99 9.25l13 7.5v15l-13 7.5L1 31.75v-15l12.99-7.5zM3 17.9v12.7l10.99 6.34 11-6.35V17.9l-11-6.34L3 17.9zM0 15l12.98-7.5V0h-2v6.35L0 12.69v2.3zm0 18.5L12.98 41v8h-2v-6.85L0 35.81v-2.3zM15 0v7.5L27.99 15H28v-2.31h-.01L17 6.35V0h-2zm0 49v-8l12.99-7.5H28v2.31h-.01L17 42.15V49h-2z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")}
+
+/* Mouse glow */
+.mouse-glow{position:fixed;width:400px;height:400px;border-radius:50%;background:radial-gradient(circle,rgba(0,229,255,.06) 0%,transparent 70%);pointer-events:none;z-index:1;transform:translate(-50%,-50%);transition:left .1s,top .1s}
+
+/* Container */
+.container{max-width:1100px;margin:0 auto;padding:0 24px;position:relative;z-index:2}
+
+/* ===== HERO ===== */
+.hero{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:80px 24px;position:relative}
+.hero-logo{width:100px;height:100px;margin-bottom:28px;animation:pulse-glow 3s ease-in-out infinite}
+@keyframes pulse-glow{0%,100%{filter:drop-shadow(0 0 12px rgba(0,229,255,.5))}50%{filter:drop-shadow(0 0 30px rgba(0,229,255,.8)) drop-shadow(0 0 60px rgba(0,229,255,.3))}}
+.hero-name{font-size:clamp(32px,6vw,56px);font-weight:900;letter-spacing:2px;background:linear-gradient(135deg,var(--cyan),var(--magenta),var(--cyan));background-size:200% 200%;-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;animation:gradient-shift 4s ease infinite;text-shadow:none;margin-bottom:12px}
+@keyframes gradient-shift{0%,100%{background-position:0% 50%}50%{background-position:100% 50%}}
+.hero-desc{font-size:clamp(15px,2.5vw,19px);color:var(--text-soft);max-width:600px;margin-bottom:16px}
+.hero-meta{display:flex;gap:16px;align-items:center;justify-content:center;flex-wrap:wrap;margin-bottom:40px}
+.hero-tag{padding:4px 14px;border:1px solid rgba(0,229,255,.3);border-radius:20px;font-size:13px;color:var(--cyan);background:rgba(0,229,255,.05)}
+.hero-buttons{display:flex;gap:16px;flex-wrap:wrap;justify-content:center}
+.btn{padding:14px 32px;border-radius:8px;font-size:16px;font-weight:600;cursor:pointer;border:none;transition:all .3s;position:relative;overflow:hidden}
+.btn-primary{background:linear-gradient(135deg,var(--cyan),var(--blue));color:#000;box-shadow:var(--glow-cyan)}
+.btn-primary:hover{transform:translateY(-2px);box-shadow:0 0 30px rgba(0,229,255,.6),0 0 80px rgba(0,229,255,.2);color:#000}
+.btn-secondary{background:transparent;color:var(--cyan);border:1px solid var(--cyan);box-shadow:inset 0 0 20px rgba(0,229,255,.05)}
+.btn-secondary:hover{background:rgba(0,229,255,.1);transform:translateY(-2px);box-shadow:var(--glow-cyan);color:var(--cyan)}
+.btn::after{content:'';position:absolute;top:-50%;left:-50%;width:200%;height:200%;background:linear-gradient(transparent,rgba(255,255,255,.05),transparent);transform:rotate(45deg);transition:left .5s}
+.btn:hover::after{left:100%}
+
+/* ===== FEATURES ===== */
+.section{padding:80px 0}
+.section-title{text-align:center;font-size:clamp(24px,4vw,36px);font-weight:800;margin-bottom:48px;background:linear-gradient(90deg,var(--cyan),var(--magenta));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.features-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:24px}
+.feature-card{background:var(--bg-card);border:1px solid rgba(0,229,255,.12);border-radius:12px;padding:32px 24px;transition:all .4s;position:relative;overflow:hidden}
+.feature-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,var(--cyan),transparent);opacity:0;transition:opacity .4s}
+.feature-card:hover{transform:translateY(-4px);border-color:rgba(0,229,255,.3);box-shadow:0 8px 40px rgba(0,229,255,.1)}
+.feature-card:hover::before{opacity:1}
+.feature-icon{font-size:36px;margin-bottom:16px;display:block}
+.feature-card h3{font-size:18px;font-weight:700;margin-bottom:8px;color:var(--cyan)}
+.feature-card p{font-size:14px;color:var(--text-soft);line-height:1.6}
+
+/* ===== PROVIDERS ===== */
+.providers-wrap{overflow:hidden;position:relative;padding:20px 0}
+.providers-track{display:flex;gap:40px;animation:marquee 30s linear infinite;width:max-content}
+.providers-track:hover{animation-play-state:paused}
+@keyframes marquee{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
+.provider-item{flex-shrink:0;padding:8px 20px;border:1px solid rgba(0,229,255,.15);border-radius:8px;font-size:14px;color:var(--text-soft);white-space:nowrap;transition:all .3s}
+.provider-item:hover{border-color:var(--cyan);color:var(--cyan);box-shadow:var(--glow-cyan)}
+.providers-fade{position:absolute;top:0;bottom:0;width:80px;z-index:1;pointer-events:none}
+.providers-fade-l{left:0;background:linear-gradient(90deg,var(--bg),transparent)}
+.providers-fade-r{right:0;background:linear-gradient(270deg,var(--bg),transparent)}
+
+/* ===== QUICKSTART ===== */
+.steps{display:flex;gap:24px;flex-wrap:wrap;justify-content:center}
+.step{flex:1;min-width:240px;max-width:340px;text-align:center;padding:32px 20px;position:relative}
+.step-num{width:56px;height:56px;border-radius:50%;border:2px solid var(--cyan);display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:800;color:var(--cyan);margin:0 auto 16px;background:rgba(0,229,255,.05);box-shadow:var(--glow-cyan)}
+.step h3{font-size:18px;margin-bottom:8px;color:var(--text)}
+.step p{font-size:14px;color:var(--text-soft)}
+.step-line{position:absolute;top:44px;right:-12px;width:24px;height:2px;background:linear-gradient(90deg,var(--cyan),transparent)}
+.step:last-child .step-line{display:none}
+
+/* ===== FOOTER ===== */
+.footer{text-align:center;padding:40px 24px;border-top:1px solid rgba(0,229,255,.1);color:var(--text-soft);font-size:13px}
+.footer a{margin:0 12px}
+
+/* ===== ANIMATIONS ===== */
+.fade-in{opacity:0;transform:translateY(30px);transition:opacity .8s,transform .8s}
+.fade-in.visible{opacity:1;transform:translateY(0)}
+
+/* Reduced motion */
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+
+/* Responsive */
+@media(max-width:640px){
+  .hero{padding:60px 16px}
+  .features-grid{grid-template-columns:1fr}
+  .steps{flex-direction:column;align-items:center}
+  .step-line{display:none!important}
+  .hero-buttons{flex-direction:column;align-items:center}
+}
+</style>
+</head>
+<body>
+
+<canvas id="starfield"></canvas>
+<div class="hex-grid"></div>
+<div class="mouse-glow" id="mouseGlow"></div>
+
+<!-- HERO -->
+<section class="hero">
+  <svg class="hero-logo" viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M40 4L72 20V60L40 76L8 60V20L40 4Z" stroke="url(#g1)" stroke-width="2" fill="rgba(0,229,255,0.03)"/>
+    <path d="M40 16L60 26V54L40 64L20 54V26L40 16Z" stroke="url(#g1)" stroke-width="1.5" fill="rgba(0,229,255,0.02)"/>
+    <rect x="34" y="34" width="12" height="12" rx="2" fill="url(#g1)"/>
+    <circle cx="40" cy="40" r="3" fill="#fff"/>
+    <line x1="40" y1="4" x2="40" y2="16" stroke="rgba(0,229,255,0.3)" stroke-width="1"/>
+    <line x1="40" y1="64" x2="40" y2="76" stroke="rgba(0,229,255,0.3)" stroke-width="1"/>
+    <line x1="8" y1="20" x2="20" y2="26" stroke="rgba(0,229,255,0.3)" stroke-width="1"/>
+    <line x1="72" y1="20" x2="60" y2="26" stroke="rgba(0,229,255,0.3)" stroke-width="1"/>
+    <line x1="8" y1="60" x2="20" y2="54" stroke="rgba(0,229,255,0.3)" stroke-width="1"/>
+    <line x1="72" y1="60" x2="60" y2="54" stroke="rgba(0,229,255,0.3)" stroke-width="1"/>
+    <circle cx="40" cy="4" r="2.5" fill="var(--cyan)" opacity=".6"/>
+    <circle cx="72" cy="20" r="2.5" fill="var(--cyan)" opacity=".6"/>
+    <circle cx="72" cy="60" r="2.5" fill="var(--cyan)" opacity=".6"/>
+    <circle cx="40" cy="76" r="2.5" fill="var(--cyan)" opacity=".6"/>
+    <circle cx="8" cy="60" r="2.5" fill="var(--cyan)" opacity=".6"/>
+    <circle cx="8" cy="20" r="2.5" fill="var(--cyan)" opacity=".6"/>
+    <defs><linearGradient id="g1" x1="8" y1="4" x2="72" y2="76"><stop stop-color="var(--cyan)"/><stop offset="1" stop-color="var(--magenta)"/></linearGradient></defs>
+  </svg>
+  <h1 class="hero-name">AI Voice Browser Assistant</h1>
+  <p class="hero-desc">AI 语音浏览器助手 - 支持语音控制 + 网页自动化 + 多模型切换</p>
+  <div class="hero-meta">
+    <span class="hero-tag">v1.3.1</span>
+    <span class="hero-tag">MIT License</span>
+    <span class="hero-tag">Chrome Extension</span>
+    <span class="hero-tag">Manifest V3</span>
+  </div>
+  <div class="hero-buttons">
+    <a class="btn btn-primary" href="https://github.com/zwf1110/browser-ai-chat/releases" target="_blank">⬇ 下载插件</a>
+    <a class="btn btn-secondary" href="user-guide.html">📖 使用指南</a>
+  </div>
+</section>
+
+<!-- FEATURES -->
+<section class="section">
+  <div class="container">
+    <h2 class="section-title fade-in">核心功能</h2>
+    <div class="features-grid">
+      <div class="feature-card fade-in">
+        <span class="feature-icon">💬</span>
+        <h3>AI 多模型对话</h3>
+        <p>支持 11 个 AI 提供商，GPT-4o、Claude、Gemini、DeepSeek 等主流大模型一键切换，流式输出，深度思考。</p>
+      </div>
+      <div class="feature-card fade-in">
+        <span class="feature-icon">🌐</span>
+        <h3>网页自动化</h3>
+        <p>自然语言控制浏览器 — 点击、输入、滚动、搜索、导航。AI 自动分析页面结构，逐步执行操作。</p>
+      </div>
+      <div class="feature-card fade-in">
+        <span class="feature-icon">🎤</span>
+        <h3>语音控制</h3>
+        <p>双引擎语音识别（本地 Sherpa-ONNX + Web Speech API），中英双语，连续对话，语音播报。</p>
+      </div>
+      <div class="feature-card fade-in">
+        <span class="feature-icon">🌍</span>
+        <h3>智能翻译</h3>
+        <p>划词翻译、自动翻译、点击翻译三种模式，8 种目标语言，代码智能保护，技术文档无障碍阅读。</p>
+      </div>
+      <div class="feature-card fade-in">
+        <span class="feature-icon">📎</span>
+        <h3>文件处理</h3>
+        <p>图片 OCR、PDF 提取、Word/Excel 解析、60+ 代码语言高亮。上传即分析，AI 读懂你的文件。</p>
+      </div>
+      <div class="feature-card fade-in">
+        <span class="feature-icon">📊</span>
+        <h3>图表与报告</h3>
+        <p>AI 生成柱状图、折线图、饼图、雷达图，内联渲染。一键导出 PNG/JSON，自动生成文件报告。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- PROVIDERS -->
+<section class="section">
+  <div class="container">
+    <h2 class="section-title fade-in">支持的 AI 提供商</h2>
+  </div>
+  <div class="providers-wrap fade-in">
+    <div class="providers-fade providers-fade-l"></div>
+    <div class="providers-fade providers-fade-r"></div>
+    <div class="providers-track">
+      <span class="provider-item">OpenAI</span>
+      <span class="provider-item">Anthropic</span>
+      <span class="provider-item">Google Gemini</span>
+      <span class="provider-item">DeepSeek</span>
+      <span class="provider-item">Qwen 通义千问</span>
+      <span class="provider-item">Kimi Moonshot</span>
+      <span class="provider-item">智谱 ChatGLM</span>
+      <span class="provider-item">文心一言</span>
+      <span class="provider-item">豆包 Doubao</span>
+      <span class="provider-item">Grok xAI</span>
+      <span class="provider-item">自定义 API</span>
+      <!-- Duplicate for seamless loop -->
+      <span class="provider-item">OpenAI</span>
+      <span class="provider-item">Anthropic</span>
+      <span class="provider-item">Google Gemini</span>
+      <span class="provider-item">DeepSeek</span>
+      <span class="provider-item">Qwen 通义千问</span>
+      <span class="provider-item">Kimi Moonshot</span>
+      <span class="provider-item">智谱 ChatGLM</span>
+      <span class="provider-item">文心一言</span>
+      <span class="provider-item">豆包 Doubao</span>
+      <span class="provider-item">Grok xAI</span>
+      <span class="provider-item">自定义 API</span>
+    </div>
+  </div>
+</section>
+
+<!-- QUICKSTART -->
+<section class="section">
+  <div class="container">
+    <h2 class="section-title fade-in">快速开始</h2>
+    <div class="steps">
+      <div class="step fade-in">
+        <div class="step-num">1</div>
+        <h3>安装扩展</h3>
+        <p>下载 CRX 包，在 Chrome 扩展页加载已解压的扩展程序</p>
+        <div class="step-line"></div>
+      </div>
+      <div class="step fade-in">
+        <div class="step-num">2</div>
+        <h3>配置模型</h3>
+        <p>选择提供商预设，填入 API Key，一键保存</p>
+        <div class="step-line"></div>
+      </div>
+      <div class="step fade-in">
+        <div class="step-num">3</div>
+        <h3>开始使用</h3>
+        <p>点击浮动按钮或快捷键打开侧边栏，与 AI 对话</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer class="footer">
+  <p>
+    <a href="https://github.com/zwf1110/browser-ai-chat" target="_blank">GitHub</a>
+    <a href="user-guide.html">使用指南</a>
+    <a href="https://github.com/zwf1110/browser-ai-chat/issues" target="_blank">反馈问题</a>
+  </p>
+  <p style="margin-top:8px">© 2026 zwf1110 · MIT License · v1.3.1</p>
+</footer>
+
+<script>
+// Starfield particles
+(function(){
+  const c=document.getElementById('starfield'),ctx=c.getContext('2d');
+  let w,h,stars=[];
+  function resize(){w=c.width=innerWidth;h=c.height=innerHeight;stars=[];for(let i=0;i<120;i++)stars.push({x:Math.random()*w,y:Math.random()*h,r:Math.random()*1.5+.5,a:Math.random(),da:(Math.random()-.5)*.008})}
+  resize();addEventListener('resize',resize);
+  function draw(){
+    ctx.clearRect(0,0,w,h);
+    for(const s of stars){
+      s.a+=s.da;if(s.a>.9||s.a<.1)s.da=-s.da;
+      ctx.beginPath();ctx.arc(s.x,s.y,s.r,0,Math.PI*2);
+      ctx.fillStyle=`rgba(0,229,255,${s.a})`;ctx.fill();
+    }
+    requestAnimationFrame(draw);
+  }
+  draw();
+})();
+
+// Mouse glow
+(function(){
+  const g=document.getElementById('mouseGlow');
+  document.addEventListener('mousemove',e=>{g.style.left=e.clientX+'px';g.style.top=e.clientY+'px'});
+})();
+
+// Scroll fade-in
+(function(){
+  const els=document.querySelectorAll('.fade-in');
+  const io=new IntersectionObserver((entries)=>{
+    entries.forEach(e=>{if(e.isIntersecting){e.target.classList.add('visible');io.unobserve(e.target)}});
+  },{threshold:.15});
+  els.forEach(el=>io.observe(el));
+})();
+</script>
+</body>
+</html>
