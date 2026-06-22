@@ -11,6 +11,8 @@ import { extractTags, isChatOnlyReply, getChatText } from './tag-parser'
 import {
   PHASE1_SYSTEM_PROMPT,
   PHASE2_SYSTEM_PROMPT,
+  buildPhase1Prompt,
+  buildPhase2Prompt,
   buildPhase2UserMessage,
 } from './prompts'
 import type { AppSettings, ChatMessage } from '@/src/types'
@@ -56,7 +58,9 @@ export class IntentDetector {
   ): Promise<Phase1Detection> {
     log.info('[Phase 1] ─── 开始意图检测 ───', { text: text.slice(0, 100) })
 
-    const aiOutput = await this.callAI('Phase1', PHASE1_SYSTEM_PROMPT, text, onChunk)
+    const settings = this.options.getSettings()
+    const phase1Prompt = buildPhase1Prompt(settings.automationEnabled !== false)
+    const aiOutput = await this.callAI('Phase1', phase1Prompt, text, onChunk)
 
     if (!aiOutput) {
       log.warn('[Phase 1] AI 未返回回复，默认当作 [action]')
@@ -109,7 +113,8 @@ export class IntentDetector {
   async detectPhase2(text: string, skeleton: SemanticSkeleton): Promise<Phase2Result> {
     log.info('[Phase 2] ─── 开始操作决策 ───', { text: text.slice(0, 100) })
 
-    const systemPrompt = PHASE2_SYSTEM_PROMPT
+    const settings = this.options.getSettings()
+    const systemPrompt = buildPhase2Prompt(settings.automationEnabled !== false)
     const userContent = buildPhase2UserMessage(text, skeleton)
 
     log.info('[Phase 2] 请求参数', {

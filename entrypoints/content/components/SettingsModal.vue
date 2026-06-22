@@ -18,6 +18,8 @@ const toast = useToast();
 const licenseKey = ref('');
 const logEnabled = !!import.meta.env.VITE_LOG_ENABLED;
 const showClearCacheConfirm = ref(false);
+const showAutomationConfirm = ref(false);
+const pendingAutomationValue = ref(true);
 
 const CACHE_LIMIT = 30 * 1024 * 1024; // 30MB
 const cacheUsed = ref(0);
@@ -359,6 +361,7 @@ function resolveTranslateMode(settings: any): 'selection' | 'auto' | 'click' | '
 const generalForm = reactive({
   theme: store.settings.theme || 'classic',
   shortcut: store.settings.shortcut || '',
+  automationEnabled: store.settings.automationEnabled !== false,
   autoSendSelection: resolveAutoSend(store.settings.autoSendSelection),
   translateTargetLang: store.settings.translateTargetLang || '中文',
   translateMode: resolveTranslateMode(store.settings),
@@ -414,16 +417,51 @@ function clearShortcut() {
   generalForm.shortcut = '';
 }
 
+// 网页自动化开关切换（切换方向都需确认）
+function toggleAutomation() {
+  pendingAutomationValue.value = !generalForm.automationEnabled;
+  showAutomationConfirm.value = true;
+}
+
+// 确认切换自动化
+async function confirmToggleAutomation() {
+  showAutomationConfirm.value = false;
+  generalForm.automationEnabled = pendingAutomationValue.value;
+  await saveAndClearHistory();
+}
+
+// 取消切换
+function cancelToggleAutomation() {
+  showAutomationConfirm.value = false;
+}
+
 // 保存通用配置
 async function saveGeneral() {
   await store.update({
     theme: generalForm.theme,
     shortcut: generalForm.shortcut,
+    automationEnabled: generalForm.automationEnabled,
     autoSendSelection: generalForm.autoSendSelection,
     translateTargetLang: generalForm.translateTargetLang,
     translateMode: generalForm.translateMode,
   });
   toast.success('通用配置已保存');
+  emit('close');
+}
+
+// 保存配置 + 清空会话（自动化开关切换时调用）
+async function saveAndClearHistory() {
+  await store.update({
+    theme: generalForm.theme,
+    shortcut: generalForm.shortcut,
+    automationEnabled: generalForm.automationEnabled,
+    autoSendSelection: generalForm.autoSendSelection,
+    translateTargetLang: generalForm.translateTargetLang,
+    translateMode: generalForm.translateMode,
+  });
+  const convStore = useConversationsStore();
+  await convStore.resetConversation();
+  toast.success('通用配置已保存，会话已清空');
   emit('close');
 }
 
@@ -808,6 +846,24 @@ function importModels(e: Event) {
             </div>
 
             <div class="aib-form-row">
+              <label>网页自动化</label>
+              <div class="aib-switch-row">
+                <button
+                  :class="['aib-switch', { 'aib-switch-on': generalForm.automationEnabled }]"
+                  @click="toggleAutomation"
+                >
+                  <span class="aib-switch-thumb" />
+                </button>
+                <span class="aib-text-faint" style="font-size: 13px;">
+                  {{ generalForm.automationEnabled ? '已开启：AI 可控制浏览器操作页面' : '已关闭：仅聊天和文件生成' }}
+                </span>
+              </div>
+              <div class="aib-text-faint" style="font-size: 12px;">
+                关闭后 AI 将不再执行网页操作指令（打开链接、点击、输入等），仅保留聊天和文件生成功能。关闭会自动清空当前会话历史。
+              </div>
+            </div>
+
+            <div class="aib-form-row">
               <label>划词操作</label>
               <div class="aib-radio-group">
                 <div
@@ -964,6 +1020,28 @@ function importModels(e: Event) {
         <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
         <path d="M10 11v6" />
         <path d="M14 11v6" />
+      </svg>
+    </template>
+  </ConfirmDialog>
+
+  <!-- 切换自动化确认弹窗 -->
+  <ConfirmDialog
+    :visible="showAutomationConfirm"
+    :title="pendingAutomationValue ? '开启网页自动化' : '关闭网页自动化'"
+    :desc="pendingAutomationValue
+      ? '开启后 AI 可控制浏览器操作页面，当前会话历史将被清空。确认开启？'
+      : '关闭后 AI 将仅保留聊天和文件生成功能，当前会话历史将被清空。确认关闭？'"
+    confirm-text="确认"
+    variant="primary"
+    @confirm="confirmToggleAutomation"
+    @cancel="cancelToggleAutomation"
+  >
+    <template #icon>
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+        stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+        <line x1="12" y1="9" x2="12" y2="13" />
+        <line x1="12" y1="17" x2="12.01" y2="17" />
       </svg>
     </template>
   </ConfirmDialog>

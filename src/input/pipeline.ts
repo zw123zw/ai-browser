@@ -17,7 +17,7 @@ import { ActionExecutor } from '@/src/browser/action-executor'
 import { SkeletonManager } from '@/src/browser/skeleton'
 import { extractFullPageSkeleton } from '@/src/browser/local-html'
 import { extractTags } from './tag-parser'
-import { PHASE2_SYSTEM_PROMPT, buildStreamingUserMessage, MODE_FIRST, MODE_STREAMING, MODE_RETRY, buildExtractPrompt } from './prompts'
+import { PHASE2_SYSTEM_PROMPT, buildPhase2Prompt, buildStreamingUserMessage, MODE_FIRST, MODE_STREAMING, MODE_RETRY, buildExtractPrompt } from './prompts'
 import { createAdapter } from '@/src/adapters'
 import { queuedTaskStorage } from '@/src/storage'
 import type { QueuedTask } from '@/src/storage'
@@ -409,7 +409,8 @@ export class InputPipeline {
               try {
                 log.info('[Phase 2] download 提取到元素', { count: dataElements.length })
                 const cleaned = cleanDataForExtraction(dataElements)
-                const extractPrompt = buildExtractPrompt(text, cleaned)
+                const automationEnabled = this.options.getSettings().automationEnabled !== false
+                const extractPrompt = buildExtractPrompt(text, cleaned, automationEnabled)
                 const aiResult = await this.callAIForExtraction(extractPrompt)
                 callbacks.onFileOutput(aiResult)
                 completed.push({ action: cmd.action, description: cmd.description })
@@ -637,7 +638,7 @@ export class InputPipeline {
     const { createAdapter } = await import('@/src/adapters')
     const adapter = createAdapter(model.provider || settings.provider)
 
-    const systemPrompt = PHASE2_SYSTEM_PROMPT
+    const systemPrompt = buildPhase2Prompt(settings.automationEnabled !== false)
       .replace('{coreRule}', coreRule)
     const userContent = buildStreamingUserMessage(text, skeleton, completed, lastError || undefined, lastFailedCommand || undefined, lastFullSkeleton || undefined, userInputContext)
 

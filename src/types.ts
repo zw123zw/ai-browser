@@ -127,6 +127,8 @@ export interface AppSettings {
   translateTargetLang?: string;
   /** 翻译模式：selection=划词翻译, auto=自动翻译, click=点击翻译, off=关闭 */
   translateMode?: 'selection' | 'auto' | 'click' | 'off';
+  /** 网页自动化开关（默认 true）：关闭后移除所有自动化提示词，退化为纯聊天 */
+  automationEnabled?: boolean;
   /** @deprecated 已废弃，改用 translateMode */
   selectionTranslate?: boolean;
   /** @deprecated 已废弃，改用 translateMode */

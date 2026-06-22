@@ -28,7 +28,7 @@ const log = new Logger('Session')
 /** 最大重试次数 */
 const MAX_RETRY = 3
 
-/** 语音指令系统 Prompt */
+/** 语音指令系统 Prompt（自动化开启时） */
 const COMMAND_SYSTEM_PROMPT = `你是浏览器语音指令助手，根据用户语音、当前页面信息生成可执行指令。
 
 严格遵守以下规则：
@@ -48,6 +48,24 @@ const COMMAND_SYSTEM_PROMPT = `你是浏览器语音指令助手，根据用户�
 6. open_item 参数必须是数字序号，表示页面上第几个可点击元素。
 7. 若语音属于闲聊对话，直接输出简短口语回复（100字内，无Markdown、无代码块）。
 8. 仅输出指令或对话，禁止多余解释、注释。`
+
+/** 语音纯聊天 Prompt（自动化关闭时） */
+const CHAT_ONLY_SYSTEM_PROMPT = `你是一个语音助手，用户通过语音和你对话。
+
+严格遵守以下规则：
+1. 用简洁的口语化中文回复，适合语音播报。
+2. 不要使用 Markdown 格式、代码块、表格。
+3. 回复控制在 100 字以内。
+4. 直接输出回复内容，禁止多余解释、注释。`
+
+/**
+ * 动态构建语音指令系统 Prompt
+ *
+ * @param automation true=包含浏览器指令（默认），false=仅聊天
+ */
+function buildVoiceSystemPrompt(automation: boolean): string {
+  return automation ? COMMAND_SYSTEM_PROMPT : CHAT_ONLY_SYSTEM_PROMPT
+}
 
 /** 闲聊系统 Prompt（当用户明确在聊天时使用） */
 const CHAT_SYSTEM_PROMPT =
@@ -355,11 +373,12 @@ export class VoiceSession {
     const model = settings.models.find(m => m.id === settings.defaultModelId) || settings.models[0]
     const adapter = createAdapter(model?.provider || settings.provider)
 
+    const systemPrompt = buildVoiceSystemPrompt(settings.automationEnabled !== false)
     const llmMessages: ChatMessage[] = [
       {
         id: 'system',
         role: 'system',
-        content: COMMAND_SYSTEM_PROMPT,
+        content: systemPrompt,
         timestamp: Date.now(),
       },
       {
