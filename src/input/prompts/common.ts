@@ -16,7 +16,7 @@ export interface CapabilityItem {
 
 export const CAPABILITY_DOMAIN_LIST: CapabilityItem[] = [
   { id: 'navigate',  desc: '打开URL（需url）',                     needSkeleton: false },
-  { id: 'scroll',    desc: '滚动页面（direction:up/down/top/bottom）', needSkeleton: false },
+  { id: 'scroll',    desc: '滚动页面（direction:up/down/top/bottom/auto/stop/pause/resume）', needSkeleton: false },
   { id: 'newTab',    desc: '打开新标签页',                          needSkeleton: false },
   { id: 'closeTab',  desc: '关闭当前标签页',                        needSkeleton: false },
   { id: 'nextTab',   desc: '切换下一个标签页',                      needSkeleton: false },

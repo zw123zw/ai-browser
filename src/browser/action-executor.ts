@@ -11,6 +11,89 @@ import type { Command, ActionResult } from './types'
 
 const log = new Logger('ActionExecutor')
 
+// ═══════════════════════════════════════════════
+// 自动滚动状态（全局单例，跨 ActionExecutor 实例共享）
+// ═══════════════════════════════════════════════
+
+const autoScroll = {
+  running: false,
+  paused: false,
+  animationId: 0,
+  container: null as Window | Element | null,
+  wheelListener: null as ((e: WheelEvent) => void) | null,
+}
+
+/** 获取最近的可滚动容器（从目标元素向上查找） */
+function getScrollableContainer(el?: Element | null): Window | Element | null {
+  // 如果有目标元素，从它向上找
+  let current = el || document.body
+  while (current && current !== document.body) {
+    const style = window.getComputedStyle(current)
+    const overflow = style.overflowY
+    if ((overflow === 'auto' || overflow === 'scroll') && current.scrollHeight > current.clientHeight) {
+      return current
+    }
+    current = current.parentElement!
+  }
+  // 兜底：检查 body/html
+  if (document.documentElement.scrollHeight > document.documentElement.clientHeight) {
+    return window
+  }
+  // body 也不可滚动，尝试找页面内最大的可滚动容器
+  const allDivs = document.querySelectorAll('div')
+  let best: Element | null = null
+  let bestScore = 0
+  for (const div of allDivs) {
+    if (div.scrollHeight > div.clientHeight + 50) {
+      const style = window.getComputedStyle(div)
+      if (style.overflowY === 'auto' || style.overflowY === 'scroll') {
+        const score = div.scrollHeight - div.clientHeight
+        if (score > bestScore) {
+          bestScore = score
+          best = div
+        }
+      }
+    }
+  }
+  return best || window
+}
+
+/** 滚动指定容器 */
+function scrollContainer(container: Window | Element | null, deltaY: number): void {
+  if (!container || container === window) {
+    window.scrollBy(0, deltaY)
+  } else {
+    (container as Element).scrollTop += deltaY
+  }
+}
+
+/** 获取容器当前滚动位置和最大值 */
+function getScrollInfo(container: Window | Element | null): { current: number; max: number } {
+  if (!container || container === window) {
+    return {
+      current: window.scrollY || document.documentElement.scrollTop,
+      max: document.documentElement.scrollHeight - document.documentElement.clientHeight,
+    }
+  }
+  const el = container as Element
+  return { current: el.scrollTop, max: el.scrollHeight - el.clientHeight }
+}
+
+/** 停止自动滚动 */
+function stopAutoScroll(): void {
+  if (autoScroll.animationId) {
+    cancelAnimationFrame(autoScroll.animationId)
+    autoScroll.animationId = 0
+  }
+  if (autoScroll.wheelListener) {
+    window.removeEventListener('wheel', autoScroll.wheelListener)
+    autoScroll.wheelListener = null
+  }
+  autoScroll.running = false
+  autoScroll.paused = false
+  autoScroll.container = null
+}
+
 export class ActionExecutor {
   /**
    * 执行单条指令
@@ -371,16 +454,103 @@ export class ActionExecutor {
     }
   }
 
-  /** 滚动 */
+  /** 滚动（支持 up/down/top/bottom/auto/stop/pause/resume） */
   private async executeScroll(direction: string, amount?: number): Promise<ActionResult> {
-    const scrollAmount = amount || window.innerHeight * 0.8
-    switch (direction) {
-      case 'up':     window.scrollBy(0, -scrollAmount); break
-      case 'down':   window.scrollBy(0, scrollAmount); break
-      case 'top':    window.scrollTo(0, 0); break
-      case 'bottom': window.scrollTo(0, document.body.scrollHeight); break
-      default:       return { success: false, message: `未知滚动方向: ${direction}` }
+    // ── auto：开始自动向下滚动 ──
+    if (direction === 'auto') {
+      if (autoScroll.running) {
+        return { success: false, message: '自动滚动已在运行中' }
+      }
+      const container = getScrollableContainer()
+      autoScroll.running = true
+      autoScroll.paused = false
+      autoScroll.container = container
+
+      const speed = 1 // 每帧滚动像素（~60px/秒，适合阅读速度）
+      const tick = () => {
+        if (!autoScroll.running) return
+        if (!autoScroll.paused) {
+          const info = getScrollInfo(container)
+          if (info.current >= info.max - 1) {
+            // 到底自动停止
+            stopAutoScroll()
+            log.info('自动滚动到底部，停止')
+            return
+          }
+          scrollContainer(container, speed)
+        }
+        autoScroll.animationId = requestAnimationFrame(tick)
+      }
+      autoScroll.animationId = requestAnimationFrame(tick)
+
+      // wheel 监听：向上暂停，向下恢复
+      autoScroll.wheelListener = (e: WheelEvent) => {
+        if (!autoScroll.running) return
+        if (e.deltaY < 0) {
+          // 滚轮向上 → 暂停
+          if (!autoScroll.paused) {
+            autoScroll.paused = true
+            log.info('滚轮向上，自动滚动暂停')
+          }
+        } else if (e.deltaY > 0 && autoScroll.paused) {
+          // 滚轮向下 → 恢复
+          autoScroll.paused = false
+          log.info('滚轮向下，自动滚动恢复')
+        }
+      }
+      window.addEventListener('wheel', autoScroll.wheelListener, { passive: true })
+
+      log.info('自动滚动开始', { container: container === window ? 'window' : (container as Element)?.tagName })
+      return { success: true, message: '开始自动滚动' }
     }
+
+    // ── stop：停止自动滚动 ──
+    if (direction === 'stop') {
+      if (!autoScroll.running) {
+        return { success: false, message: '自动滚动未运行' }
+      }
+      stopAutoScroll()
+      return { success: true, message: '自动滚动已停止' }
+    }
+
+    // ── pause：暂停自动滚动 ──
+    if (direction === 'pause') {
+      if (!autoScroll.running) {
+        return { success: false, message: '自动滚动未运行' }
+      }
+      autoScroll.paused = true
+      return { success: true, message: '自动滚动已暂停' }
+    }
+
+    // ── resume：恢复自动滚动 ──
+    if (direction === 'resume') {
+      if (!autoScroll.running) {
+        return { success: false, message: '自动滚动未运行' }
+      }
+      autoScroll.paused = false
+      return { success: true, message: '自动滚动已恢复' }
+    }
+
+    // ── 一次性滚动（up/down/top/bottom）──
+    const container = getScrollableContainer()
+    const scrollAmount = amount || window.innerHeight * 0.8
+
+    switch (direction) {
+      case 'up':     scrollContainer(container, -scrollAmount); break
+      case 'down':   scrollContainer(container, scrollAmount); break
+      case 'top':
+        if (!container || container === window) window.scrollTo(0, 0)
+        else (container as Element).scrollTop = 0
+        break
+      case 'bottom': {
+        const info = getScrollInfo(container)
+        scrollContainer(container, info.max)
+        break
+      }
+      default:
+        return { success: false, message: `未知滚动方向: ${direction}` }
+    }
+
     // 等待浏览器完成滚动和重绘（两帧 + 500ms 保险）
     await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(resolve, 500))))
     return { success: true, message: `滚动: ${direction}` }

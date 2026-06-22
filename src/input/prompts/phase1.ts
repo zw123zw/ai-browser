@@ -48,6 +48,8 @@ ${PHASE1_CAPABILITY_LIST}
 示例：
 [command]{"action":"navigate","url":"https://www.bilibili.com","description":"打开B站"}[/command]
 [command]{"action":"scroll","direction":"down","description":"向下滚动"}[/command]
+[command]{"action":"scroll","direction":"auto","description":"自动滚动页面"}[/command]
+[command]{"action":"scroll","direction":"stop","description":"停止滚动"}[/command]
 [command]{"action":"keyboard","key":"Enter","description":"按回车"}[/command]
 
 规则：
