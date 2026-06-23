@@ -412,16 +412,11 @@ export function usePipeline() {
       }
 
       // 还原跨标签页的历史消息（如果有）
-      // 跳过执行状态消息（🔧✅❌💬📝），这些由 pipeline 回调重新生成
-      const RESTORE_SKIP_PREFIXES = ['🔧', '✅', '⏹', '❌', '💬', '📝']
       if (task.recentMessages?.length && convStore.conversation) {
         const existingCount = convStore.conversation.messages.length
-        let restored = 0
         for (const msg of task.recentMessages) {
           // 跳过原始请求的第一条 user 消息（processInput 已经加过了，避免重复）
           if (msg.role === 'user' && msg.content === task.originalRequest) continue
-          // 跳过执行状态消息（pipeline 回调会重新生成）
-          if (msg.role === 'system' && RESTORE_SKIP_PREFIXES.some(p => msg.content.startsWith(p))) continue
           convStore.conversation.messages.push({
             id: uuid(),
             role: msg.role as 'user' | 'assistant',
@@ -429,9 +424,8 @@ export function usePipeline() {
             timestamp: Date.now(),
             status: 'done',
           })
-          restored++
         }
-        log.info('[恢复] 还原历史消息', { total: task.recentMessages.length, restored, existingCount })
+        log.info('[恢复] 还原历史消息', { count: task.recentMessages.length, existingCount })
       }
 
       await getPipeline().resumeQueuedTask(task, callbacks)
