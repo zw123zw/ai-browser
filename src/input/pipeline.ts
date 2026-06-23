@@ -15,7 +15,7 @@ import { InputRouter } from './router'
 import { IntentDetector } from './intent-detector'
 import { ActionExecutor } from '@/src/browser/action-executor'
 import { SkeletonManager } from '@/src/browser/skeleton'
-import { extractFullPageSkeleton } from '@/src/browser/local-html'
+import { extractFullPageSkeletonAsync } from '@/src/browser/local-html'
 import { extractTags } from './tag-parser'
 import { PHASE2_SYSTEM_PROMPT, buildPhase2Prompt, buildStreamingUserMessage, MODE_FIRST, MODE_STREAMING, MODE_RETRY, buildExtractPrompt, buildSummarizePrompt } from './prompts'
 import { createAdapter } from '@/src/adapters'
@@ -31,13 +31,22 @@ const MAX_RETRY = 5
 const MAX_TOTAL_STEPS = 20
 
 /**
- * 去掉历史消息中的重数据（骨架 JSON 等），减少 token 消耗
+ * 去掉历史消息中的重数据，保留操作上下文
+ *
+ * 输入格式：系统提示词\n\n[原始请求]...\n\n[页面骨架]{...}
+ * 保留：[原始请求]、[已完成]、[上次错误]、[用户补充信息]
+ * 过滤：系统提示词、[页面骨架] JSON、[全页骨架] JSON、[失败指令] JSON
  */
 function stripHeavyData(content: string): string {
-  let result = content
-  result = result.replace(/页面骨架:\n[\s\S]*?(?=\n\n|$)/g, '页面骨架: [已省略]')
-  result = result.replace(/\[(全页|当前页面)骨架\]\n[\s\S]*?(?=\n\n|$)/g, '[$1骨架]: [已省略]')
-  return result
+  // 1. 去掉系统提示词（[原始请求] 之前的所有内容）
+  let result = content.replace(/^[\s\S]*?(?=\[原始请求\])/, '')
+  // 2. [页面骨架] + JSON
+  result = result.replace(/\[页面骨架\]\n\{[\s\S]*?\}(?=\n\n|$)/g, '[页面骨架] [已省略]')
+  // 3. [全页骨架] + JSON
+  result = result.replace(/\[全页骨架\]\n[\s\S]*?(?=\n\n|$)/g, '[全页骨架] [已省略]')
+  // 4. [失败指令] + JSON（占空间但价值低）
+  result = result.replace(/\[失败指令\]\n\{[\s\S]*?\}/g, '[失败指令] [已省略]')
+  return result.trim()
 }
 
 /** abort-aware sleep：等待期间可被 AbortSignal 中断 */
@@ -401,8 +410,13 @@ export class InputPipeline {
         throw new DOMException('The operation was aborted.', 'AbortError')
       }
 
-      // 每轮重新提取骨架
-      const skeleton = this.skeletonManager.getSkeleton()
+      // 每轮重新提取骨架（含跨域 iframe 内元素）
+      const skeleton = await this.skeletonManager.getSkeletonWithIframes()
+
+      // 骨架提取后检查 abort
+      if (this.options.getSignal?.()?.aborted) {
+        throw new DOMException('The operation was aborted.', 'AbortError')
+      }
 
       log.info(`[Phase 2] ─── 第 ${completed.length + 1} 步 ───`, {
         skeletonElements: skeleton.elements.length,
@@ -414,6 +428,12 @@ export class InputPipeline {
       const isFirstEntry = completed.length === 0 && !lastError
       const coreRule = isFirstEntry ? MODE_FIRST : (lastError ? MODE_RETRY : MODE_STREAMING)
       const phase2Result = await this.callStreamingAI(text, skeleton, completed, lastError, lastFailedCommand, lastFullSkeleton, coreRule, userInputContext)
+
+      // AI 请求返回后再次检查 abort
+      if (this.options.getSignal?.()?.aborted) {
+        log.info('[Phase 2] ═══ AI 请求后收到 abort 信号 ═══')
+        throw new DOMException('The operation was aborted.', 'AbortError')
+      }
 
       // ── 无标签 → AI 无输出，任务完成 ──
       if (!phase2Result.commands?.length && !phase2Result.needFull && !phase2Result.needInput) {
@@ -520,9 +540,11 @@ export class InputPipeline {
                 log.info('[Phase 2] summarize 提取到文本', { length: pageText.length })
                 const summarizePrompt = buildSummarizePrompt(text, pageText)
                 const aiResult = await this.callAIForSummarize(summarizePrompt)
+                log.info('[Phase 2] summarize AI 返回', { length: aiResult.length, preview: aiResult.slice(0, 100) })
                 // 创建新消息并输出总结
                 callbacks.onChatStart()
                 callbacks.onChatDelta(aiResult)
+                log.info('[Phase 2] summarize onChatDelta 已调用', { contentLength: aiResult.length })
                 callbacks.onChatEnd()
                 completed.push({ action: cmd.action, description: cmd.description })
                 completedKeys.add(cmdKey)
@@ -549,6 +571,7 @@ export class InputPipeline {
             ? {
                 originalRequest: text,
                 completedSteps: [...completed, { action: cmd.action, elementId: cmd.elementId, description: cmd.description }],
+                recentMessages: this.options.getRecentMessages?.()?.map(m => ({ role: m.role, content: m.content })),
                 timestamp: Date.now(),
               }
             : null
@@ -596,6 +619,7 @@ export class InputPipeline {
               const task: QueuedTask = {
                 originalRequest: text,
                 completedSteps: completed.map(c => ({ action: c.action, elementId: c.elementId, description: c.description })),
+                recentMessages: this.options.getRecentMessages?.()?.map(m => ({ role: m.role, content: m.content })),
                 timestamp: Date.now(),
               }
               await queuedTaskStorage.setValue(task)
@@ -645,7 +669,7 @@ export class InputPipeline {
       if (phase2Result.needFull) {
         totalExecutions++  // need_full 也计数
         log.info('[Phase 2] → need_full')
-        const fullSkeleton = extractFullPageSkeleton()
+        const fullSkeleton = await extractFullPageSkeletonAsync()
         log.info('[Phase 2] 全页骨架提取结果', { found: !!fullSkeleton })
         lastError = '当前视口骨架未找到目标元素，已提取全页骨架'
         lastFailedCommand = null
@@ -766,6 +790,11 @@ export class InputPipeline {
     coreRule = MODE_STREAMING,
     userInputContext?: string,
   ): Promise<import('./intent-detector').Phase2Result & { needInput?: { message: string } }> {
+    // 请求前检查 abort
+    if (this.options.getSignal?.()?.aborted) {
+      throw new DOMException('The operation was aborted.', 'AbortError')
+    }
+
     const settings = this.options.getSettings()
     const modelId = this.options.getModelId?.() || settings.defaultModelId
     const model = settings.models.find(m => m.id === modelId) || settings.models[0]

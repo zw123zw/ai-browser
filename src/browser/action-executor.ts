@@ -175,6 +175,11 @@ export class ActionExecutor {
   async execute(cmd: Command): Promise<ActionResult> {
     log.info('═══ 执行指令开始 ═══', { action: cmd.action, elementId: cmd.elementId, description: cmd.description })
 
+    // iframe 元素（f_ 前缀）→ 通过 background 中转注入到 iframe 执行
+    if (cmd.elementId?.startsWith('f_')) {
+      return await this.executeIframeAction(cmd)
+    }
+
     // 不需要元素的操作（keyboard/press 作用于当前焦点元素，tab 操作走 background）
     const needsElement = !['navigate', 'wait', 'scroll', 'keyboard', 'press', 'newTab', 'closeTab', 'switchTab', 'nextTab', 'prevTab'].includes(cmd.action)
     let element: HTMLElement | null = null
@@ -415,10 +420,17 @@ export class ActionExecutor {
     el.focus()
     el.dispatchEvent(new FocusEvent('focus', { bubbles: true }))
 
-    // 1. CodeMirror 编辑器
-    const cmElement = el.closest('.CodeMirror') as HTMLElement & { CodeMirror?: { setValue: (v: string) => void } }
+    // 1. CodeMirror 编辑器（ByteMD 等）
+    const cmElement = el.closest('.CodeMirror') as HTMLElement & {
+      CodeMirror?: {
+        setValue: (v: string) => void
+        trigger?: (name: string, ...args: unknown[]) => void
+      }
+    }
     if (cmElement?.CodeMirror) {
       cmElement.CodeMirror.setValue(text)
+      // 触发 change 事件，让 ByteMD 等上层框架同步内容
+      cmElement.CodeMirror.trigger?.('change')
       return { success: true, message: `输入成功: ${text}` }
     }
 
@@ -426,6 +438,8 @@ export class ActionExecutor {
     const monacoElement = el.closest('.monaco-editor') as HTMLElement & { __editor?: { setValue: (v: string) => void } }
     if (monacoElement?.__editor) {
       monacoElement.__editor.setValue(text)
+      // 触发 input 事件，让上层框架同步
+      monacoElement.dispatchEvent(new Event('input', { bubbles: true }))
       return { success: true, message: `输入成功: ${text}` }
     }
 
@@ -433,6 +447,8 @@ export class ActionExecutor {
     const aceElement = el.closest('.ace_editor') as HTMLElement & { env?: { editor?: { session?: { setValue: (v: string) => void } } } }
     if (aceElement?.env?.editor?.session) {
       aceElement.env.editor.session.setValue(text)
+      // 触发 input 事件，让上层框架同步
+      aceElement.dispatchEvent(new Event('input', { bubbles: true }))
       return { success: true, message: `输入成功: ${text}` }
     }
 
@@ -791,6 +807,46 @@ export class ActionExecutor {
       return { success: false, message: msg }
     }
   }
+
+  /**
+   * iframe 内元素操作
+   *
+   * 通过 chrome.scripting.executeScript 注入操作函数到目标 iframe，
+   * 在 iframe 上下文中执行 click/type/select/focus/hover。
+   */
+  private async executeIframeAction(cmd: Command): Promise<ActionResult> {
+    // 去掉 f_ 前缀，得到 iframe 内的真实 skeletonId
+    const elementId = (cmd.elementId || '').replace(/^f_/, '')
+    const action = cmd.action
+
+    try {
+      // 通过 background 中转调用 chrome.scripting.executeScript
+      const response = await new Promise<{ result?: { success: boolean; message: string }; error?: string }>(resolve => {
+        chrome.runtime.sendMessage({
+          type: 'execute-iframe-action',
+          action,
+          elementId,
+          text: cmd.text || '',
+          key: cmd.key || '',
+        }, resolve)
+      })
+
+      if (response.error) {
+        log.warn('iframe 操作失败', { error: response.error })
+        return { success: false, message: `iframe 操作失败: ${response.error}` }
+      }
+
+      if (response.result) {
+        log.info('iframe 操作完成', { action, elementId, success: response.result.success, message: response.result.message })
+        return response.result
+      }
+      return { success: false, message: 'iframe 操作无返回结果' }
+    } catch (err) {
+      const msg = `iframe 操作失败: ${err instanceof Error ? err.message : String(err)}`
+      log.warn(msg)
+      return { success: false, message: msg }
+    }
+  }
 }
 
 /** 格式化时间为 mm:ss */
@@ -798,4 +854,91 @@ function formatTime(seconds: number): string {
   const m = Math.floor(seconds / 60)
   const s = Math.floor(seconds % 60)
   return `${m}:${s.toString().padStart(2, '0')}`
+}
+
+/**
+ * 注入到 iframe 的自包含操作函数
+ *
+ * 不依赖外部导入，在 iframe 的隔离上下文中执行。
+ * 支持：click、type、clear、select、focus、hover
+ */
+function iframeActionFunc(
+  action: string,
+  elementId: string,
+  text: string,
+  key: string,
+): { success: boolean; message: string } {
+  // 查找元素
+  const el = document.querySelector(`[data-skeleton-id="${elementId}"]`) as HTMLElement | null
+  if (!el) return { success: false, message: `未找到元素: ${elementId}` }
+
+  function triggerClick(target: HTMLElement): void {
+    const rect = target.getBoundingClientRect()
+    const cx = rect.left + rect.width / 2
+    const cy = rect.top + rect.height / 2
+    target.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, clientX: cx, clientY: cy }))
+    target.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, clientX: cx, clientY: cy }))
+    target.dispatchEvent(new FocusEvent('focus', { bubbles: true }))
+    target.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, cancelable: true, clientX: cx, clientY: cy }))
+    target.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, clientX: cx, clientY: cy }))
+    target.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, clientX: cx, clientY: cy }))
+  }
+
+  function triggerType(target: HTMLElement, value: string): void {
+    target.focus()
+    target.dispatchEvent(new FocusEvent('focus', { bubbles: true }))
+    // 使用原生 value setter 绕过框架拦截
+    const descriptor = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')
+      || Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')
+    if (descriptor?.set) {
+      descriptor.set.call(target, value)
+    } else {
+      (target as HTMLInputElement).value = value
+    }
+    target.dispatchEvent(new Event('input', { bubbles: true }))
+    target.dispatchEvent(new Event('change', { bubbles: true }))
+  }
+
+  try {
+    switch (action) {
+      case 'click': {
+        triggerClick(el)
+        return { success: true, message: '点击成功' }
+      }
+      case 'type': {
+        triggerType(el, text)
+        return { success: true, message: `输入成功: ${text}` }
+      }
+      case 'clear': {
+        triggerType(el, '')
+        return { success: true, message: '清空成功' }
+      }
+      case 'select': {
+        (el as HTMLSelectElement).value = text
+        el.dispatchEvent(new Event('change', { bubbles: true }))
+        return { success: true, message: `选择: ${text}` }
+      }
+      case 'focus': {
+        el.focus()
+        el.dispatchEvent(new FocusEvent('focus', { bubbles: true }))
+        return { success: true, message: '聚焦成功' }
+      }
+      case 'hover': {
+        const rect = el.getBoundingClientRect()
+        const cx = rect.left + rect.width / 2
+        const cy = rect.top + rect.height / 2
+        el.dispatchEvent(new PointerEvent('pointerover', { bubbles: true, clientX: cx, clientY: cy }))
+        el.dispatchEvent(new PointerEvent('pointerenter', { bubbles: false, clientX: cx, clientY: cy }))
+        el.dispatchEvent(new MouseEvent('mouseover', { bubbles: true, clientX: cx, clientY: cy }))
+        el.dispatchEvent(new MouseEvent('mouseenter', { bubbles: false, clientX: cx, clientY: cy }))
+        el.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: cx, clientY: cy }))
+        el.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: cx, clientY: cy }))
+        return { success: true, message: '悬停成功' }
+      }
+      default:
+        return { success: false, message: `iframe 不支持的操作: ${action}` }
+    }
+  } catch (err) {
+    return { success: false, message: `操作异常: ${err instanceof Error ? err.message : String(err)}` }
+  }
 }

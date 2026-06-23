@@ -11,8 +11,8 @@ export default defineConfig({
   }),
   manifest: {
     name: '小灵 - AI 语音浏览器助手',
-    description: '小灵 LingBot Browser - AI Chat and Web Automation Extension',
-    version: '1.0.0',
+    description: '小灵 LingBot - AI 语音浏览器助手 | AI Voice Browser Assistant',
+    version: '1.3.1',
     permissions: ['storage', 'unlimitedStorage', 'activeTab', 'scripting', 'tabs'],
     host_permissions: [
       '<all_urls>',

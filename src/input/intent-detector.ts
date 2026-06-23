@@ -256,17 +256,20 @@ export class IntentDetector {
 }
 
 /**
- * 去掉历史消息中的重数据（骨架 JSON、全页骨架 JSON 等）
- * 保留用户输入和 AI 回复的关键信息，减少 token 消耗
+ * 去掉历史消息中的重数据，保留操作上下文
+ *
+ * 输入格式：系统提示词\n\n[原始请求]...\n\n[页面骨架]{...}
+ * 保留：[原始请求]、[已完成]、[上次错误]、[用户补充信息]
+ * 过滤：系统提示词、[页面骨架] JSON、[全页骨架] JSON、[失败指令] JSON
  */
 function stripHeavyData(content: string): string {
-  let result = content
-
-  // 1. 去掉骨架 JSON（页面骨架: 后面的所有内容，直到双换行或结尾）
-  result = result.replace(/页面骨架:\n[\s\S]*?(?=\n\n|$)/g, '页面骨架: [已省略]')
-
-  // 2. 去掉 [全页骨架] 或 [当前页面骨架] JSON
-  result = result.replace(/\[(全页|当前页面)骨架\]\n[\s\S]*?(?=\n\n|$)/g, '[$1骨架]: [已省略]')
-
-  return result
+  // 1. 去掉系统提示词（[原始请求] 之前的所有内容）
+  let result = content.replace(/^[\s\S]*?(?=\[原始请求\])/, '')
+  // 2. [页面骨架] + JSON
+  result = result.replace(/\[页面骨架\]\n\{[\s\S]*?\}(?=\n\n|$)/g, '[页面骨架] [已省略]')
+  // 3. [全页骨架] + JSON
+  result = result.replace(/\[全页骨架\]\n[\s\S]*?(?=\n\n|$)/g, '[全页骨架] [已省略]')
+  // 4. [失败指令] + JSON
+  result = result.replace(/\[失败指令\]\n\{[\s\S]*?\}/g, '[失败指令] [已省略]')
+  return result.trim()
 }

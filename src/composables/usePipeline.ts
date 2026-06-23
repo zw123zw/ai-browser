@@ -48,17 +48,12 @@ export function usePipeline() {
   function getRecentMessages(): Array<{ role: 'user' | 'assistant' | 'system'; content: string }> {
     const conv = convStore.conversation
     if (!conv) return []
-    // 排除当前轮次的两条消息：
-    // 1. ChatPanel 预先 push 的用户消息
-    // 2. onChatStart() 创建的 assistant 占位消息
-    const msgs = conv.messages.slice(0, -2)
-    const maxContext = settingsStore.settings.maxContext || 50
-    // 过滤 system 消息（🔧✅ 等执行状态通知），只保留 user/assistant 对话
-    // Phase 2 的已执行步骤通过 completed 数组 + [已完成] 标签传递，不需要 system
-    return msgs
-      .filter(m => m.role === 'user' || m.role === 'assistant')
+    const maxContext = settingsStore.settings.maxContext || 100
+    // 保留所有消息，不做任何过滤
+    // 数据清洗由 pipeline 的 stripHeavyData 处理
+    return conv.messages
       .slice(-maxContext)
-      .map(m => ({ role: m.role as 'user' | 'assistant', content: m.content.slice(0, 300) }))
+      .map(m => ({ role: m.role as 'user' | 'assistant' | 'system', content: m.content }))
   }
 
   function getPipeline(): InputPipeline {
@@ -97,6 +92,11 @@ export function usePipeline() {
       timestamp: Date.now(),
       status: 'done',
     })
+    // 自动清理：消息超过 500 条时裁剪
+    const MAX_MESSAGES = 500
+    if (convStore.conversation.messages.length > MAX_MESSAGES) {
+      convStore.conversation.messages.splice(0, convStore.conversation.messages.length - MAX_MESSAGES)
+    }
   }
 
   /** 格式化指令详情（用于执行中和重试消息） */
@@ -313,10 +313,32 @@ export function usePipeline() {
     currentAborter = ac
 
     try {
+      let currentStreamingMsg: ChatMessage | null = null
       const callbacks: PipelineCallbacks = {
-        onChatStart: () => {},
-        onChatDelta: () => {},
-        onChatEnd: () => {},
+        onChatStart: () => {
+          log.info('[恢复] onChatStart')
+          if (!convStore.conversation) return
+          currentStreamingMsg = reactive<ChatMessage>({
+            id: uuid(),
+            role: 'assistant',
+            content: '',
+            timestamp: Date.now(),
+            status: 'streaming',
+          })
+          convStore.conversation.messages.push(currentStreamingMsg)
+        },
+        onChatDelta: (delta) => {
+          if (!currentStreamingMsg) return
+          if (delta) currentStreamingMsg.content += delta
+          if (convStore.conversation) convStore.conversation.updatedAt = Date.now()
+        },
+        onChatEnd: () => {
+          log.info('[恢复] onChatEnd')
+          if (currentStreamingMsg) {
+            currentStreamingMsg.status = 'done'
+            currentStreamingMsg = null
+          }
+        },
         onActionDetected: () => {
           log.info('[恢复] onActionDetected')
           // 不向用户展示"正在恢复跨页面操作..."，直接由后续 onCommandsParsed 处理
@@ -387,6 +409,29 @@ export function usePipeline() {
             status: 'done',
           })
         },
+      }
+
+      // 还原跨标签页的历史消息（如果有）
+      // 跳过执行状态消息（🔧✅❌💬📝），这些由 pipeline 回调重新生成
+      const RESTORE_SKIP_PREFIXES = ['🔧', '✅', '⏹', '❌', '💬', '📝']
+      if (task.recentMessages?.length && convStore.conversation) {
+        const existingCount = convStore.conversation.messages.length
+        let restored = 0
+        for (const msg of task.recentMessages) {
+          // 跳过原始请求的第一条 user 消息（processInput 已经加过了，避免重复）
+          if (msg.role === 'user' && msg.content === task.originalRequest) continue
+          // 跳过执行状态消息（pipeline 回调会重新生成）
+          if (msg.role === 'system' && RESTORE_SKIP_PREFIXES.some(p => msg.content.startsWith(p))) continue
+          convStore.conversation.messages.push({
+            id: uuid(),
+            role: msg.role as 'user' | 'assistant',
+            content: msg.content,
+            timestamp: Date.now(),
+            status: 'done',
+          })
+          restored++
+        }
+        log.info('[恢复] 还原历史消息', { total: task.recentMessages.length, restored, existingCount })
       }
 
       await getPipeline().resumeQueuedTask(task, callbacks)

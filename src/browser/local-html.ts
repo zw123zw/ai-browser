@@ -7,7 +7,7 @@
  */
 
 import { Logger } from '@/src/utils/logger'
-import { extractFullSkeleton } from './skeleton'
+import { extractFullSkeleton, SkeletonManager } from './skeleton'
 
 const log = new Logger('LocalHtml')
 
@@ -23,6 +23,31 @@ export function extractFullPageSkeleton(): string | null {
   log.info('提取全页骨架')
 
   const skeleton = extractFullSkeleton(document)
+
+  if (skeleton.elements.length === 0) {
+    log.warn('全页骨架提取完成，无元素')
+    return null
+  }
+
+  const result = JSON.stringify(skeleton)
+  log.info('全页骨架提取完成', {
+    elements: skeleton.elements.length,
+    jsonLength: result.length,
+  })
+  return result
+}
+
+/**
+ * 异步提取全页骨架（含跨域 iframe 内元素）
+ *
+ * [need_full] 触发时调用，使用 chrome.scripting.executeScript
+ * 注入提取函数到不可访问的 iframe 中，合并结果。
+ */
+export async function extractFullPageSkeletonAsync(): Promise<string | null> {
+  log.info('提取全页骨架（含 iframe）')
+
+  const manager = new SkeletonManager()
+  const skeleton = await manager.getFullSkeletonWithIframes()
 
   if (skeleton.elements.length === 0) {
     log.warn('全页骨架提取完成，无元素')

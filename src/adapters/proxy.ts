@@ -99,7 +99,7 @@ export async function proxyFetchStream(
 
     // 先注册监听器，再发消息，避免竞态
     const chunkListener = (msg: any) => {
-      if (msg.type === 'stream-chunk' && msg.requestId === requestId) {
+      if (msg.type === 'stream-chunk' && msg.requestId === requestId && !aborted) {
         onChunk(msg.chunk);
       }
     };
@@ -131,21 +131,18 @@ export async function proxyFetchStream(
     // 注册监听器（在 sendMessage 之后但在流数据到达之前）
     chrome.runtime.onMessage.addListener(chunkListener);
 
-    // 监听 abort signal
+    // 监听 abort signal（设标记 + 通知 background 中止 fetch）
     if (options.signal) {
       options.signal.addEventListener('abort', () => {
         aborted = true;
         log.debug(`→ [stream] 收到中止信号 requestId=${requestId}`)
-        // 通知 background 中止请求
-        chrome.runtime.sendMessage({
-          type: 'abort-stream',
-          requestId,
-        }).catch(() => {});
+        chrome.runtime.sendMessage({ type: 'abort-stream', requestId }).catch(() => {});
       }, { once: true });
     }
 
     // 等待流结束或错误
     return new Promise((resolve, reject) => {
+      let settled = false
       const cleanup = () => {
         chrome.runtime.onMessage.removeListener(chunkListener);
         chrome.runtime.onMessage.removeListener(endListener);
@@ -156,6 +153,8 @@ export async function proxyFetchStream(
         if (msg.type === 'stream-end' && msg.requestId === requestId) {
           const duration = Date.now() - startTime
           cleanup();
+          if (settled) return
+          settled = true
           if (aborted) {
             log.info(`⊘ [stream] ${url} 已中止 ${duration}ms`)
             reject(new DOMException('The operation was aborted.', 'AbortError'));
@@ -171,6 +170,8 @@ export async function proxyFetchStream(
           const duration = Date.now() - startTime
           log.error(`✗ [stream] ${url} 中断 ${duration}ms - ${msg.error || '未知错误'}`)
           cleanup();
+          if (settled) return
+          settled = true
           reject(new Error(msg.error || '流式请求中断'));
         }
       };
@@ -179,8 +180,19 @@ export async function proxyFetchStream(
       if (aborted || options.signal?.aborted) {
         log.info(`⊘ [stream] ${url} 已中止`)
         cleanup();
-        reject(new DOMException('The operation was aborted.', 'AbortError'));
+        if (!settled) { settled = true; reject(new DOMException('The operation was aborted.', 'AbortError')); }
         return;
+      }
+
+      // abort 时立即 reject，不等 stream-end
+      if (options.signal) {
+        options.signal.addEventListener('abort', () => {
+          if (settled) return
+          settled = true
+          cleanup()
+          log.info(`⊘ [stream] ${url} abort 立即 reject`)
+          reject(new DOMException('The operation was aborted.', 'AbortError'))
+        }, { once: true })
       }
 
       chrome.runtime.onMessage.addListener(endListener);

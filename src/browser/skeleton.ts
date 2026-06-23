@@ -18,7 +18,7 @@
 
 import { Logger } from '@/src/utils/logger'
 import { INTERACTIVE_TAGS } from './types'
-import { ensureAllSkeletonIds } from './skeleton-id'
+import { ensureAllSkeletonIds, ensureAllSkeletonIdsForDoc } from './skeleton-id'
 import type { SkeletonElement, SemanticSkeleton } from './types'
 
 const log = new Logger('Skeleton')
@@ -71,6 +71,69 @@ export class SkeletonManager {
     log.info('骨架提取（full）', {
       url: skeleton.url,
       elements: skeleton.elements.length,
+    })
+    return skeleton
+  }
+
+  /**
+   * 获取视口骨架 + 跨域 iframe 内骨架（异步）
+   *
+   * 主文档 + 同源 iframe 由 extractSkeleton() 同步处理，
+   * 跨域 iframe 通过 chrome.scripting.executeScript 注入提取。
+   */
+  async getSkeletonWithIframes(): Promise<SemanticSkeleton> {
+    const skeleton = extractSkeleton(document, 'viewport')
+
+    // 检测跨域 iframe（每次重新遍历）
+    // contentDocument 为 null（未加载完）或抛 SecurityError（跨域）都收集
+    const crossOriginIframes: HTMLIFrameElement[] = []
+    for (const iframe of document.querySelectorAll('iframe')) {
+      const el = iframe as HTMLIFrameElement
+      try {
+        if (!el.contentDocument) crossOriginIframes.push(el)
+      } catch {
+        crossOriginIframes.push(el)
+      }
+    }
+
+    if (crossOriginIframes.length > 0) {
+      log.info('检测到跨域 iframe，开始注入提取', { count: crossOriginIframes.length })
+      const iframeElements = await extractIframeSkeletons(crossOriginIframes, 'viewport')
+      skeleton.elements.push(...iframeElements)
+    }
+    log.info('骨架提取（viewport + iframe）', {
+      url: skeleton.url,
+      elements: skeleton.elements.length,
+      crossOriginIframes: crossOriginIframes.length,
+    })
+    return skeleton
+  }
+
+  /**
+   * 获取全页面骨架 + 跨域 iframe 内骨架（异步）
+   */
+  async getFullSkeletonWithIframes(): Promise<SemanticSkeleton> {
+    const skeleton = extractSkeleton(document, 'full')
+
+    const crossOriginIframes: HTMLIFrameElement[] = []
+    for (const iframe of document.querySelectorAll('iframe')) {
+      const el = iframe as HTMLIFrameElement
+      try {
+        if (!el.contentDocument) crossOriginIframes.push(el)
+      } catch {
+        crossOriginIframes.push(el)
+      }
+    }
+
+    if (crossOriginIframes.length > 0) {
+      log.info('检测到跨域 iframe，开始注入提取', { count: crossOriginIframes.length })
+      const iframeElements = await extractIframeSkeletons(crossOriginIframes, 'full')
+      skeleton.elements.push(...iframeElements)
+    }
+    log.info('骨架提取（full + iframe）', {
+      url: skeleton.url,
+      elements: skeleton.elements.length,
+      crossOriginIframes: crossOriginIframes.length,
     })
     return skeleton
   }
@@ -163,26 +226,6 @@ export function extractSkeleton(doc: Document, scope: SkeletonScope = 'viewport'
   extractFromDoc(doc, 0, 0)
   scannedCount = allElements.length
 
-  // iframe 提取（同源 iframe 内元素，parent 标记为 iframe 标识）
-  const iframes = doc.querySelectorAll('iframe')
-  for (const iframe of iframes) {
-    const iframeEl = iframe as HTMLIFrameElement
-    let iframeDoc: Document | null = null
-    try { iframeDoc = iframeEl.contentDocument } catch { continue }
-    if (!iframeDoc?.body) continue
-
-    const iframeRect = iframeEl.getBoundingClientRect()
-    if (iframeRect.width < 1 || iframeRect.height < 1) continue
-
-    const iframeLabel = iframeEl.id
-      || (iframeEl.className ? iframeEl.className.split(/\s+/)[0] : '')
-      || iframeEl.getAttribute('name')
-      || 'iframe'
-
-    scannedCount += iframeDoc.body.querySelectorAll('*').length
-    extractFromDoc(iframeDoc, iframeRect.left, iframeRect.top, `iframe.${iframeLabel}`)
-  }
-
   // 过滤空文本元素 + 父子同文本去重（保留子级）+ 同级去重
   const elMap = new Map<string, SkeletonElement>()
   for (const el of elements) elMap.set(el.id, el)
@@ -229,6 +272,27 @@ export function extractSkeleton(doc: Document, scope: SkeletonScope = 'viewport'
 
   // 提取页面上的错误/状态提示文本（非交互元素，但对 AI 决策很重要）
   const alerts = extractAlerts(doc)
+
+  // iframe 处理：同源直接提取 + 跨域收集
+  const allIframes = doc.querySelectorAll('iframe')
+  let iframeIndex = 0
+  for (const iframe of allIframes) {
+    const iframeEl = iframe as HTMLIFrameElement
+
+    let iframeDoc: Document | null = null
+    try { iframeDoc = iframeEl.contentDocument } catch { /* 跨域 */ }
+
+    if (iframeDoc?.body) {
+      // 同源 iframe：直接打标 + 提取
+      ensureAllSkeletonIdsForDoc(iframeDoc)
+      const iframeLabel = iframeEl.id || iframeEl.getAttribute('name') || `iframe${iframeIndex}`
+      scannedCount += iframeDoc.body.querySelectorAll('*').length
+      const rect = iframeEl.getBoundingClientRect()
+      extractFromDoc(iframeDoc, rect.left, rect.top, `iframe.${iframeLabel}`)
+    }
+    // 跨域 iframe 不在此处理，由 getSkeletonWithIframes() 通过 chrome.scripting 注入
+    iframeIndex++
+  }
 
   // 页面状态
   const hasModal = hasModalOverlay(doc)
@@ -304,6 +368,12 @@ function isClickable(el: HTMLElement): boolean {
     // getComputedStyle 可能失败，忽略
   }
 
+  // 代码编辑器容器（CodeMirror/Monaco/Ace/ByteMD）
+  if (el.classList.contains('CodeMirror') ||
+      el.classList.contains('monaco-editor') ||
+      el.classList.contains('ace_editor') ||
+      el.classList.contains('bytemd-editor')) return true
+
   return false
 }
 
@@ -337,13 +407,32 @@ function extractElement(el: HTMLElement, id: string): SkeletonElement | null {
   const altText = !ariaLabel ? el.querySelector('img')?.getAttribute('alt') : null
   const ariaLabelValue = ariaLabel || altText || null
 
-  if (!text && !el.getAttribute('role') && !hasIcon && !hasFormContent && !labelText && !ariaLabelValue) return null
+  // 代码编辑器容器（CodeMirror/Monaco/Ace）— 提取编辑器内容作为 value
+  const isEditor = el.classList.contains('CodeMirror') ||
+    el.classList.contains('monaco-editor') ||
+    el.classList.contains('ace_editor') ||
+    el.classList.contains('bytemd-editor')
+
+  if (!text && !el.getAttribute('role') && !hasIcon && !hasFormContent && !labelText && !ariaLabelValue && !isEditor) return null
 
   const base: SkeletonElement = { id, tag }
 
   // ── 1. 身份标识：role ──
   const role = extractRole(el, tag)
   if (role) base.role = role
+
+  // 代码编辑器容器：标记为 textbox，AI 知道可以输入
+  if (isEditor && !base.role) {
+    base.role = 'textbox'
+    // 提取编辑器当前内容（CodeMirror/Monaco/Ace）
+    try {
+      const cm = (el as any).CodeMirror
+      if (cm) {
+        const val = cm.getValue?.() || ''
+        if (val) base.value = val.slice(0, MAX_VALUE_LENGTH)
+      }
+    } catch { /* */ }
+  }
 
   // ── 2. 内容信息：text/label/ariaLabel ──
   if (text) {
@@ -699,4 +788,203 @@ function findLandmarkParent(el: HTMLElement): string | undefined {
  */
 export function extractFullSkeleton(doc: Document): SemanticSkeleton {
   return extractSkeleton(doc, 'full')
+}
+
+// ═══════════════════════════════════════════════
+// 跨域 iframe 骨架提取（chrome.scripting.executeScript）
+// ═══════════════════════════════════════════════
+
+
+/**
+ * 从跨域 iframe 中提取骨架元素
+ *
+ * 使用 chrome.scripting.executeScript with allFrames: true，
+ * 注入自包含的提取函数到每个 frame。
+ */
+async function extractIframeSkeletons(
+  inaccessibleIframes: HTMLIFrameElement[],
+  scope: SkeletonScope,
+): Promise<SkeletonElement[]> {
+  if (!inaccessibleIframes.length) return []
+
+  const vpWidth = window.innerWidth
+  const vpHeight = window.innerHeight
+
+  try {
+    // 通过 background 中转调用 chrome.scripting.executeScript（content script 无权直接调用）
+    const response = await new Promise<{ results?: Array<{ url: string; elements: SkeletonElement[] }>; error?: string }>(resolve => {
+      chrome.runtime.sendMessage({
+        type: 'extract-iframe-skeleton',
+        scope,
+        vpWidth: window.innerWidth,
+        vpHeight: window.innerHeight,
+      }, resolve)
+    })
+
+    if (response.error) {
+      log.warn('iframe 骨架提取失败', { error: response.error })
+      return []
+    }
+
+    const results = response.results
+    if (!results?.length) return []
+
+    const merged: SkeletonElement[] = []
+
+    for (const data of results) {
+      if (!data?.elements?.length) continue
+      // 跳过主框架
+      if (data.url === window.location.href) continue
+
+      // 通过 URL 匹配 iframe 元素获取 parentLabel
+      const iframeEl = inaccessibleIframes.find(f => {
+        try { return f.contentWindow?.location?.href === data.url } catch { return false }
+      })
+
+      let parentLabel = 'iframe'
+      if (iframeEl) {
+        parentLabel = iframeEl.id
+          || iframeEl.getAttribute('name')
+          || (iframeEl.className ? iframeEl.className.split(/\s+/)[0] : '')
+          || 'iframe'
+      }
+
+      // 调整 ID 前缀避免冲突 + 设置 parent
+      for (const el of data.elements) {
+        el.id = `f_${el.id}`
+        el.parent = `iframe.${parentLabel}`
+        merged.push(el)
+      }
+    }
+
+    log.info('iframe 骨架提取完成', {
+      iframeCount: results.filter(r => r.url !== window.location.href).length,
+      elements: merged.length,
+    })
+    return merged
+  } catch (err) {
+    log.warn('iframe 骨架提取失败', { error: String(err) })
+    return []
+  }
+}
+
+/**
+ * 注入到跨域 iframe 的自包含提取函数
+ *
+ * 不依赖任何外部导入，在 iframe 的隔离上下文中执行。
+ */
+function iframeExtractFunc(scope: string, vpWidth: number, vpHeight: number): { url: string; elements: unknown[] } {
+  const SKIP = 'script,style,noscript,meta,link,br,hr'
+  const TAGS = ['a', 'button', 'input', 'select', 'textarea', 'video', 'audio']
+  let idCounter = 0
+
+  function isClickable(el: HTMLElement): boolean {
+    if (TAGS.includes(el.tagName.toLowerCase())) return true
+    if (el.getAttribute('contenteditable') === 'true' || el.getAttribute('contenteditable') === '') return true
+    if (el.getAttribute('onclick')) return true
+    const role = el.getAttribute('role')
+    if (role && ['button', 'link', 'menuitem', 'tab', 'option', 'switch', 'checkbox', 'radio'].includes(role)) return true
+    if (el.getAttribute('tabindex')) return true
+    try { if (getComputedStyle(el).cursor === 'pointer') return true } catch { /* */ }
+    return false
+  }
+
+  function isVisible(el: HTMLElement): boolean {
+    const s = getComputedStyle(el)
+    if (s.display === 'none' || s.visibility === 'hidden') return false
+    return el.offsetParent !== null || s.position === 'fixed'
+  }
+
+  function getText(el: HTMLElement): string {
+    let t = ''
+    for (const n of el.childNodes) {
+      if (n.nodeType === Node.TEXT_NODE) t += n.textContent?.trim() || ''
+    }
+    if (!t) {
+      for (const c of el.children) {
+        const ct = (c as HTMLElement).innerText?.trim() || ''
+        if (ct) { t = ct; break }
+      }
+    }
+    return t.trim().slice(0, 100)
+  }
+
+  function extract(el: HTMLElement, id: string): Record<string, unknown> | null {
+    const tag = el.tagName.toLowerCase()
+    const text = getText(el)
+    const hasIcon = !!el.querySelector('svg, img, i, [class*="icon"]')
+    const isForm = ['input', 'textarea', 'select'].includes(tag)
+    const hasFormContent = isForm && (el.getAttribute('placeholder') || (el as HTMLInputElement).value)
+    const ariaLabel = el.getAttribute('aria-label') || el.getAttribute('title') || null
+    const altText = !ariaLabel ? el.querySelector('img')?.getAttribute('alt') : null
+    const ariaLabelValue = ariaLabel || altText || null
+    if (!text && !el.getAttribute('role') && !hasIcon && !hasFormContent && !ariaLabelValue) return null
+
+    const base: Record<string, unknown> = { id, tag }
+    const explicitRole = el.getAttribute('role')
+    if (explicitRole) base.role = explicitRole
+    else if (tag === 'input') {
+      const t = (el as HTMLInputElement).type
+      if (t === 'submit' || t === 'reset') base.role = 'button'
+      else if (t !== 'checkbox' && t !== 'radio') base.role = 'textbox'
+    } else if (tag === 'select') base.role = 'combobox'
+
+    if (text) base.text = text
+    else if (hasFormContent) {
+      const v = (el as HTMLInputElement).value
+      if (v) base.text = v.length > 20 ? v.slice(0, 20) + '...' : v
+    } else if (hasIcon && ariaLabelValue) base.ariaLabel = ariaLabelValue
+    else if (hasIcon) base.text = '(icon)'
+    if (ariaLabelValue && base.text !== ariaLabelValue) base.ariaLabel = ariaLabelValue
+    if (isForm && el.getAttribute('placeholder')) base.placeholder = el.getAttribute('placeholder')!.slice(0, 50)
+
+    if (tag === 'a') {
+      const href = el.getAttribute('href')
+      if (href && href !== '#' && !href.startsWith('javascript:')) {
+        try { base.href = new URL(href, el.baseURI).href.slice(0, 80) } catch { /* */ }
+      }
+    }
+    if (tag === 'input') {
+      const inp = el as HTMLInputElement
+      const t = inp.type || 'text'
+      if (t !== 'checkbox' && t !== 'radio') base.inputType = t
+      if (t !== 'password' && inp.value) base.value = inp.value.slice(0, 20)
+      if ((t === 'checkbox' || t === 'radio') && inp.checked) base.checked = true
+      if (inp.required) base.required = true
+    }
+    if (tag === 'textarea') {
+      const ta = el as HTMLTextAreaElement
+      if (ta.value) base.value = ta.value.slice(0, 20)
+      if (ta.required) base.required = true
+    }
+    if (isForm || tag === 'button') {
+      const d = (el as HTMLInputElement).disabled || el.getAttribute('aria-disabled') === 'true'
+      if (d) base.disabled = true
+    }
+    return base
+  }
+
+  // 确保所有元素有 data-skeleton-id
+  for (const el of document.body.querySelectorAll(`*:not(${SKIP})`)) {
+    if (!(el as HTMLElement).dataset.skeletonId) {
+      (el as HTMLElement).dataset.skeletonId = `fi${++idCounter}`
+    }
+  }
+
+  const elements: Record<string, unknown>[] = []
+  for (const el of document.body.querySelectorAll('*')) {
+    const htmlEl = el as HTMLElement
+    const id = htmlEl.dataset.skeletonId || ''
+    if (!id || !isClickable(htmlEl)) continue
+    if (!isVisible(htmlEl)) continue
+    if (scope === 'viewport') {
+      const r = htmlEl.getBoundingClientRect()
+      if (r.top >= vpHeight || r.bottom <= 0 || r.left >= vpWidth || r.right <= 0) continue
+      if (r.width < 1 || r.height < 1) continue
+    }
+    const ex = extract(htmlEl, id)
+    if (ex) elements.push(ex)
+  }
+
+  return { url: location.href, elements }
 }

@@ -38,7 +38,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   theme: 'classic',
   shortcut: 'Ctrl+`',
   maxConversations: 100,
-  maxContext: 50,
+  maxContext: 100,
   autoSendSelection: 'auto',
   translateTargetLang: '中文',
   translateMode: 'off',
@@ -85,6 +85,7 @@ export const inputHistoryStorage = storage.defineItem<string[]>('local:ai-browse
 export interface QueuedTask {
   originalRequest: string
   completedSteps: Array<{ action: string; elementId?: string; description?: string }>
+  recentMessages?: Array<{ role: string; content: string }>
   timestamp: number
 }
 export const queuedTaskStorage = storage.defineItem<QueuedTask | null>(

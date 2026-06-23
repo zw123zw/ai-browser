@@ -56,6 +56,20 @@ export function ensureAllSkeletonIds(): void {
 }
 
 /**
+ * 给指定文档（如 iframe 的 contentDocument）的所有元素打 data-skeleton-id
+ *
+ * 同源 iframe 骨架提取前调用，确保 iframe 内元素也有 id。
+ */
+export function ensureAllSkeletonIdsForDoc(doc: Document): void {
+  syncIdCounter(doc)
+  if (!doc.body) return
+  const allElements = doc.body.querySelectorAll(`*:not(${SKIP_TAGS})`)
+  for (const el of allElements) {
+    ensureSkeletonId(el as HTMLElement)
+  }
+}
+
+/**
  * 首次加载全量打标（带日志）
  */
 export function initAllSkeletonIds(): void {

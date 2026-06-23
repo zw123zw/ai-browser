@@ -397,7 +397,7 @@ const generalForm = reactive({
   autoSendSelection: resolveAutoSend(store.settings.autoSendSelection),
   translateTargetLang: store.settings.translateTargetLang || '中文',
   translateMode: resolveTranslateMode(store.settings),
-  maxContext: store.settings.maxContext || 50,
+  maxContext: store.settings.maxContext || 100,
 });
 
 const autoSendOptions = computed(() => [
@@ -976,12 +976,12 @@ function importModels(e: Event) {
                 <input
                   v-model.number="generalForm.maxContext"
                   type="number"
-                  min="5"
-                  max="200"
+                  min="100"
+                  max="500"
                   step="1"
                   class="aib-input aib-input-with-btn"
-                  placeholder="50"
-                  @change="generalForm.maxContext = Math.max(5, Math.min(200, Math.round(generalForm.maxContext || 50)))"
+                  placeholder="100"
+                  @change="generalForm.maxContext = Math.max(100, Math.min(500, Math.round(generalForm.maxContext || 100)))"
                 />
                 <button class="aib-btn-activate" @click="saveMaxContext">{{ t('settings.general.save') }}</button>
               </div>
