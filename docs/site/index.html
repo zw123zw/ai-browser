@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="description" content="AI 语音浏览器助手 - 支持语音控制 + 网页自动化 + 多模型切换">
 <meta name="keywords" content="browser-extension, chrome-extension, ai, voice, automation, wxt, vue3, manifest-v3">
-<title>AI Voice Browser Assistant</title>
+<title>小灵 LingBot - AI Voice Browser Assistant</title>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{--cyan:#00e5ff;--magenta:#ff00ff;--blue:#0090FF;--bg:#0a0e1a;--bg-card:rgba(15,20,40,0.85);--text:#e0e6f0;--text-soft:#8892a8;--glow-cyan:0 0 20px rgba(0,229,255,.4),0 0 60px rgba(0,229,255,.15);--glow-magenta:0 0 20px rgba(255,0,255,.4),0 0 60px rgba(255,0,255,.15)}
@@ -34,13 +34,16 @@ body::after{content:'';position:fixed;top:0;left:0;width:100%;height:4px;backgro
 .hero{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:80px 24px;position:relative}
 .hero-logo{width:100px;height:100px;margin-bottom:28px;animation:pulse-glow 3s ease-in-out infinite}
 @keyframes pulse-glow{0%,100%{filter:drop-shadow(0 0 12px rgba(0,229,255,.5))}50%{filter:drop-shadow(0 0 30px rgba(0,229,255,.8)) drop-shadow(0 0 60px rgba(0,229,255,.3))}}
-.hero-name{font-size:clamp(32px,6vw,56px);font-weight:900;letter-spacing:2px;background:linear-gradient(135deg,var(--cyan),var(--magenta),var(--cyan));background-size:200% 200%;-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;animation:gradient-shift 4s ease infinite;text-shadow:none;margin-bottom:12px}
+.hero-name{font-size:clamp(48px,8vw,72px);font-weight:900;letter-spacing:2px;background:linear-gradient(135deg,var(--cyan),var(--magenta),var(--cyan));background-size:200% 200%;-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;animation:gradient-shift 4s ease infinite;text-shadow:none;margin-bottom:16px}
 @keyframes gradient-shift{0%,100%{background-position:0% 50%}50%{background-position:100% 50%}}
-.hero-desc{font-size:clamp(15px,2.5vw,19px);color:var(--text-soft);max-width:600px;margin-bottom:16px}
-.hero-meta{display:flex;gap:16px;align-items:center;justify-content:center;flex-wrap:wrap;margin-bottom:40px}
-.hero-tag{padding:4px 14px;border:1px solid rgba(0,229,255,.3);border-radius:20px;font-size:13px;color:var(--cyan);background:rgba(0,229,255,.05)}
-.hero-buttons{display:flex;gap:16px;flex-wrap:wrap;justify-content:center}
-.btn{padding:14px 32px;border-radius:8px;font-size:16px;font-weight:600;cursor:pointer;border:none;transition:all .3s;position:relative;overflow:hidden}
+.hero-subtitle{font-size:clamp(28px,4vw,40px);margin-bottom:12px;font-weight:700;letter-spacing:2px;background:linear-gradient(135deg,var(--cyan),var(--magenta));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;min-height:1.2em}
+.hero-subtitle .cursor{display:inline-block;width:2px;height:1em;background:var(--cyan);margin-left:2px;animation:blink .8s step-end infinite;vertical-align:text-bottom}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+.hero-brand{display:inline-block;font-size:clamp(14px,1.8vw,18px);color:var(--cyan);margin-bottom:20px;font-weight:600;letter-spacing:4px;padding:8px 24px;border:1px solid rgba(0,229,255,.4);border-radius:6px;background:rgba(0,229,255,.05);box-shadow:0 0 20px rgba(0,229,255,.1),inset 0 0 20px rgba(0,229,255,.03)}
+.hero-meta{display:flex;gap:16px;align-items:center;justify-content:center;flex-wrap:wrap;margin-bottom:48px}
+.hero-tag{padding:6px 18px;border:1px solid rgba(0,229,255,.3);border-radius:20px;font-size:15px;color:var(--cyan);background:rgba(0,229,255,.05)}
+.hero-buttons{display:flex;gap:20px;flex-wrap:wrap;justify-content:center}
+.btn{padding:16px 40px;border-radius:8px;font-size:18px;font-weight:600;cursor:pointer;border:none;transition:all .3s;position:relative;overflow:hidden}
 .btn-primary{background:linear-gradient(135deg,var(--cyan),var(--blue));color:#000;box-shadow:var(--glow-cyan)}
 .btn-primary:hover{transform:translateY(-2px);box-shadow:0 0 30px rgba(0,229,255,.6),0 0 80px rgba(0,229,255,.2);color:#000}
 .btn-secondary{background:transparent;color:var(--cyan);border:1px solid var(--cyan);box-shadow:inset 0 0 20px rgba(0,229,255,.05)}
@@ -128,8 +131,9 @@ body::after{content:'';position:fixed;top:0;left:0;width:100%;height:4px;backgro
     <circle cx="8" cy="20" r="2.5" fill="var(--cyan)" opacity=".6"/>
     <defs><linearGradient id="g1" x1="8" y1="4" x2="72" y2="76"><stop stop-color="var(--cyan)"/><stop offset="1" stop-color="var(--magenta)"/></linearGradient></defs>
   </svg>
+  <p class="hero-brand">小灵 LingBot</p>
   <h1 class="hero-name">AI Voice Browser Assistant</h1>
-  <p class="hero-desc">AI 语音浏览器助手 - 支持语音控制 + 网页自动化 + 多模型切换</p>
+  <p class="hero-subtitle" id="heroSubtitle"><span class="cursor"></span></p>
   <div class="hero-meta">
     <span class="hero-tag">v1.3.1</span>
     <span class="hero-tag">MIT License</span>
@@ -137,7 +141,7 @@ body::after{content:'';position:fixed;top:0;left:0;width:100%;height:4px;backgro
     <span class="hero-tag">Manifest V3</span>
   </div>
   <div class="hero-buttons">
-    <a class="btn btn-primary" href="https://github.com/zwf1110/browser-ai-chat/releases" target="_blank">⬇ 下载插件</a>
+    <a class="btn btn-primary" href="#" target="_blank">⬇ 下载插件</a>
     <a class="btn btn-secondary" href="guide.html">📖 使用指南</a>
   </div>
 </section>
@@ -246,11 +250,11 @@ body::after{content:'';position:fixed;top:0;left:0;width:100%;height:4px;backgro
 <!-- FOOTER -->
 <footer class="footer">
   <p>
-    <a href="https://github.com/zwf1110/browser-ai-chat" target="_blank">GitHub</a>
+    <a href="#">GitHub</a>
     <a href="guide.html">使用指南</a>
-    <a href="https://github.com/zwf1110/browser-ai-chat/issues" target="_blank">反馈问题</a>
+    <a href="#">反馈问题</a>
   </p>
-  <p style="margin-top:8px">© 2026 zwf1110 · MIT License · v1.3.1</p>
+  <p style="margin-top:8px">© 2026 小灵 LingBot · MIT License · v1.3.1</p>
 </footer>
 
 <script>
@@ -276,6 +280,35 @@ body::after{content:'';position:fixed;top:0;left:0;width:100%;height:4px;backgro
 (function(){
   const g=document.getElementById('mouseGlow');
   document.addEventListener('mousemove',e=>{g.style.left=e.clientX+'px';g.style.top=e.clientY+'px'});
+})();
+
+// Typewriter effect
+(function(){
+  const el=document.getElementById('heroSubtitle');
+  const text='AI 语音浏览器助手';
+  const cursor=el.querySelector('.cursor');
+  let i=0;
+  function type(){
+    if(i<text.length){
+      cursor.before(document.createTextNode(text[i]));
+      i++;
+      setTimeout(type,120+Math.random()*60);
+    }else{
+      setTimeout(erase,2000);
+    }
+  }
+  function erase(){
+    if(i>0){
+      const nodes=el.childNodes;
+      for(let j=nodes.length-1;j>=0;j--){
+        if(nodes[j].nodeType===3){nodes[j].remove();i--;break}
+      }
+      setTimeout(erase,60);
+    }else{
+      setTimeout(type,500);
+    }
+  }
+  setTimeout(type,800);
 })();
 
 // Scroll fade-in

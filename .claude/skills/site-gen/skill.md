@@ -1,31 +1,25 @@
 ---
 name: site-gen
-description: "扫描项目代码和 PRD，生成官网首页和使用指南，输出到 docs/site/ 文件夹。首页仅 --home 时生成，使用指南每次更新。"
+description: "扫描项目代码和 PRD，生成使用指南（guide.md + guide.html），输出到 docs/site/ 文件夹。"
 ---
 
-# Site Gen — 官网与使用文档生成
+# Site Gen — 使用文档生成
 
-扫描项目代码库，提取所有用户可见功能，生成官网首页和使用指南，输出到 `docs/site/` 文件夹。
+扫描项目代码库，提取所有用户可见功能，生成使用指南，输出到 `docs/site/` 文件夹。
 
 ## 输出文件
 
 ```
 docs/site/
-├── index.html    # 科幻风格产品首页（仅 --home 时生成/覆盖）
 ├── guide.html    # 使用指南 HTML（每次生成）
-├── guide.md      # 使用指南 Markdown（每次生成）
-└── assets/       # 预留静态资源（截图等）
+└── guide.md      # 使用指南 Markdown（每次生成）
 ```
+
+> **注意：** 首页 `index.html` 手动维护，此技能不生成也不修改。
 
 ## 触发命令
 
-| 命令 | `index.html` | `guide.html` | `guide.md` | 说明 |
-|------|---|---|---|---|
-| `/site-gen` | ❌ 不动 | ✅ 全量 | ✅ 全量 | 日常更新使用指南 |
-| `/site-gen --update` | ❌ 不动 | ✅ 增量 | ✅ 增量 | 仅变化模块 |
-| `/site-gen --home` | ✅ 仅首页 | ❌ | ❌ | 重新生成/覆盖首页 |
-
-> **重要：** `/site-gen` 和 `--update` 绝不触碰 `index.html`。首页只有 `--home` 才会生成。
+- `/site-gen` — 全量生成 guide.md + guide.html
 
 ---
 
@@ -35,13 +29,12 @@ docs/site/
 
 | 字段 | 用途 |
 |------|------|
-| `name` | 产品名称（首页标题、指南页头） |
-| `description` | 产品描述（首页副标题） |
-| `author.name` | 作者（首页页脚） |
-| `license` | 许可证（首页页脚） |
-| `homepage` | 项目主页链接（首页 GitHub 按钮） |
-| `repository.url` | 仓库地址（首页下载按钮 → releases） |
-| `keywords` | SEO 关键词（首页 meta） |
+| `name` | 产品名称 |
+| `description` | 产品描述 |
+| `author.name` | 作者 |
+| `license` | 许可证 |
+| `homepage` | 项目主页链接 |
+| `repository.url` | 仓库地址 |
 
 **版本号规则：** `git tag --sort=-creatordate | head -1`，无 tag 回退到 `package.json` 的 `version`。
 
@@ -129,29 +122,6 @@ git tag --sort=-creatordate | head -1
 - 页头：SVG Logo + 产品名称（package.json）+ 版本号（git tag）
 - 页脚：`← 返回首页`（链接 index.html）+ GitHub + 下载 + 生成日期
 - 触发示例用 `.trigger-tip` 样式（💡 图标 + 蓝色左边框）
-
-### Step 3: 生成首页（仅 `--home`）
-
-生成 `docs/site/index.html`，要求：
-
-**视觉风格：科幻 / 赛博朋克**
-- 深色背景（#0a0e1a），粒子星空 canvas 动画
-- 霓虹色调（cyan #00e5ff, magenta #ff00ff, electric blue #0090FF）
-- 标题文字发光效果（text-shadow 多层霓虹光晕）
-- 卡片悬浮 + 边框渐变光效
-- 滚动触发淡入动画（IntersectionObserver）
-- 鼠标跟随光晕效果
-- 六边形网格背景
-- 扫描线效果（伪元素循环）
-
-**页面结构：**
-1. **Hero** — SVG Logo（脉冲动画）+ 产品名 + 描述 + 版本号 + 许可证 + CTA 按钮
-2. **功能亮点** — 6 个卡片（AI 对话、网页自动化、语音控制、智能翻译、文件处理、图表）
-3. **AI 提供商** — marquee 自动滚动
-4. **快速开始** — 3 步骤（安装 → 配置 → 使用）
-5. **页脚** — 版权 + GitHub + 使用指南链接（guide.html）
-
-**自包含要求：** 所有 CSS/JS/SVG 内联，无外部依赖。
 
 ---
 

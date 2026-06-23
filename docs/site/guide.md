@@ -1,8 +1,8 @@
-# AI Voice Browser Assistant 使用指南
+# 小灵 LingBot 使用指南
 
-> AI 语音浏览器助手 - 支持语音控制 + 网页自动化 + 多模型切换
+> AI 语音浏览器助手 | AI Voice Browser Assistant
 
-**版本：** v1.3.1 | **许可证：** MIT | **作者：** zwf1110
+**版本：** v1.3.1 | **许可证：** MIT
 
 ---
 
@@ -27,7 +27,7 @@
 
 ### 1.1 安装扩展
 
-1. 从 [GitHub Releases](https://github.com/zwf1110/browser-ai-chat/releases) 下载最新 CRX 包
+1. 下载最新 CRX 包
 2. 打开 Chrome，地址栏输入 `chrome://extensions/`
 3. 开启右上角「开发者模式」开关
 4. 点击「加载已解压的扩展程序」按钮
@@ -39,7 +39,7 @@
 
 1. 点击浮动按钮或按 `Ctrl+`` ` 打开侧边栏
 2. 点击右上角 ⚙️ 齿轮图标进入设置
-3. 在「模型配置」标签页，点击「+ 新建」
+3. 在「AI」标签页，点击「新建模型」
 4. 点击提供商预设按钮（如 DeepSeek），自动填充
 5. 填写 API Key，点击「保存」
 
@@ -155,7 +155,7 @@
 
 ### 2.8 消息内容交互
 
-- **代码块** — 右上角复制按钮
+- **代码块** — 右上角复制按钮（1.5s 确认反馈）
 - **表格** — 右上角下载按钮（导出 Excel）
 - **深度思考** — 可折叠区块
 - **错误** — 红色横幅；停止 — 黄色横幅
@@ -445,6 +445,8 @@ AI 通过 `[FILE]` 标签嵌入可下载文件：文本、CSV、Excel、JSON、P
 | 上下文消息数 | 5-200（默认 50） |
 | 缓存管理 | 使用量显示 + 清除按钮 |
 | 激活码 | 暂未开放 |
+| 语言切换 | 中文 / English |
+| 使用文档 | 内置 Markdown 文档查看器 |
 
 清除缓存：清除会话/日志/历史，保留模型配置/主题/快捷键等个性化配置。
 
@@ -551,4 +553,4 @@ AI 通过 `[FILE]` 标签嵌入可下载文件：文本、CSV、Excel、JSON、P
 
 ---
 
-> **AI Voice Browser Assistant** v1.3.1 | MIT License | [GitHub](https://github.com/zwf1110/browser-ai-chat) | 📸 标记位置需后续补充截图
+> **小灵 LingBot** v1.3.1 | MIT License

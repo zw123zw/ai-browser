@@ -32,7 +32,7 @@
       },
       "report": {
         "title": "Report Generation",
-        "desc": "Generate an analysis report based on this page"
+        "desc": "Generate a Vue3 project report (Word format with bar charts)"
       }
     }
   },
