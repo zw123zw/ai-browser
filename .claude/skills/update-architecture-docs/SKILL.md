@@ -1,90 +1,56 @@
 ---
 name: update-architecture-docs
-description: "全量扫描项目代码库，重写全部架构文档（docs/architecture/）和功能文档（docs/features/）。每次执行都读取所有源文件，确保文档与代码完全同步。"
+description: "全量扫描项目代码，生成各模块详细架构文档（docs/architecture/）。写清技术方案、实现细节、架构设计。"
 ---
 
-# 更新架构文档与功能文档
+# 架构文档生成
 
-全量扫描项目代码，重写全部文档，包含两个维度：
-- **架构文档**（`docs/architecture/`）— 模块怎么设计的、怎么实现的
-- **功能文档**（`docs/features/`）— 模块支持什么功能、怎么用、具体参数和行为
+全量扫描项目代码，重写全部架构文档到 `docs/architecture/`。每次执行都读取所有源文件，确保文档与代码完全同步。
 
 **核心原则：文档必须反映代码的真实状态，每次执行都从源文件重新生成。**
 
 ---
 
-## 使用场景
+## 输出目录
 
-* 新功能开发完成后，更新对应模块文档
-* 重大重构后，刷新受影响的文档
-* 新成员入职时，首次生成全套文档
-* 审查项目结构时
-* 用户询问「XX 支持哪些操作」「XX 怎么用」时
+```
+docs/architecture/
+├── README.md              # 总体架构概览
+├── browser-command.md     # 浏览器命令引擎
+├── input-pipeline.md      # 输入管线
+├── ai-adapters.md         # AI 适配器
+├── state-management.md    # 状态管理
+├── background-service.md  # 后台服务
+├── content-script.md      # 内容脚本
+├── translation.md         # 翻译系统
+├── voice.md               # 语音系统
+├── storage.md             # 存储层
+└── file-parsing.md        # 文件处理
+```
 
 ---
 
-## 文档体系
+## 执行模式：全量扫描
 
-```
-docs/
-├── architecture/          # 架构文档：设计、实现、数据流
-│   ├── README.md          # 总体架构概览
-│   ├── browser-command.md
-│   ├── input-pipeline.md
-│   ├── ai-adapters.md
-│   ├── state-management.md
-│   ├── background-service.md
-│   ├── content-script.md
-│   ├── translation.md
-│   ├── voice.md
-│   ├── storage.md
-│   └── file-parsing.md
-│
-└── features/              # 功能文档：支持什么、怎么用、细节
-    ├── README.md          # 功能总览索引
-    ├── browser-commands.md    # 浏览器命令参考（16 种操作）
-    ├── automation-actions.md  # 语音自动化操作参考
-    ├── input-system.md        # 输入系统（路由、意图检测、管线）
-    ├── ai-providers.md        # AI 适配器配置与能力
-    ├── voice-features.md      # 语音功能（识别、TTS、命令）
-    ├── file-features.md       # 文件功能（解析、生成、OCR）
-    └── translation-features.md # 翻译功能（三种模式）
-```
+**每次调用都扫描全部源文件并重写全部文档。** 不做增量更新。
 
-### 两类文档的分工
-
-| 维度 | 架构文档 | 功能文档 |
-|------|---------|---------|
-| 关注点 | 怎么设计的、为什么这样设计 | 支持什么、怎么用、具体行为 |
-| 读者 | 开发者（理解代码结构） | 开发者 + 用户（了解能力边界） |
-| 内容 | 分层图、类图、数据流、设计决策 | 功能清单、参数说明、使用示例、边界行为 |
-| 图表 | Mermaid 架构图、序列图 | 参数表格、流程图、示例代码 |
-
----
-
-## 执行模式：全量扫描（每次必做）
-
-**每次调用技能时，必须扫描全部源文件并重写全部文档。** 不做增量更新，不做 git diff 检测。
-
-原因：文档必须反映代码的真实状态，增量更新容易遗漏隐式变化（如函数签名不变但行为变了、注释变了、依赖变了）。
+原因：增量更新容易遗漏隐式变化（函数签名不变但行为变了、依赖变了、注释变了）。
 
 流程：
-1. 扫描模块映射表中所有源文件
-2. 读取每个源文件的完整内容
-3. 基于实际代码重写所有架构文档和功能文档
-4. 使用 Write 工具全量覆盖（不用 Edit 局部修改）
+1. 并行读取所有源文件
+2. 分析代码结构和依赖关系
+3. 重写所有架构文档
+4. 同步根目录 README.md
 
 ---
 
 ## 模块与源文件映射
 
-### 架构文档映射
-
 | 文档 | 源文件 |
 |------|--------|
-| `README.md` | `package.json`, `entrypoints/background.ts`, `entrypoints/content/index.ts`, `entrypoints/content/App.vue`, 所有模块的关键导出文件 |
+| `README.md` | `package.json`, `entrypoints/background.ts`, `entrypoints/content/index.ts`, `entrypoints/content/App.vue` |
 | `browser-command.md` | `src/browser/types.ts`, `src/browser/skeleton.ts`, `src/browser/action-executor.ts`, `src/browser/local-html.ts`, `src/browser/index.ts` |
-| `input-pipeline.md` | `src/input/types.ts`, `src/input/router.ts`, `src/input/intent-detector.ts`, `src/input/pipeline.ts`, `src/input/tag-parser.ts`, `src/input/prompts/index.ts`, `src/input/prompts/common.ts`, `src/input/prompts/phase1.ts`, `src/input/prompts/phase2.ts`, `src/input/prompts/translate.ts`, `src/input/prompts/extract.ts`, `src/input/prompts/summarize.ts`, `src/input/index.ts`, `src/composables/usePipeline.ts` |
+| `input-pipeline.md` | `src/input/types.ts`, `src/input/router.ts`, `src/input/intent-detector.ts`, `src/input/pipeline.ts`, `src/input/tag-parser.ts`, `src/input/prompts/*.ts`, `src/input/index.ts`, `src/composables/usePipeline.ts` |
 | `ai-adapters.md` | `src/adapters/base.ts`, `src/adapters/openai.ts`, `src/adapters/qwen.ts`, `src/adapters/wenxin.ts`, `src/adapters/gemini.ts`, `src/adapters/doubao.ts`, `src/adapters/proxy.ts`, `src/adapters/index.ts` |
 | `state-management.md` | `src/stores/settings.ts`, `src/stores/conversations.ts`, `src/stores/voice.ts` |
 | `background-service.md` | `entrypoints/background.ts` |
@@ -94,522 +60,133 @@ docs/
 | `storage.md` | `src/storage/index.ts` |
 | `file-parsing.md` | `src/utils/file-parsers.ts`, `src/utils/file-type.ts`, `src/utils/file-generators.ts`, `src/utils/file-tag-parser.ts`, `src/utils/echart-renderer.ts`, `src/utils/ocr.ts` |
 
-### 功能文档映射
-
-| 文档 | 源文件 |
-|------|--------|
-| `README.md` | 所有功能文档 |
-| `browser-commands.md` | `src/browser/types.ts`（Command/SkeletonElement/ActionResult 类型）, `src/browser/action-executor.ts`（所有 action 实现）, `src/browser/skeleton.ts`（骨架提取逻辑）, `src/input/prompts/common.ts`（CAPABILITY_DOMAIN_LIST） |
-| `automation-actions.md` | `src/automation/actions.ts`, `src/automation/selectors.ts`, `src/voice/commandParser.ts` |
-| `input-system.md` | `src/input/router.ts`, `src/input/intent-detector.ts`, `src/input/pipeline.ts`, `src/input/tag-parser.ts`, `src/input/prompts/*.ts`, `src/input/types.ts` |
-| `ai-providers.md` | `src/adapters/*.ts`, `src/types.ts`（Provider/ModelConfig/AppSettings）, `src/local-config.json` |
-| `voice-features.md` | `src/voice/recognition.ts`, `src/voice/sherpa-recognition.ts`, `src/voice/broadcast.ts`, `src/voice/session.ts`, `src/voice/commandParser.ts`, `src/stores/voice.ts` |
-| `file-features.md` | `src/utils/file-parsers.ts`, `src/utils/file-type.ts`, `src/utils/file-generators.ts`, `src/utils/file-tag-parser.ts`, `src/utils/echart-renderer.ts`, `src/utils/ocr.ts`, `src/utils/file.ts` |
-| `translation-features.md` | `src/browser/translate-service.ts`, `src/browser/translate-popup.ts`, `src/browser/translate-click.ts`, `src/browser/translate-parser.ts`, `src/browser/code-filter.ts`, `src/input/prompts/translate.ts` |
-
 ---
 
-## 实现步骤
+## 文档内容标准
 
-当 skill 被调用时，按以下步骤执行：
+每个架构文档必须包含以下章节，**写清技术方案和实现细节**：
 
-### 第一步：读取全部源文件
+### 1. 模块概述
 
-按模块映射表，使用并行 Agent 读取所有源文件的完整内容。必须覆盖映射表中的每一个文件，不遗漏。
+- 这个模块解决什么问题
+- 在整体架构中的位置和职责
+- 与其他模块的依赖关系
 
-### 第二步：生成/更新文档
+### 2. 架构设计
 
-#### 2.1 架构文档（docs/architecture/）
+- 分层架构图（Mermaid）
+- 核心类/函数的职责划分
+- 设计模式的使用（工厂、策略、观察者等）
+- **为什么这样设计**（设计决策和权衡）
 
-保持原有结构不变，每个文档包含：
-1. **目标** — 这个模块做什么
-2. **架构概览** — 分层架构图（Mermaid）
-3. **核心设计决策** — 关键选择和原因
-4. **详细实现** — 每个部分如何工作
-5. **数据流** — 序列图/流程图（Mermaid）
-6. **关键方法签名** — 重要 API
-7. **错误处理** — 如何处理错误
-8. **目录结构** — 文件组织
+### 3. 核心类型定义
 
-#### 2.2 功能文档（docs/features/）
+- 列出模块中的关键 TypeScript 类型/接口
+- 字段说明、类型约束、枚举值
+- 代码块展示实际类型定义
 
-每个功能文档遵循统一结构：
+### 4. 实现细节
 
-```markdown
-# [模块名] 功能参考
+**这是最重要的章节，必须详细到函数级别：**
 
-## 功能总览
-一句话概括 + 功能清单表格
+- 每个核心函数的签名、参数、返回值
+- 关键算法的步骤说明
+- 边界条件的处理方式
+- 错误处理策略
+- 性能优化手段
+- 代码块展示关键实现片段
 
-## 功能 1：[名称]
+### 5. 数据流
 
-### 用途
-这个功能解决什么问题
+- Mermaid 序列图展示完整调用链
+- 数据在模块间的传递方式
+- 异步操作的处理（Promise、Stream、Event）
 
-### 怎么使用
-调用方式、触发条件、用户操作路径
+### 6. 配置与扩展
 
-### 参数/配置
-| 参数 | 类型 | 默认值 | 说明 |
-|------|------|--------|------|
+- 可配置的参数和默认值
+- 扩展点（如何新增适配器、新增命令等）
+- 与外部系统的接口
 
-### 具体行为
-- 正常情况下的行为
-- 边界情况和特殊处理
-- 错误情况
+### 7. 已知限制
 
-### 示例
-代码片段或操作步骤
-
-## 功能 2：[名称]
-...
-```
-
-#### 2.3 各功能文档的具体内容要求
-
-##### browser-commands.md — 浏览器命令参考
-
-必须包含以下内容：
-
-**命令总览表格：**
-| Action | 用途 | 需要骨架 | 需要元素ID | 参数 |
-
-**16 种 Action 逐一说明：**
-
-1. **click** — 点击元素
-   - 参数：`elementId`, `fallbackSelector`, `text`（三级查找）
-   - 行为：完整鼠标事件序列（mousedown → focus → mouseup → click）
-   - 特殊：label 点击自动转发到关联表单元素
-
-2. **type** — 输入文本
-   - 参数：`elementId`, `text`
-   - 行为：使用 native value setter（绕过 React/Vue 受控组件）
-   - 特殊：自动聚焦目标元素
-
-3. **clear** — 清空输入
-   - 参数：`elementId`
-   - 行为：清空 input/textarea 的值
-
-4. **scroll** — 页面滚动
-   - 参数：`direction`（up/down/left/right）, `amount`（像素）
-   - 行为：平滑滚动指定方向和距离
-
-5. **navigate** — 导航到 URL
-   - 参数：`url`
-   - 行为：通过 background 的 tab-action 打开（避免弹窗拦截）
-   - 特殊：同域直接跳转，跨域通过新标签页
-
-6. **select** — 下拉选择
-   - 参数：`elementId`, `text`
-   - 行为：选中 option 的文本匹配
-
-7. **keyboard / press** — 键盘按键
-   - 参数：`key`（键名）, `description`
-   - 行为：映射 key 名到 KeyboardEvent.code
-   - 特殊：Enter 键自动触发表单提交
-
-8. **focus** — 聚焦元素
-   - 参数：`elementId`
-   - 行为：focus() + focusin 事件
-
-9. **hover** — 悬停元素
-   - 参数：`elementId`
-   - 行为：mouseenter → mouseover 事件序列
-
-10. **wait** — 等待
-    - 参数：`ms`（毫秒）
-    - 行为：setTimeout 延迟
-
-11. **newTab** — 新标签页
-    - 参数：`url`（可选）
-    - 行为：通过 background 创建新标签页
-
-12. **closeTab** — 关闭标签页
-    - 参数：无
-    - 行为：关闭当前标签页
-
-13. **switchTab** — 切换标签页
-    - 参数：`tabQuery`（关键词）
-    - 行为：按关键词匹配标签页标题/URL，支持站点别名
-    - 别名表：bilibili→bilibili.com, taobao→taobao.com, jd→jd.com 等
-
-14. **nextTab / prevTab** — 前后切换标签页
-    - 参数：无
-    - 行为：相对切换
-
-15. **video** — 视频控制
-    - 参数：`subAction`（play/pause/volume/mute/unmute/seek/jump/speed/fullscreen）, `value`
-    - 子操作详解：
-      - play/pause：播放/暂停
-      - volume(0-1)：设置音量
-      - mute/unmute：静音/取消静音
-      - seek(seconds)：跳转到指定时间
-      - jump(seconds)：相对跳转（正/负）
-      - speed(rate)：设置播放速率
-      - fullscreen：切换全屏
-
-**元素查找机制（三级降级）：**
-1. elementId（data-skeleton-id）→ 精确匹配
-2. fallbackSelector（CSS 选择器）→ 选择器匹配
-3. text（文本内容）→ 模糊匹配
-
-**骨架提取规则：**
-- 可交互元素判定：原生标签（a/button/input/select/textarea/label/summary/details）、contenteditable、onclick、role 属性、tabindex、cursor:pointer
-- 可见性检查、视口边界检查、父子去重
-- 视口骨架最多 200 元素，全页骨架无限制
-- 同源 iframe 支持
-- 模态框检测（dialog、ARIA modal、Bootstrap/Element UI/Ant Design/Material/Vuetify）
-
-##### automation-actions.md — 语音自动化操作
-
-必须包含：
-
-**操作总览：**
-| 操作 | 用途 | 参数 | 触发方式 |
-
-**8 种操作逐一说明：**
-1. `open_site` — 打开网站（参数：url）
-2. `search` — 百度搜索（参数：query）
-3. `site_search` — 站内搜索（参数：query）
-4. `open_item` — 点击第 N 个搜索结果（参数：index）
-5. `page_next` — 翻到下一页
-6. `page_prev` — 翻到上一页
-7. `video_play` — 播放视频
-8. `video_pause` — 暂停视频
-
-**选择器适配表：**
-| 站点 | 搜索输入框 | 搜索结果 | 翻页按钮 |
-|------|-----------|---------|---------|
-| 百度 | #kw | .result h3 a | #page .nxt |
-| Google | input[name=q] | #search .g a | #pnnext |
-| Bing | #sb_form_q | #b_results .b_algo h2 a | .b_pag a.sb_pagN |
-| 通用 | input[type=search], input[name=q], ... | ... | ... |
-
-**命令解析格式：**
-语音 AI 回复中的命令标签：`【code】type:params【/code】`
-
-##### input-system.md — 输入系统
-
-必须包含：
-
-**路由规则：**
-| 输入前缀 | 路由目标 | 示例 |
-|---------|---------|------|
-| `/` | 内置命令 | `/stop`, `/pause`, `/resume`, `/list`, `/help` |
-| 其他 | AI 意图检测 | 任意自然语言 |
-
-**内置命令说明：**
-| 命令 | 用途 |
-|------|------|
-| `/stop` | 停止当前操作 |
-| `/pause` | 暂停执行 |
-| `/resume` | 恢复执行 |
-| `/list` | 列出可用命令 |
-| `/help` | 显示帮助 |
-
-**Phase 1 意图检测：**
-- 输入：用户文本 + 历史上下文（最近 6 条消息）
-- AI 输出四种格式：
-  1. `[command]{...}[/command]` — 快速命令，直接执行
-  2. `[action]` — 需要页面操作，进入 Phase 2
-  3. `[FILE:xxx]...[/FILE]` — 文件生成请求
-  4. 直接回复 — 纯聊天
-
-**Phase 2 命令执行：**
-- 输入：用户文本 + 页面骨架
-- AI 输出三种格式：
-  1. `[command]{...}[/command]` — 执行命令
-  2. `[need_full]` — 请求全页骨架
-  3. `[need_input]{...}[/need_input]` — 请求用户输入
-- 执行模式：流式循环（每次 AI 返回 1 个命令 → 执行 → 反馈 → 下一个）
-- 最大步数：20 步
-- 错误处理：重试（最多 3 次）、去重、跨标签页任务传递
-
-**Command JSON 结构：**
-```json
-{
-  "action": "click",
-  "elementId": "e5",
-  "fallbackSelector": "#submit-btn",
-  "text": "提交",
-  "url": "https://...",
-  "key": "Enter",
-  "direction": "down",
-  "amount": 500,
-  "ms": 1000,
-  "description": "点击提交按钮",
-  "tabAction": "newTab",
-  "tabQuery": "google",
-  "done": true,
-  "subAction": "play",
-  "value": 0.8
-}
-```
-
-##### ai-providers.md — AI 适配器
-
-必须包含：
-
-**支持的 Provider 列表：**
-| Provider | 适配器类 | API 格式 | 特殊能力 |
-|----------|---------|---------|---------|
-| openai | OpenAIAdapter | OpenAI Chat Completions | — |
-| anthropic | OpenAIAdapter | Anthropic Messages | thinking/reasoning delta |
-| gemini | GeminiAdapter | Google Generative Language | systemInstruction, thinking model |
-| qwen | QwenAdapter | DashScope | 独立 system 字段 |
-| wenxin | WenxinAdapter | /chat/completions | result 字段, is_end |
-| doubao | DoubaoAdapter | OpenAI 兼容 | — |
-| zhipu | OpenAIAdapter | OpenAI 兼容 | — |
-| deepseek | OpenAIAdapter | OpenAI 兼容 | — |
-| moonshot | OpenAIAdapter | OpenAI 兼容 | — |
-| grok | OpenAIAdapter | OpenAI 兼容 | — |
-| custom | OpenAIAdapter | OpenAI 兼容 | 自定义 baseUrl |
-
-**配置参数：**
-| 参数 | 类型 | 说明 |
-|------|------|------|
-| provider | Provider | AI 提供商标识 |
-| baseUrl | string | API 基础 URL |
-| apiKey | string | API 密钥 |
-| modelName | string | 模型名称 |
-| messages | ChatMessage[] | 消息数组 |
-| signal | AbortSignal | 中止信号 |
-
-**代理机制：**
-所有 API 请求通过 `proxyFetchStream()` 经 background Service Worker 中转，规避 CORS 限制。流式传输基于 requestId 的 chunk 转发。
-
-##### voice-features.md — 语音功能
-
-必须包含：
-
-**语音识别：**
-| 引擎 | 类型 | 语言 | 特点 |
-|------|------|------|------|
-| Web Speech API | 在线 | 多语言 | 连续模式、自动重启、interim 结果 |
-| Sherpa-ONNX | 离线 | 中英双语 | WebAssembly、16kHz、本地处理 |
-
-**语音合成（TTS）：**
-- Web Speech Synthesis API
-- speak(text) 返回 Promise
-- 支持 cancel、onStart/onEnd 回调
-
-**语音会话状态机：**
-```
-IDLE → LISTENING → PROCESSING → SPEAKING → IDLE（循环）
-```
-- 优先使用 Sherpa 本地识别，降级到 Web Speech API
-- 识别文本 + 页面上下文发送给 AI
-- 解析 AI 回复中的命令标签
-- 串行执行自动化操作
-- TTS 播报结果
-- 解析失败重试（最多 3 次）
-
-**语音命令格式：**
-AI 回复中的命令：`【code】type:params【/code】`
-支持 8 种命令类型（同 automation-actions.md）
-
-##### file-features.md — 文件功能
-
-必须包含：
-
-**文件解析支持：**
-| 类型 | 格式 | 大小限制 | 处理方式 |
-|------|------|---------|---------|
-| image | png/jpg/gif/webp/svg | 20MB | dataURL + 可选 OCR |
-| text | txt/md/csv/log | 2MB | 直接读取 |
-| code | 60+ 语言扩展名 | 2MB | 语法高亮语言检测 |
-| pdf | pdf | 10MB | pdfjs-dist 提取文本 |
-| word | doc/docx | 10MB | mammoth 转 HTML |
-| excel | xlsx/xls | 10MB | xlsx 解析 |
-| binary | 其他 | 10MB | 文本降级 |
-
-**OCR 能力：**
-- Tesseract.js 引擎
-- 语言：chi_sim + eng
-- 超时：30 秒
-- 语言包从扩展本地路径加载
-
-**文件生成：**
-| 格式 | 函数 | 说明 |
-|------|------|------|
-| XLSX | generateXlsx() | 从数据生成 Excel |
-| CSV→XLSX | generateXlsxFromCsv() | CSV 转 Excel |
-| DOCX | generateDocx() | 生成 Word 文档 |
-| PDF | generatePdf() | html2canvas + jsPDF，A4 分页 |
-| Markdown→PDF | generatePdfFromMarkdown() | Markdown 转 PDF |
-
-**[FILE] 标签系统：**
-AI 回复中的文件标签：`[FILE:type:name]...[/FILE]`
-- type：text / data / excel / json / pdf / chart
-- 下载方式：text→Blob, data→DataURL, excel→XLSX, json→JSON, pdf→PDF, chart→PNG
-
-**ECharts 图表：**
-- 动态加载 ECharts 库
-- 支持渲染到 Canvas/SVG/Blob
-- 模板函数：柱状图、折线图、饼图、雷达图
-- 图表配置解析和验证
-
-##### translation-features.md — 翻译功能
-
-必须包含：
-
-**三种翻译模式：**
-| 模式 | 触发方式 | 实现 |
-|------|---------|------|
-| 选中翻译 | 鼠标选中文本 | translate-popup.ts（浮动弹窗） |
-| 点击翻译 | 点击文本块 | translate-click.ts（段落下方显示） |
-| 自动翻译 | 页面滚动/加载 | translate-service.ts（IntersectionObserver） |
-
-**代码过滤（三层）：**
-1. 标签黑名单：pre, code, samp
-2. 类名黑名单：hljs, language-*, code-block, highlight, syntax, prism, shiki, codemirror, ace_
-3. 正则匹配：注释、反引号、URL、CLI 命令、JSON、函数调用、属性链、花括号/方括号块、关键字、版本号、文件路径
-
-代码替换为 `{{code_N}}` 占位符，翻译后恢复。
-
-**翻译响应解析（三层降级）：**
-1. 直接 JSON 解析
-2. 正则提取 JSON
-3. 逐行解析
-
-**配置项：**
-- 翻译模式切换（选中/点击/自动）
-- 目标语言
-- API 配置（复用 AI 适配器）
-
----
-
-#### 2.4 README.md 生成规则
-
-**架构 README（docs/architecture/README.md）：**
-- 项目概述、技术栈、分层架构图（Mermaid）
-- 模块列表和描述
-- 数据流概览、关键设计决策
-
-**功能 README（docs/features/README.md）：**
-- 功能分类总览
-- 快速查找表（「我想做 XX → 看哪个文档」）
-- 每个功能文档的一句话摘要
-
-```markdown
-# 功能文档索引
-
-## 快速查找
-
-| 我想... | 参考文档 |
-|---------|---------|
-| 用 AI 自动点击页面元素 | browser-commands.md → click |
-| 让 AI 帮我填表单 | browser-commands.md → type + select |
-| 控制页面上的视频 | browser-commands.md → video |
-| 语音控制浏览器 | voice-features.md |
-| 翻译整个页面 | translation-features.md → 自动翻译 |
-| 解析上传的 PDF 文件 | file-features.md → 文件解析 |
-| 让 AI 生成 Excel 文件 | file-features.md → [FILE] 标签 |
-| 配置新的 AI 模型 | ai-providers.md |
-| 了解输入命令的处理流程 | input-system.md |
-
-## 文档列表
-...
-```
-
-### 第三步：生成 Mermaid 图表
-
-**架构文档** — 保持原有图表类型（架构图、序列图、类图）
-
-**功能文档** — 使用更适合说明功能的图表：
-- 流程图：展示功能执行流程
-- 状态图：展示状态转换（如语音会话状态机）
-- 决策图：展示路由/判断逻辑
-
-### 第四步：写入文档
-
-使用 Write 工具**全量覆盖**所有文档（不用 Edit 局部修改），确保文档与代码完全同步。
-
-### 第五步：同步根目录 README.md
-
-每次更新文档后，将 `docs/architecture/README.md` 的最新内容同步到项目根目录 `README.md`。根目录 README 是项目的门面，必须与架构文档保持一致。模块链接路径使用 `./docs/architecture/` 前缀。
-
-同时在根目录 README 中添加功能文档的链接：`📖 [功能文档](./docs/features/)`
-
-### 第六步：报告更新摘要
-
-输出本次更新的总结：
-
-```
-✅ 文档更新完成
-
-扫描范围：全部源文件（N 个文件）
-生成文档：架构文档 M 篇 + 功能文档 K 篇
-
-架构文档：
-  - README.md
-  - browser-command.md
-  - input-pipeline.md
-  - ai-adapters.md
-  - state-management.md
-  - background-service.md
-  - content-script.md
-  - translation.md
-  - voice.md
-  - storage.md
-  - file-parsing.md
-
-功能文档：
-  - README.md
-  - browser-commands.md
-  - automation-actions.md
-  - input-system.md
-  - ai-providers.md
-  - voice-features.md
-  - file-features.md
-  - translation-features.md
-
-根目录 README.md：已同步
-```
+- 当前实现的限制和约束
+- 已知的边界问题
+- 未来改进方向
 
 ---
 
 ## 文档质量要求
 
-### 架构文档
-* 使用 Mermaid 生成所有图表
-* 专注于设计和实现，不是 API 参考
-* **基于实际代码，不是设计文档** — 必须读取源文件后生成
-* 每个文档应该独立完整、可读
-* 在有帮助的地方包含代码片段
-* 保持图表简单、聚焦
-* **方法签名、类型定义、常量值必须与代码完全一致**
-
-### 功能文档（新增要求）
-* **完整性**：列出所有支持的功能/操作，不遗漏
-* **准确性**：参数类型、默认值、边界行为必须与代码一致
-* **可操作性**：每个功能都要有使用示例或调用方式
-* **细节到位**：
-  - 浏览器命令：每个 action 的参数、行为、特殊处理
-  - 自动化操作：每个操作的参数、选择器适配
-  - 输入系统：路由规则、Phase1/Phase2 的输入输出格式
-  - AI 适配器：每个 Provider 的差异和特殊配置
-  - 语音功能：识别引擎对比、状态机、命令格式
-  - 文件功能：支持格式、大小限制、生成方式
-  - 翻译功能：三种模式差异、代码过滤规则
-* 增量更新时保留原文的措辞风格，只改有变化的部分
+- **基于实际代码**，不是设计文档 — 必须读取源文件后生成
+- **方法签名、类型定义、常量值必须与代码完全一致**
+- 使用 Mermaid 生成架构图、序列图、状态图
+- 在有帮助的地方包含代码片段
+- 每个文档独立完整、可读
+- 保持图表简单、聚焦
 
 ---
 
-## 特殊情况处理
+## README.md 生成规则
 
-### 新增模块
+`docs/architecture/README.md` 包含：
 
-当发现源码中有新的模块目录但文档目录中没有对应文档时：
-1. 自动生成对应的架构文档和功能文档
-2. 在两个 README.md 中添加条目
+1. **项目概述** — 一句话描述
+2. **技术栈** — 框架、库、工具
+3. **分层架构图** — Mermaid 图展示整体分层
+4. **模块列表** — 每个模块的一句话描述 + 链接
+5. **数据流概览** — 从用户输入到最终输出的完整链路
+6. **关键设计决策** — 架构层面的重要选择和原因
 
-### 删除模块
+同步到根目录 README.md 时，模块链接使用 `./docs/architecture/` 前缀。
 
-当文档目录中有文档但对应源码目录已不存在时：
-1. 自动删除该孤立文档
-2. 从两个 README.md 中移除对应条目
+---
 
-### prompts 目录结构
+## 执行步骤
 
-如果 `src/input/prompts.ts` 不存在但 `src/input/prompts/` 目录存在，则按模块化目录结构生成文档（index.ts + 各子模块）。
+### Step 1: 发现模块
+
+1. 扫描 `src/` 目录下的所有子目录
+2. 扫描 `entrypoints/` 目录下的所有子目录
+3. 对比已有的 `docs/architecture/` 文档列表
+4. 识别新增模块（有目录但无文档）和已删除模块（有文档但无目录）
+
+### Step 2: 并行读取全部源文件
+
+按模块映射表 + 新发现模块，使用并行 Agent 读取所有源文件。必须覆盖每一个文件。
+
+### Step 3: 分析代码结构
+
+- 识别模块间的依赖关系
+- 提取关键类型定义和函数签名
+- 理解数据流和调用链
+- 识别设计模式的使用
+
+### Step 4: 生成架构文档
+
+使用 Write 工具全量覆盖每个文档。按文档内容标准写入详细内容。
+
+**新发现的模块：** 自动生成对应架构文档，文件名用 kebab-case，内容遵循文档内容标准。
+
+**已删除的模块：** 删除对应的孤立文档，从 README 中移除条目。
+
+### Step 5: 同步根目录 README
+
+将 `docs/architecture/README.md` 同步到项目根目录 `README.md`。
+
+### Step 6: 报告摘要
+
+```
+✅ 架构文档更新完成
+
+扫描文件：N 个
+生成文档：M 篇
+新增文档：X 篇（列出新模块名）
+删除文档：Y 篇（列出已删除模块名）
+
+文档列表：
+  - README.md（总体架构）
+  - browser-command.md
+  - input-pipeline.md
+  - ...
+```

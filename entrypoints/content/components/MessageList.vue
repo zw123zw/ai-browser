@@ -28,7 +28,7 @@ interface CtxMenu {
 }
 const ctxMenu = ref<CtxMenu | null>(null);
 const MENU_WIDTH = 160;
-const MENU_HEIGHT = 92;
+const MENU_HEIGHT = 130;
 
 function onContextMenu(payload: { message: ChatMessage; x: number; y: number }) {
   // .aib-drawer 上有 transform，会让内部 position:fixed 以 drawer 为参考系。
@@ -76,6 +76,22 @@ async function copyMessage() {
 function deleteMessage() {
   if (!ctxMenu.value) return;
   store.deleteMessage(ctxMenu.value.message.id);
+  closeMenu();
+}
+
+async function bookmarkMessage() {
+  if (!ctxMenu.value) return;
+  const msg = ctxMenu.value.message;
+  try {
+    const key = 'aib-bookmarks';
+    const stored = await chrome.storage.local.get(key);
+    const list: Array<{ id: string; content: string; role: string; timestamp: number }> = stored[key] ?? [];
+    list.push({ id: msg.id, content: msg.content, role: msg.role, timestamp: Date.now() });
+    await chrome.storage.local.set({ [key]: list });
+    toast.success('已收藏');
+  } catch {
+    toast.error('收藏失败');
+  }
   closeMenu();
 }
 
@@ -205,6 +221,7 @@ defineExpose({
     :x="ctxMenu.x"
     :y="ctxMenu.y"
     @copy="copyMessage"
+    @bookmark="bookmarkMessage"
     @delete="deleteMessage"
   />
 </template>

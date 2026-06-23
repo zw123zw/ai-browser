@@ -1,471 +1,185 @@
-# Content Script + Vue 组件架构
+# Content Script
 
-> Content Script 在每个页面注入 Vue 3 应用（Shadow DOM），提供聊天抽屉、翻译功能、语音面板和跨标签页任务续接。
+## 模块概述
 
-## 初始化流程
+Content Script 是扩展注入到每个网页的前端入口，负责在 Shadow DOM 中挂载 Vue 3 应用、监听页面事件（URL 变化、DOM 变化、文本选择）、初始化翻译功能、以及跨标签页任务续接。它是用户与扩展交互的第一层界面。
 
-```mermaid
-flowchart TD
-    A["defineContentScript main(ctx)"] --> B["骨架 ID 初始化<br/>initAllSkeletonIds() — 延迟 1s"]
-    A --> C["翻译功能初始化<br/>TranslateService + 事件监听"]
-    A --> D["Vue 应用挂载<br/>createShadowRootUi"]
+**源文件**: `entrypoints/content/index.ts`, `entrypoints/content/App.vue`
 
-    B --> B1["页面 load 后 1s 执行<br/>等待 SPA 动态内容渲染"]
+## 架构设计
 
-    C --> C1["initClickTranslate()<br/>点击翻译事件监听"]
-    C --> C2["mouseup 监听<br/>划词翻译"]
-    C --> C3["runAutoTranslate()<br/>自动翻译（首次 + 监听）"]
-    C --> C4["URL 变化监听<br/>pushState/replaceState/popstate/hashchange"]
-    C --> C5["MutationObserver<br/>DOM 变化触发翻译"]
-
-    D --> D1["onMount: 注入全局 CSS 到 shadow root"]
-    D --> D1["onMount: 设置 shadowHost 样式"]
-    D --> D2["onMount: createApp(App).use(Pinia).mount(container)"]
-    D --> D3["onRemove: unmount + 翻译清理"]
-
-    A --> E["跨标签页续接<br/>queuedTaskStorage 检查"]
-    E --> E1{"有排队任务?<br/>且未过期(30s)"}
-    E1 -->|是| E2["usePipeline().resumeQueuedTask(task)"]
-    E1 -->|否| E3["跳过"]
+```
+┌──────────────────────────────────────────────────────────┐
+│                    宿主网页 (Host Page)                    │
+│                                                          │
+│  ┌─────────────────────────────────────────────────────┐ │
+│  │              Shadow DOM (隔离边界)                    │ │
+│  │                                                     │ │
+│  │  ┌──────────┐  ┌──────────┐  ┌───────────────────┐ │ │
+│  │  │ Floating │  │  Chat    │  │  Settings Modal   │ │ │
+│  │  │  Button  │  │  Drawer  │  │                   │ │ │
+│  │  └──────────┘  └──────────┘  └───────────────────┘ │ │
+│  │                                                     │ │
+│  │  ┌──────────────────────────────────────────────┐  │ │
+│  │  │              Pinia Stores                    │  │ │
+│  │  │  settings | conversations                    │  │ │
+│  │  └──────────────────────────────────────────────┘  │ │
+│  └─────────────────────────────────────────────────────┘ │
+│                                                          │
+│  Content Script 入口 (index.ts)                          │
+│  ├─ Shadow DOM 挂载                                      │
+│  ├─ 翻译初始化 (selection / click / auto)                 │
+│  ├─ SPA URL 变化检测                                      │
+│  ├─ MutationObserver (DOM 变化 -> 自动翻译)               │
+│  └─ 跨标签页任务续接                                      │
+└──────────────────────────────────────────────────────────┘
 ```
 
-## Shadow DOM 挂载
-
-### Shadow Host 配置
+## 核心类型定义
 
 ```typescript
-const ui = await createShadowRootUi(ctx, {
-  name: 'browser-ai-chat',
-  position: 'inline',
-  anchor: 'body',
-  onMount(container, _shadow, shadowHost) {
-    // 注入全局 CSS
-    const style = document.createElement('style');
-    style.textContent = globalCss;
-    _shadow.appendChild(style);
-
-    // Shadow Host 样式：固定定位 + 最高 z-index + 零尺寸
-    shadowHost.style.position = 'fixed';
-    shadowHost.style.zIndex = '2147483647';
-    shadowHost.style.top = '0';
-    shadowHost.style.left = '0';
-    shadowHost.style.width = '0';
-    shadowHost.style.height = '0';
-
-    const app = createApp(App);
-    app.use(createPinia());
-    app.mount(container);
-    return app;
-  },
-  onRemove(app) {
-    app?.unmount();
-    translateService.reset();
-    hideTranslatePopup();
-  },
-});
-```
-
-### Shadow Host 样式说明
-
-| 属性 | 值 | 原因 |
-|------|-----|------|
-| `position` | `fixed` | 脱离文档流，不干扰页面布局 |
-| `z-index` | `2147483647` | 32 位最大整数，确保在最顶层 |
-| `width/height` | `0` | Host 自身不可见，内容通过子组件定位 |
-
----
-
-## App.vue — 根组件
-
-源码：`entrypoints/content/App.vue`
-
-### 组件树
-
-```mermaid
-graph TB
-    App["App.vue"]
-    FB["FloatingButton"]
-    CD["ChatDrawer"]
-    CP["ChatPanel"]
-    EC["EmptyChat"]
-    ML["MessageList"]
-    MI["MessageItem"]
-    MCM["MessageContextMenu"]
-    IB["InputBar"]
-    FPM["FilePreviewModal"]
-    VP["VoicePanel"]
-    SM["SettingsModal"]
-    TC["ToastContainer"]
-    CFD["ConfirmDialog"]
-
-    App --> FB
-    App --> CD
-    App --> SM
-    App --> TC
-
-    CD --> CP
-    CD --> VP
-    CD --> CFD
-
-    CP --> EC
-    CP --> ML
-    CP --> IB
-    CP --> FPM
-
-    ML --> MI
-    MI --> MCM
-```
-
-### 响应式状态
-
-```typescript
-const open = ref(false);              // 抽屉展开状态
-const showSettings = ref(false);      // 设置弹窗
-const rootEl = ref<HTMLElement | null>(null);  // 根元素引用
-```
-
-### 键盘快捷键
-
-```typescript
-function onKeydown(e: KeyboardEvent) {
-  const sc = settingsStore.settings.shortcut;  // 如 "Ctrl+Shift+B"
-  if (matchShortcut(e, sc)) {
-    e.preventDefault();
-    e.stopPropagation();
-    toggle();
-  }
+// WXT Shadow Root UI 配置
+interface ShadowRootUiConfig {
+  name: string;           // 'browser-ai-chat'
+  position: 'inline';
+  anchor: 'body';
+  onMount: (container, shadow, shadowHost) => App;
+  onRemove: (app) => void;
 }
 
-// 注册在 capture 阶段，优先于页面快捷键
-document.addEventListener('keydown', onKeydown, true);
-```
-
-### 鼠标选中检测
-
-```mermaid
-flowchart TD
-    A["mouseup 事件 (capture)"] --> B{"抽屉已打开?"}
-    B -->|否| Z["忽略"]
-    B -->|是| C{"autoSendSelection 模式"}
-    C -->|"off / false"| Z
-    C -->|D["检查事件来源"] --> E{"来自扩展 Shadow DOM?"}
-    E -->|是| Z
-    E -->|否| F["document.getSelection()"]
-    F --> G{"有选中文本?"}
-    G -->|否| Z
-    G -->|是| H{"mode?"}
-    H -->|"manual"| I["convStore.conversation.draftText = text"]
-    H -->|"auto"| J["convStore.send(text)"]
-```
-
-事件过滤通过 `composedPath()` 和 `hostEl.contains()` 双重检查，确保扩展内部操作不会触发选中检测。
-
-### 主题应用
-
-```typescript
-function applyTheme() {
-  const host = root instanceof ShadowRoot ? root.host as HTMLElement : el;
-  const theme = getThemeById(settingsStore.settings.theme);
-  for (const [key, value] of Object.entries(theme.vars)) {
-    host.style.setProperty(key, value);
-  }
-  host.style.setProperty('--aib-primary', ...);
-  host.style.setProperty('--aib-drawer-width', '480px');
-}
-```
-
-CSS 变量设置在 shadow host 上，Shadow DOM 内的所有组件通过 `var(--aib-xxx)` 引用。
-
-### 抽屉跨标签页同步
-
-```mermaid
-sequenceDiagram
-    participant App as App.vue (Tab A)
-    participant BG as Background SW
-    participant App2 as App.vue (Tab B)
-
-    App->>App: open.value = true
-    App->>App: syncingFromRemote? → 否
-    App->>App: drawerOpenStorage.setValue(true)
-    App->>BG: aib-drawer-changed {open: true}
-
-    BG->>App2: aib-drawer-sync {open: true}
-    App2->>App2: syncingFromRemote = true
-    App2->>App2: open.value = true
-    App2->>App2: nextTick → syncingFromRemote = false
-    Note over App2: syncingFromRemote 阻止再次广播
-```
-
----
-
-## usePipeline — 输入管线 Composable
-
-源码：`src/composables/usePipeline.ts`
-
-### 核心职责
-
-将 `InputPipeline` 集成到 Vue 组件中，管理流式消息生命周期和用户交互。
-
-### 模块级状态
-
-```typescript
-const isProcessing = ref(false);
-const waitingInputPrompt = ref<string | null>(null);
-let waitingInputResolve: ((value: string) => void) | null = null;
-let waitingInputReject: ((reason?: unknown) => void) | null = null;
-let _abortFn: (() => Promise<void>) | null = null;
-```
-
-`isProcessing` 和 `waitingInputPrompt` 是模块级 ref（非组件级），确保跨组件访问一致。
-
-### processInput() 流程
-
-```mermaid
-sequenceDiagram
-    participant User as 用户
-    participant InputBar as InputBar
-    participant Pipeline as usePipeline
-    participant IP as InputPipeline
-    participant Conv as ConversationsStore
-    participant Adapter as AI Adapter
-
-    User->>InputBar: 输入文本
-    InputBar->>Pipeline: processInput(text, reasoning?)
-    Pipeline->>Pipeline: isProcessing = true
-    Pipeline->>Pipeline: new AbortController()
-
-    Pipeline->>IP: pipeline.process({text, mode:'text'}, callbacks)
-
-    Note over Pipeline,Adapter: Phase 1 — AI 对话/意图检测
-    IP->>Adapter: adapter.chat(messages, onChunk)
-
-    loop 流式回调
-        Adapter-->>IP: chunk {delta}
-        IP-->>Pipeline: callbacks.onChatStart()
-        Pipeline->>Conv: push reactive aiMsg (status: 'streaming')
-        IP-->>Pipeline: callbacks.onChatDelta(delta)
-        Pipeline->>Conv: aiMsg.content += delta
-    end
-
-    alt 检测到操作意图
-        IP-->>Pipeline: callbacks.onActionDetected()
-        Pipeline->>Conv: aiMsg.status = 'done', content = '正在执行操作...'
-    end
-
-    Note over Pipeline,Adapter: Phase 2 — 指令执行
-    IP-->>Pipeline: callbacks.onCommandsParsed(commands, step)
-    Pipeline->>Conv: 删除占位消息, 添加系统消息
-
-    IP-->>Pipeline: callbacks.onCommandResult(action, success, message)
-    Pipeline->>Conv: 添加执行结果系统消息
-
-    IP-->>Pipeline: callbacks.onAllCommandsDone(userText, commands)
-    Pipeline->>Conv: 添加完成摘要消息
-
-    Pipeline->>Pipeline: isProcessing = false
-```
-
-### PipelineCallbacks 映射
-
-| 回调 | 触发时机 | Store 操作 |
-|------|----------|-----------|
-| `onChatStart` | AI 流式回复开始 | 创建 reactive 占位消息 (streaming) |
-| `onChatDelta` | 流式增量 | `aiMsg.content += delta` |
-| `onChatEnd` | 流式回复结束 | `aiMsg.status = 'done'` |
-| `onActionDetected` | 检测到操作意图 | 标记占位消息完成，清空引用 |
-| `onChatMessage` | 纯文本回复（非流式） | 直接 push 完成消息 |
-| `onCommandsParsed` | 解析到指令列表 | 删除占位消息，添加执行状态 |
-| `onCommandResult` | 单条指令执行完成 | 添加结果系统消息 |
-| `onAllCommandsDone` | 全部指令执行成功 | 添加完成摘要 |
-| `onRetryMessage` | 指令重试 | 清理占位消息，添加重试提示 |
-| `onError` | 最终错误 | 添加错误系统消息 |
-| `onNeedInput` | AI 请求用户输入 | 显示提示，返回 Promise |
-| `onFileOutput` | 数据提取完成 | 添加 assistant 消息（触发 [FILE] 渲染） |
-
-### onNeedInput — 用户输入等待
-
-```mermaid
-sequenceDiagram
-    participant Pipeline as usePipeline
-    participant AI as InputPipeline
-    participant UI as InputBar
-
-    AI->>Pipeline: callbacks.onNeedInput(prompt)
-    Pipeline->>Pipeline: waitingInputPrompt = prompt
-    Pipeline->>Pipeline: 创建 Promise (保存 resolve/reject)
-
-    Note over Pipeline: Pipeline 挂起，等待用户输入
-
-    UI->>Pipeline: provideInput(text)
-    Pipeline->>Pipeline: resolve(text)
-    Pipeline->>Pipeline: waitingInputPrompt = null
-    Pipeline->>AI: Promise 解析，继续执行
-
-    alt 用户取消
-        UI->>Pipeline: abort()
-        Pipeline->>Pipeline: reject(AbortError)
-    end
-```
-
-### abort() — 中止机制
-
-```typescript
-function abort(): Promise<void> {
-  // 1. 如果在等待用户输入，reject Promise
-  if (waitingInputReject) {
-    waitingInputReject(new DOMException('The operation was aborted.', 'AbortError'));
-    waitingInputResolve = null;
-    waitingInputReject = null;
-    waitingInputPrompt.value = null;
-  }
-  // 2. 中止 AI 请求
-  currentAborter?.abort();
-  // 3. 清除跨标签页排队任务
-  queuedTaskStorage.setValue(null).catch(() => {});
-  // 4. 等待 pipeline 真正结束（超时 3s 兜底）
-  if (isProcessing.value) {
-    return new Promise<void>(resolve => {
-      stoppedResolve = resolve;
-      setTimeout(() => {
-        if (isProcessing.value) {
-          isProcessing.value = false;
-          resolve();
-        }
-      }, 3000);
-    });
-  }
-  return Promise.resolve();
-}
-```
-
-模块级 `abortPipeline()` 导出函数，供清除会话时调用：
-
-```typescript
-export async function abortPipeline(): Promise<void> {
-  await _abortFn?.();
-}
-```
-
-### resumeQueuedTask() — 跨标签页续接
-
-当用户在 `navigate` 指令后打开新标签页，原标签页的 pipeline 通过 `queuedTaskStorage` 保存进度，新标签页在初始化时恢复：
-
-```mermaid
-sequenceDiagram
-    participant Old as 原标签页
-    participant Storage as queuedTaskStorage
-    participant New as 新标签页
-    participant Pipeline as usePipeline
-
-    Old->>Old: 执行 navigate 指令
-    Old->>Storage: queuedTaskStorage.setValue(task)
-    Old->>Old: chrome.tabs.create(url)
-
-    Note over New: 页面加载完成
-    New->>Storage: queuedTaskStorage.getValue()
-    Storage-->>New: task (未过期)
-    New->>Storage: queuedTaskStorage.setValue(null)
-    New->>Pipeline: resumeQueuedTask(task)
-    Pipeline->>Pipeline: 从 task.completedSteps 之后继续执行
-```
-
-过期保护：30 秒前的旧任务直接丢弃。
-
----
-
-## 翻译功能初始化
-
-Content Script 同时初始化三种翻译模式：
-
-### 事件监听架构
-
-```mermaid
-graph LR
-    subgraph "Content Script (index.ts)"
-        TS["TranslateService 实例"]
-        CT["initClickTranslate()"]
-        MU["mouseup 监听"]
-        AT["runAutoTranslate()"]
-        UC["URL 变化监听"]
-        DO["MutationObserver"]
-    end
-
-    subgraph "翻译模式"
-        CLICK["点击翻译"]
-        SELECT["划词翻译"]
-        AUTO["自动翻译"]
-    end
-
-    CT --> CLICK
-    MU --> SELECT
-    AT --> AUTO
-    UC --> AUTO
-    DO --> AUTO
-    TS --> CLICK
-    TS --> SELECT
-    TS --> AUTO
-```
-
-### 设置变化响应
-
-```typescript
-settingsStorage.watch((newValue, oldValue) => {
-  if (oldMode === newMode) return;
-
-  // 切换到 auto → 立即触发翻译
-  if (newMode === 'auto') runAutoTranslate();
-
-  // 从 auto 切走 → 还原所有翻译
-  if (oldMode === 'auto' && newMode !== 'auto') translateService.restoreAll();
-});
-```
-
-### URL 变化检测
-
-```typescript
-// Monkey-patch pushState/replaceState
-history.pushState = function (...args) {
-  origPushState.apply(this, args);
-  onUrlChange('pushState');
-};
-
-// + popstate + hashchange 事件监听
-// 800ms 防抖 → translateService.reset() + runAutoTranslate()
-```
-
----
-
-## 跨标签页任务续接
-
-### QueuedTask 结构
-
-```typescript
+// 跨标签页排队任务
 interface QueuedTask {
   originalRequest: string;
-  completedSteps: string[];
-  timestamp: number;
-  // ... 其他 pipeline 状态
+  completedSteps: Array<{
+    action: string;
+    elementId?: string;
+    description?: string;
+  }>;
+  timestamp: number;  // 过期判断用
 }
 ```
 
-### 续接流程
+## 实现细节
 
-1. 原标签页执行 `navigate` 指令 → 写入 `queuedTaskStorage`
-2. 新标签页打开 → Content Script 初始化后检查 `queuedTaskStorage`
-3. 过期检查：`Date.now() - task.timestamp > 30_000` → 丢弃
-4. 调用 `usePipeline().resumeQueuedTask(task)` 恢复执行
-5. 立即清除存储：`queuedTaskStorage.setValue(null)`
+### Shadow DOM 隔离
 
-### 错误处理
+通过 WXT 的 `createShadowRootUi` API 创建 Shadow DOM 容器：
+
+- **样式隔离**: `global.css` 以 `<style>` 标签注入 shadow root，所有 CSS 类名使用 `aib-` 前缀
+- **宿主定位**: shadowHost 设置 `position: fixed; z-index: 2147483647; width: 0; height: 0`，不占据页面布局
+- **Vue 挂载**: 在 `onMount` 回调中 `createApp(App).use(createPinia()).mount(container)`
+- **卸载清理**: `onRemove` 中 unmount Vue 实例 + 重置翻译状态 + 隐藏翻译弹窗
+
+### SPA URL 变化检测
+
+由于 SPA 通过 `history.pushState/replaceState` 改变 URL 而不触发 `popstate`，需要 monkey-patch：
 
 ```typescript
-try {
-  const { usePipeline } = await import('@/src/composables/usePipeline');
-  const { resumeQueuedTask } = usePipeline();
-  await resumeQueuedTask(queuedTask);
-} catch (err) {
-  log.error('[跨标签页续接] 恢复失败', err);
+history.pushState = function (...args) {
+  origPushState.apply(this, args)
+  onUrlChange('pushState')
 }
+history.replaceState = function (...args) {
+  origReplaceState.apply(this, args)
+  onUrlChange('replaceState')
+}
+// 同时监听 popstate 和 hashchange
+window.addEventListener('popstate', () => onUrlChange('popstate'))
+window.addEventListener('hashchange', () => onUrlChange('hashchange'))
 ```
 
-动态 `import()` 确保 Vue 应用已 mount 后再加载 pipeline 模块。
+URL 变化后延迟 800ms 执行：重置翻译状态 -> 重新扫描翻译。
+
+### MutationObserver 监听 DOM 变化
+
+监听 `document.body` 的 `childList` 和 `characterData` 变化，过滤纯属性修改，200ms 防抖后触发自动翻译扫描。
+
+### 翻译初始化
+
+Content Script 入口统一初始化三种翻译模式：
+
+1. **划词翻译 (selection)**: `mouseup` 事件监听，检查 `translateMode === 'selection'`，获取选中文本后调用 `TranslateService.translateSelection()`
+2. **点击翻译 (click)**: 通过 `initClickTranslate()` 初始化，独立的 click 事件监听
+3. **自动翻译 (auto)**: 页面加载后首次触发 + 监听 settingsStorage 变化 + URL 变化时重新触发
+
+翻译设置变化时的响应逻辑：
+- 切换到 `auto` -> 立即触发翻译
+- 从 `auto` 切走 -> 还原所有翻译 (`translateService.restoreAll()`)
+
+### 跨标签页任务续接
+
+页面加载后检查 `queuedTaskStorage`：
+- 任务存在且未过期（30s 内）-> 清空存储 -> 动态导入 `usePipeline` -> 调用 `resumeQueuedTask()`
+- 任务过期 -> 直接丢弃
+
+### App.vue 组件
+
+**核心状态**:
+- `open: ref<boolean>` - 抽屉展开状态
+- `showSettings: ref<boolean>` - 设置模态框显隐
+
+**功能**:
+- **浮动按钮**: `<FloatingButton @click="toggle" />`
+- **聊天抽屉**: `<ChatDrawer :open="open" />`
+- **设置模态框**: `<SettingsModal v-if="showSettings" />`
+- **主题应用**: 通过 `getThemeById()` 获取主题 CSS 变量，设置到 shadowHost style
+- **键盘快捷键**: `matchShortcut(e, sc)` 匹配用户配置的快捷键
+- **文本选中自动发送**: `mouseup` 检测选中文本，`autoSendSelection` 支持 `off/manual/auto` 三种模式
+- **跨标签页抽屉同步**: `watch(open)` 时写入 `drawerOpenStorage` + 发送 `aib-drawer-changed` 消息；接收 `aib-drawer-sync` 消息时更新本地状态（`syncingFromRemote` 标志防止循环）
+- **国际化**: 监听 `settings.locale` 变化，调用 `setLocale()` 切换语言
+- **自动化指令**: 接收 `automation` 类型消息，调用 `executeAutomationAction()` 执行
+
+## 数据流
+
+```
+页面加载
+    │
+    ▼
+defineContentScript.main(ctx)
+    │
+    ├─ initAllSkeletonIds()     <- 骨架 ID 打标
+    ├─ new TranslateService()   <- 翻译服务初始化
+    ├─ initClickTranslate()     <- 点击翻译
+    ├─ mouseup 监听             <- 划词翻译
+    ├─ settingsStorage.watch()  <- 翻译模式切换
+    ├─ URL 变化检测             <- pushState/replaceState/popstate/hashchange
+    ├─ MutationObserver         <- DOM 变化自动翻译
+    │
+    ▼
+createShadowRootUi -> mount
+    │
+    ├─ createApp(App).use(Pinia)
+    ├─ 注入 global.css 到 shadow root
+    ├─ shadowHost 定位 (fixed, z-index max)
+    │
+    ▼
+App.vue onMounted
+    │
+    ├─ settingsStore.init() + convStore.init()
+    ├─ initI18n(locale)
+    ├─ applyTheme()
+    ├─ drawerOpenStorage.getValue() -> 恢复抽屉状态
+    ├─ chrome.runtime.onMessage.addListener()
+    │
+    ▼
+跨标签页续接检查
+    │ queuedTaskStorage -> resumeQueuedTask()
+    ▼
+用户交互就绪
+```
+
+## 配置与扩展
+
+- **CSS 注入模式**: `cssInjectionMode: 'ui'` 由 WXT 框架控制
+- **匹配规则**: `matches: ['<all_urls>']` 在所有页面生效
+- **翻译防抖间隔**: URL 变化 800ms，DOM 变化 200ms
+- **跨标签页任务过期**: 30 秒硬编码阈值
+- **shadowHost z-index**: `2147483647`（32 位整数最大值），确保在最顶层
+
+## 已知限制
+
+1. **Shadow DOM 事件穿透**: `mouseup` 事件需要检查 `isInExtensionUI()` 避免扩展内部操作干扰，但 `composedPath` 检测可能在极端场景下漏判。
+2. **SPA 检测不完整**: 仅 monkey-patch `pushState/replaceState` + 监听 `popstate/hashchange`，无法覆盖所有框架的路由机制（如某些框架使用 `location.assign`）。
+3. **翻译模式互斥**: 三种翻译模式（selection/click/auto）在同一时间只能激活一种，切换时需要手动还原前一种模式的状态。
+4. **跨标签页同步延迟**: 抽屉状态同步通过 Background 中转广播，存在网络延迟，快速连续操作可能导致状态不一致。
+5. **Store 初始化顺序**: `settingsStore.init()` 和 `convStore.init()` 并行执行，但后续代码依赖两者都完成，`Promise.all` 确保了这一点但异常时只 catch 不区分。

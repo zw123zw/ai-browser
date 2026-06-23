@@ -1,343 +1,186 @@
-# 存储架构
+# Storage Module
 
-## 目标
+## 模块概述
 
-提供类型安全的数据持久化层，支持跨标签页同步。基于 WXT 框架的 `storage.defineItem()` API 统一封装 Chrome Storage，实现设置、会话、UI 状态等数据的持久化存储，并通过 `defineStorageSync()` 工具实现 Vue 响应式数据与 storage 的双向同步。
+存储模块基于 WXT 框架的 `wxt/storage` API，提供类型安全的 Chrome storage 抽象层。定义了 6 个存储项，涵盖应用设置、对话数据、UI 状态、输入历史和跨标签页任务队列。所有存储项使用 `local:` 前缀，数据持久化在 `chrome.storage.local` 中。
 
-## 架构总览
+**源文件**: `src/storage/index.ts`
 
-```mermaid
-graph TB
-    subgraph Vue 响应式层
-        RS[reactive state<br/>Pinia Store / Component Ref]
-    end
+## 架构设计
 
-    subgraph 同步层
-        SS[defineStorageSync<br/>双向同步 + 防抖 + 回声抑制]
-    end
-
-    subgraph 存储定义层
-        direction LR
-        S1[settingsStorage]
-        S2[conversationStorage]
-        S3[fabPosStorage]
-        S4[drawerOpenStorage]
-        S5[inputHistoryStorage]
-        S6[queuedTaskStorage]
-    end
-
-    subgraph WXT 框架层
-        WXT[wxt/storage<br/>storage.defineItem]
-    end
-
-    subgraph 浏览器层
-        CS[Chrome Storage API<br/>chrome.storage.local]
-    end
-
-    RS <-->|双向绑定| SS
-    SS --> WXT
-    S1 & S2 & S3 & S4 & S5 & S6 --> WXT
-    WXT --> CS
-
-    subgraph 配置源
-        LC[local-config.json<br/>默认模型配置]
-    end
-
-    LC -->|parseLocalModels| S1
+```
+┌─────────────────────────────────────────────────┐
+│                  Storage Module                   │
+│                                                  │
+│  ┌────────────────────────────────────────────┐  │
+│  │         wxt/storage (底层抽象)              │  │
+│  │    chrome.storage.local + fallback         │  │
+│  └──────────────────┬─────────────────────────┘  │
+│                     │                            │
+│  ┌──────────────────▼─────────────────────────┐  │
+│  │         storage.defineItem<T>()            │  │
+│  │    类型安全 + fallback 默认值               │  │
+│  └──────────────────┬─────────────────────────┘  │
+│                     │                            │
+│  ┌──────┬──────┬────┴────┬──────┬──────┐        │
+│  │settings│conv │fabPos │drawer│history│queued│  │
+│  │Storage│Storage│Storage│Storage│Storage│Task │  │
+│  └──────┴──────┴───────┴──────┴──────┴──────┘  │
+│                                                  │
+│  ┌────────────────────────────────────────────┐  │
+│  │         local-config.json                  │  │
+│  │    DEFAULT_SETTINGS 种子数据               │  │
+│  │    parseLocalModels() 模型解析             │  │
+│  └────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────┘
 ```
 
-## 核心设计决策
-
-### 1. WXT storage.defineItem() 类型安全存储
-
-所有存储项通过 `storage.defineItem<T>(key, { fallback })` 定义，提供完整的 TypeScript 类型推导和默认值回退。无需手动处理 JSON 序列化/反序列化，WXT 框架自动处理。
-
-### 2. local: 命名空间
-
-所有数据使用 `local:` 命名空间，即 `chrome.storage.local`。这意味着数据存储在本地磁盘，不随 Chrome 账号同步，但读写速度最快且无容量配额限制（相比 `sync:` 的 100KB 限制）。
-
-### 3. 配置驱动的默认值
-
-`DEFAULT_SETTINGS` 从 `local-config.json` 动态解析默认模型列表，通过 `parseLocalModels()` 映射为标准 `ModelConfig[]`。这使得开箱即用的模型配置可以通过修改 JSON 文件调整，无需改动代码。
-
-### 4. 输入历史 FIFO 策略
-
-`inputHistoryStorage` 存储用户输入历史，上限 100 条。采用 FIFO（先进先出）策略，超过上限时截掉头部旧记录。连续相同文本自动去重，避免重复记录。
-
-### 5. 跨标签页排队任务
-
-`queuedTaskStorage` 存储跨标签页续接的排队任务。当 `navigate` 或 `_blank` 点击导致页面跳转时，当前 JS 上下文可能被销毁，Pipeline 将未完成任务保存到此存储项。新标签页加载完成后读取并恢复执行。
-
-**生命周期：**
-- Pipeline 执行 click/navigate 前写入
-- 任务完成后清除（`setValue(null)`）
-- 30 秒过期保护（新标签页可能已关闭或加载失败）
-- 非持久化：用后即清，不跨浏览器重启
-
-### 6. 存储键命名规范
-
-所有存储键使用 `ai-browser-` 前缀（从旧版 `aib-` 前缀迁移），存储在 `local:` 域。
-
-## 存储项详情
-
-### settingsStorage — 应用设置
-
-- **键**：`local:ai-browser-settings`
-- **类型**：`AppSettings`
-- **默认值**：`DEFAULT_SETTINGS`（从 `local-config.json` 解析）
+## 核心类型定义
 
 ```typescript
+// 应用设置（主配置）
 interface AppSettings {
-  provider: Provider              // 协议类型（openai/anthropic/gemini/...）
-  baseUrl: string                 // API 请求地址
-  apiKey: string                  // API 密钥
-  authField?: string              // 认证字段（bearer/api-key/access-token）
-  models: ModelConfig[]           // 可用模型列表
-  defaultModelId: string          // 默认模型 ID
-  drawerWidth: number             // 抽屉宽度（vw 百分比，40-100）
-  primaryColor: string            // 主题色（hex）
-  theme?: string                  // 主题 ID
-  shortcut: string                // 快捷键（如 "Ctrl+`"）
-  maxConversations?: number       // 最大会话数
-  maxContext?: number             // 单会话最大上下文消息数
-  autoSendSelection?: 'auto' | 'manual' | 'off'  // 划词操作模式
-  translateTargetLang?: string    // 翻译目标语言
-  translateMode?: 'selection' | 'auto' | 'click' | 'off'  // 翻译模式
-  automationEnabled?: boolean     // 网页自动化开关（默认 true）
-}
-```
-
-**默认值构建流程**：
-
-```mermaid
-flowchart LR
-    A[local-config.json] -->|import| B[rawModels]
-    B -->|parseLocalModels| C[ModelConfig[]]
-    C -->|DEFAULT_SETTINGS| D[settingsStorage fallback]
-```
-
-`parseLocalModels()` 处理逻辑：
-- `baseUrl` 末尾去掉 `/chat/completions`（适配器会自动拼接）
-- 从 `id`/`modelName`/`model` 中推导模型标识
-- `label` 默认等于 `modelName`
-- `provider` 默认为 `'openai'`
-
-### conversationStorage — 单会话
-
-- **键**：`local:ai-browser-conversation`
-- **类型**：`Conversation | null`
-- **默认值**：`null`
-
-```typescript
-interface Conversation {
-  id: string
-  title: string
-  messages: ChatMessage[]
-  modelId: string               // 当前会话使用的模型 ID
-  scrollTop?: number            // 滚动条位置
-  draftText?: string            // 输入框草稿
-  draftAttachments?: Attachment[]  // 草稿附件
-  reasoningEnabled?: boolean    // 深度思考开关
-  createdAt: number
-  updatedAt: number
+  provider: Provider;
+  baseUrl: string;
+  apiKey: string;
+  authField: string;
+  defaultModelId: string;
+  drawerWidth: number;
+  primaryColor: string;
+  theme: string;
+  shortcut: string;
+  maxConversations: number;
+  maxContext: number;
+  autoSendSelection: 'auto' | 'manual' | 'off';
+  translateTargetLang: string;
+  translateMode: 'off' | 'selection' | 'auto' | 'click';
+  automationEnabled: boolean;
+  locale: 'zh-CN' | 'en-US';
+  models: ModelConfig[];
 }
 
-interface ChatMessage {
-  id: string
-  role: 'user' | 'assistant' | 'system'
-  content: string
-  reasoning?: string            // 深度思考内容
-  attachments?: Attachment[]    // 统一附件
-  timestamp: number
-  status?: 'sending' | 'streaming' | 'done' | 'error' | 'aborted'
-  errorMessage?: string
-  reasoningEnabled?: boolean
+// 模型配置
+interface ModelConfig {
+  id: string;
+  label: string;
+  provider: Provider;
+  modelName: string;
+  baseUrl: string;
+  apiKey: string;
+  website: string;
 }
-```
 
-### fabPosStorage — 悬浮按钮位置
-
-- **键**：`local:ai-browser-fab-pos`
-- **类型**：`FabPos`
-- **默认值**：`{ right: 24, bottom: 24 }`
-
-```typescript
+// 悬浮按钮位置
 interface FabPos {
-  right: number   // 距视口右边距离（px）
-  bottom: number  // 距视口底边距离（px）
+  right: number;   // 距视口右边距
+  bottom: number;  // 距视口下边距
+}
+
+// 跨标签页排队任务
+interface QueuedTask {
+  originalRequest: string;
+  completedSteps: Array<{
+    action: string;
+    elementId?: string;
+    description?: string;
+  }>;
+  timestamp: number;
 }
 ```
 
-### drawerOpenStorage — 抽屉展开状态
+## 实现细节
 
-- **键**：`local:ai-browser-drawer-open`
-- **类型**：`boolean`
-- **默认值**：`false`
+### 模型配置解析 (parseLocalModels)
 
-### inputHistoryStorage — 输入历史
+从 `local-config.json` 读取原始模型列表，转换为 `ModelConfig[]`：
 
-- **键**：`local:ai-browser-input-history`
-- **类型**：`string[]`
-- **默认值**：`[]`
-- **上限**：100 条（FIFO 策略）
+1. **baseUrl 清洗**: 去除末尾 `/chat/completions` 后缀（adapter 会自动拼接）
+2. **ID 级联回退**: `m.id || m.modelName || m.model || 'model-{timestamp}'`
+3. **modelName 级联回退**: `m.modelName || m.model || id`
+4. **label 默认**: `m.label || modelName`
+5. **provider 默认**: `m.provider || 'openai'`
 
-`pushInputHistory()` 函数逻辑：
-1. 过滤空文本
-2. 连续去重（与最后一条相同则跳过）
-3. 推入新记录
-4. 超过 100 条时 `splice(0, history.length - 100)` 截掉头部
+### 默认设置 (DEFAULT_SETTINGS)
 
-### queuedTaskStorage — 跨标签页排队任务
-
-- **键**：`local:aib-queued-task`
-- **类型**：`QueuedTask | null`
-- **默认值**：`null`
+从解析后的 `localModels` 数组第一个元素填充默认值：
 
 ```typescript
-interface QueuedTask {
-  originalRequest: string        // 原始用户请求
-  completedSteps: Array<{
-    action: string
-    elementId?: string
-    description?: string
-  }>                             // 已完成的步骤
-  timestamp: number              // 创建时间（用于过期检测）
+{
+  provider: 'openai',
+  baseUrl: localModels[0]?.baseUrl || 'https://api.openai.com/v1',
+  apiKey: localModels[0]?.apiKey || '',
+  defaultModelId: localModels[0]?.id || '',
+  drawerWidth: 480,
+  primaryColor: '#4f46e5',
+  theme: 'classic',
+  shortcut: 'Ctrl+`',
+  maxConversations: 100,
+  maxContext: 50,
+  autoSendSelection: 'auto',
+  translateTargetLang: '中文',
+  translateMode: 'off',
+  automationEnabled: true,
+  locale: 'zh-CN',
+  models: localModels,
 }
 ```
 
-**使用场景：**
+### 6 个存储项
 
-```mermaid
-sequenceDiagram
-    participant P as Pipeline (原标签页)
-    participant S as queuedTaskStorage
-    participant N as Pipeline (新标签页)
+| 存储项 | 键名 | 类型 | fallback | 用途 |
+|-------|------|------|----------|------|
+| `settingsStorage` | `local:ai-browser-settings` | `AppSettings` | `DEFAULT_SETTINGS` | 全局配置 |
+| `conversationStorage` | `local:ai-browser-conversation` | `Conversation \| null` | `null` | 当前会话 |
+| `fabPosStorage` | `local:ai-browser-fab-pos` | `FabPos` | `{ right: 24, bottom: 24 }` | 悬浮按钮位置 |
+| `drawerOpenStorage` | `local:ai-browser-drawer-open` | `boolean` | `false` | 抽屉展开状态 |
+| `inputHistoryStorage` | `local:ai-browser-input-history` | `string[]` | `[]` | 输入历史（上限 100） |
+| `queuedTaskStorage` | `local:aib-queued-task` | `QueuedTask \| null` | `null` | 跨标签页任务队列 |
 
-    Note over P: click/navigate 前
-    P->>S: setValue({originalRequest, completedSteps, timestamp})
-    P->>P: 执行 click/navigate
+### wxt/storage API
 
-    alt 页面跳转（JS 上下文销毁）
-        Note over N: 新标签页加载完成
-        N->>S: getValue()
-        S-->>N: QueuedTask
-        N->>N: 过期检查（30秒）
-        N->>S: setValue(null) 清除
-        N->>N: resumeQueuedTask() 继续执行
-    else 页面未跳转
-        Note over P: 500ms 后
-        P->>S: setValue(null) 清除
-    end
-```
+`storage.defineItem<T>(key, options)` 返回的存储项提供：
+- `getValue()`: 异步读取当前值
+- `setValue(value)`: 异步写入
+- `watch(callback)`: 监听值变化（跨标签页同步）
+- `fallback`: 当存储中无值时返回的默认值
 
 ## 数据流
 
-### 设置同步流程
-
-```mermaid
-sequenceDiagram
-    participant UI as Vue 组件
-    participant Store as Pinia Store
-    participant Sync as defineStorageSync
-    participant Storage as wxt/storage
-    participant Chrome as chrome.storage.local
-    participant Other as 其他标签页
-
-    Note over Store,Sync: 初始化阶段
-    Store->>Storage: settingsStorage.getValue()
-    Storage->>Chrome: chrome.storage.local.get()
-    Chrome-->>Storage: 持久化数据
-    Storage-->>Store: 应用到 reactive state
-
-    Note over UI,Store: 用户修改设置
-    UI->>Store: 更新 reactive state
-    Store->>Sync: watch 触发
-    Sync->>Sync: 防抖 200ms
-    Sync->>Storage: storage.setValue(plain(state))
-    Storage->>Chrome: chrome.storage.local.set()
-
-    Note over Chrome,Other: 跨标签页同步
-    Chrome-->>Other: onChanged 事件
-    Other->>Other: storage.watch 回调
-    Other->>Other: echoWindow 内忽略（500ms）
-    Other->>Other: applyRemote(nv) 更新状态
+```
+应用启动
+    │
+    ▼
+settingsStorage.getValue()
+    │ fallback: DEFAULT_SETTINGS
+    │ 如果 chrome.storage 中有值 -> 返回存储值
+    │ 如果无值 -> 返回 DEFAULT_SETTINGS
+    ▼
+useSettingsStore.init()
+    │ 加载设置到 Pinia store
+    ▼
+组件通过 store 读取/修改设置
+    │
+    ▼
+settingsStorage.setValue(updatedSettings)
+    │ wxt/storage 写入 chrome.storage.local
+    ▼
+其他标签页 watch 回调触发
+    │ 跨标签页同步
 ```
 
-### defineStorageSync 双向同步机制
+## 配置与扩展
 
-`defineStorageSync()` 是连接 Vue 响应式世界和 Chrome Storage 的桥梁：
+- **存储前缀**: 所有键使用 `local:` 前缀，存储在 `chrome.storage.local`（非 `sync`）
+- **配置来源**: `local-config.json` 作为模型配置种子文件
+- **无加密**: apiKey 明文存储在 chrome.storage.local 中
+- **无过期机制**: 所有存储项永不过期，需手动清理
+- **输入历史上限**: 100 条（由 `useInputHistory` composable 控制，非存储层限制）
 
-```typescript
-function defineStorageSync<T>(opts: {
-  source: Ref<T>              // Vue 响应式 ref
-  storage: StorageItemLike<T> // wxt storage item
-  ready: Ref<boolean>         // 就绪标志，false 时不写入
-  applyRemote: (nv: T) => void  // 远端值 → 应用到 source
-  debounce?: number           // 防抖延时，默认 200ms
-  echoWindow?: number         // 回声忽略窗口，默认 500ms
-}): { flush: () => Promise<void>, ... }
-```
+## 已知限制
 
-**关键机制**：
-- **防抖写入**：source 变化后延迟 200ms 写入 storage，避免频繁 IO
-- **回声抑制**：自己写入后 500ms 内忽略 storage.watch 回调，防止循环更新
-- **plain 化**：写入前通过 `JSON.parse(JSON.stringify(toRaw(v)))` 去除 Vue 代理
-- **显式 flush**：提供 `flush()` 方法绕过防抖立即写入（用于关键操作）
-
-### plain() 工具函数
-
-```typescript
-function plain<T>(v: T): T {
-  return JSON.parse(JSON.stringify(toRaw(v)));
-}
-```
-
-剥离 Vue 响应式代理，确保写入 storage 的是纯 JSON 可序列化对象。`toRaw()` 移除 Proxy 包装，`JSON.stringify/parse` 深拷贝去除不可序列化字段。
-
-## 关键类型与接口
-
-```typescript
-// ========== 存储项类型 ==========
-
-// wxt/storage 通用接口
-interface StorageItemLike<T> {
-  getValue(): Promise<T>
-  setValue(v: T): Promise<void>
-  watch(cb: (nv: T) => void): void
-  removeValue(): Promise<void>
-}
-
-// 同步选项
-interface SyncOptions<T> {
-  source: Ref<T>
-  storage: StorageItemLike<T>
-  ready: Ref<boolean>
-  applyRemote: (nv: T) => void
-  debounce?: number    // 默认 200ms
-  echoWindow?: number  // 默认 500ms
-}
-
-// ========== 存储键映射 ==========
-
-// local:ai-browser-settings       → AppSettings
-// local:ai-browser-conversation   → Conversation | null
-// local:ai-browser-fab-pos        → FabPos { right, bottom }
-// local:ai-browser-drawer-open    → boolean
-// local:ai-browser-input-history  → string[]
-// local:aib-queued-task           → QueuedTask | null
-```
-
-## 目录结构
-
-```
-src/storage/
-├── index.ts            # 所有存储项定义 + DEFAULT_SETTINGS + QueuedTask 接口
-└── input-history.ts    # pushInputHistory() 输入历史管理
-
-src/utils/
-└── storage-sync.ts     # defineStorageSync() 双向同步工具 + plain()
-
-src/
-├── local-config.json   # 默认模型配置（构建时导入）
-└── types.ts            # AppSettings, Conversation, ModelConfig 等类型定义
-```
+1. **apiKey 明文存储**: `settingsStorage` 中的 `apiKey` 以明文形式存储在 `chrome.storage.local`，任何有扩展权限的代码都可读取。
+2. **单会话设计**: `conversationStorage` 只存储一个会话，不支持多会话并行。
+3. **无存储迁移**: 存储结构变更时没有版本号和迁移机制，旧数据可能与新类型不兼容。
+4. **Chrome Storage 容量**: `chrome.storage.local` 有 5MB 限制（默认），大量对话历史可能接近上限。
+5. **queuedTask 无持久化保护**: 跨标签页任务仅靠 `timestamp` 做 30s 过期判断，Service Worker 重启后任务丢失。
+6. **parseLocalModels 硬编码**: 模型解析逻辑硬编码在存储模块中，不支持运行时动态添加模型（需修改 JSON 文件重新构建）。

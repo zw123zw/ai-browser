@@ -83,6 +83,10 @@ git tag --sort=-creatordate | head -1
 
 ### Step 2: 生成使用指南（guide.md + guide.html）
 
+> **⚠️ 强制规则：每次执行必须同时重新生成 guide.md 和 guide.html，禁止只更新其中一个。**
+> **⚠️ 强制规则：guide.html 必须基于最新的 guide.md 内容生成，内容必须完全一致。**
+> **⚠️ 强制规则：禁止跳过生成步骤，即使检测到内容"已是最新的"也必须重新生成。**
+
 **先写 `docs/site/guide.md`**，结构：
 
 ```
