@@ -9,8 +9,8 @@ const { t, locale } = useI18n();
 const SUGGESTIONS = computed(() => [
   { icon: '⚡', title: t('emptyChat.suggestions.automation.title'), desc: t('emptyChat.suggestions.automation.desc') },
   { icon: '🎙️', title: t('emptyChat.suggestions.voice.title'), desc: t('emptyChat.suggestions.voice.desc') },
-  { icon: '📄', title: t('emptyChat.suggestions.report.title'), desc: t('emptyChat.suggestions.report.desc') },
-  { icon: '📊', title: t('emptyChat.suggestions.analysis.title'), desc: t('emptyChat.suggestions.analysis.desc') },
+  { icon: '🌐', title: t('emptyChat.suggestions.translate.title'), desc: t('emptyChat.suggestions.translate.desc') },
+  { icon: '📊', title: t('emptyChat.suggestions.report.title'), desc: t('emptyChat.suggestions.report.desc') },
 ]);
 
 const greeting = computed(() => {
@@ -27,10 +27,6 @@ const greeting = computed(() => {
 
 <template>
   <div class="aib-chat-empty">
-    <div class="aib-chat-empty-brand">
-      <div class="aib-chat-empty-name">{{ t('app.name') }}</div>
-      <div class="aib-chat-empty-subtitle">{{ t('app.subtitle') }}</div>
-    </div>
     <div class="aib-chat-empty-title">{{ greeting }}，{{ t('emptyChat.prompt') }}</div>
     <div class="aib-chat-empty-tags">
       {{ t('emptyChat.tags') }}

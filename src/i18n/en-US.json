@@ -5,7 +5,7 @@
     "subtitle": "AI Chat and Web Automation Extension"
   },
   "fab": {
-    "tooltip": "AI Voice Chat Assistant"
+    "tooltip": "LingBot · AI Voice Chat Assistant"
   },
   "emptyChat": {
     "greeting": {
@@ -16,23 +16,23 @@
       "evening": "Good evening"
     },
     "prompt": "What shall we talk about?",
-    "tags": "Voice Chat · Web Automation · Smart Translation · Smart Notes · OCR · Report Generation",
+    "tags": "Voice Chat · Web Automation · Smart Translation · Smart Notes · OCR · Data Extraction · Report Generation",
     "suggestions": {
       "automation": {
-        "title": "Web Action",
-        "desc": "Scroll to the bottom of the page"
+        "title": "Web Automation",
+        "desc": "Auto-scroll the page and extract all product names and prices"
       },
       "voice": {
-        "title": "Voice Assistant",
-        "desc": "Open Baidu and search for AI news"
+        "title": "Voice Control",
+        "desc": "Open Baidu and search for today's tech news"
+      },
+      "translate": {
+        "title": "Smart Translation",
+        "desc": "Translate this page into English"
       },
       "report": {
         "title": "Report Generation",
-        "desc": "Generate a Vue3 Word report for me"
-      },
-      "analysis": {
-        "title": "Content Analysis",
-        "desc": "Analyze and summarize this page"
+        "desc": "Generate an analysis report based on this page"
       }
     }
   },

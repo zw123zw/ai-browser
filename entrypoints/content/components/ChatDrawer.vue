@@ -114,10 +114,13 @@ const drawerClass = computed(() => ({ 'aib-open': props.open }));
         </template>
         <!-- 文字模式：始终显示品牌 logo -->
         <template v-else>
-          <span class="aib-brand">
-            <span class="aib-brand-ai">{{ locale === 'zh-CN' ? t('app.name') : t('app.fullName') }}</span>
-            <span class="aib-brand-shine" />
-          </span>
+          <div class="aib-header-brand">
+            <span class="aib-brand">
+              <span class="aib-brand-ai">{{ locale === 'zh-CN' ? t('app.name') : t('app.fullName') }}</span>
+              <span class="aib-brand-shine" />
+            </span>
+            <span class="aib-brand-sub">{{ t('app.subtitle') }}</span>
+          </div>
         </template>
       </div>
       <div class="aib-header-actions">

@@ -92,7 +92,7 @@ async function openDocs() {
   showDocs.value = true;
   docsLoading.value = true;
   try {
-    const resp = await fetch(chrome.runtime.getURL('user-guide.md'));
+    const resp = await fetch(chrome.runtime.getURL('guide.md'));
     if (resp.ok) {
       docsHtml.value = md.render(await resp.text());
     } else {

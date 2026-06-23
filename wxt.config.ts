@@ -10,8 +10,8 @@ export default defineConfig({
     build: { cssMinify: 'esbuild' },
   }),
   manifest: {
-    name: 'AI 语音浏览器助手',
-    description: '支持语音控制 + 网页自动化 + 多模型切换的 AI 浏览器助手',
+    name: '小灵 - AI 语音浏览器助手',
+    description: '小灵 LingBot Browser - AI Chat and Web Automation Extension',
     version: '1.0.0',
     permissions: ['storage', 'unlimitedStorage', 'activeTab', 'scripting', 'tabs'],
     host_permissions: [
@@ -29,7 +29,7 @@ export default defineConfig({
       '128': 'icon.png',
     },
     action: {
-      default_title: 'AI 语音浏览器助手',
+      default_title: '小灵 - AI 语音浏览器助手',
       default_icon: {
         '16': 'icon.png',
         '32': 'icon.png',
@@ -38,7 +38,7 @@ export default defineConfig({
     },
     web_accessible_resources: [
       {
-        resources: ['icon.png'],
+        resources: ['icon.png', 'guide.md'],
         matches: ['<all_urls>'],
       },
       {

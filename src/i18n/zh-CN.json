@@ -5,7 +5,7 @@
     "subtitle": "AI 语音浏览器助手"
   },
   "fab": {
-    "tooltip": "AI 语音聊天助手"
+    "tooltip": "小灵 · AI 语音聊天助手"
   },
   "emptyChat": {
     "greeting": {
@@ -16,23 +16,23 @@
       "evening": "晚上好"
     },
     "prompt": "今天聊点什么？",
-    "tags": "语音对话 · 网页自动化 · 智能翻译 · 智能笔记 · OCR 识别 · 报告生成",
+    "tags": "语音对话 · 网页自动化 · 智能翻译 · 智能笔记 · OCR 识别 · 数据提取 · 报告生成",
     "suggestions": {
       "automation": {
-        "title": "网页操作",
-        "desc": "滚动到页面底部"
+        "title": "网页自动化",
+        "desc": "帮我自动滚动页面，提取所有商品名称和价格"
       },
       "voice": {
-        "title": "语音助手",
-        "desc": "帮我打开百度，搜索 AI 新闻"
+        "title": "语音控制",
+        "desc": "打开百度，搜索今天的科技新闻"
+      },
+      "translate": {
+        "title": "智能翻译",
+        "desc": "把当前页面翻译成英文"
       },
       "report": {
         "title": "报告生成",
-        "desc": "给我输出一份 Vue3 的 Word 报告"
-      },
-      "analysis": {
-        "title": "内容分析",
-        "desc": "分析总结这个页面"
+        "desc": "根据这个页面内容生成一份分析报告"
       }
     }
   },
