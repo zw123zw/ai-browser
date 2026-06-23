@@ -266,25 +266,69 @@ interface DataElement {
 
 ## Summarize -- 页面分析
 
-**源码**: `src/input/pipeline.ts`
+**源码**: `src/input/pipeline.ts`, `src/input/prompts/summarize.ts`
 
-summarize 提取页面全文纯文本，发送给 AI 分析总结。
+summarize 提取页面全文纯文本，发送给 AI 进行结构化分析总结。输出为半结构化 Markdown，可直接收藏为笔记。
+
+### 执行流程
 
 ```typescript
 // 1. 提取页面全文（innerText，保留段落结构）
 const pageText = extractPageText()  // 限制 15000 字符
 
-// 2. 构建分析提示词
+// 2. 构建分析提示词（系统提示词 + 用户请求 + 页面全文）
 const summarizePrompt = buildSummarizePrompt(userRequest, pageText)
 
 // 3. 调用 AI 分析
 const aiResult = await this.callAIForSummarize(summarizePrompt)
 
-// 4. 输出为聊天消息
+// 4. 输出为聊天消息（流式）
 callbacks.onChatStart()
 callbacks.onChatDelta(aiResult)
 callbacks.onChatEnd()
 ```
+
+### 分析框架（三层递进）
+
+`SUMMARIZE_SYSTEM_PROMPT` 定义了三层分析框架：
+
+| 层级 | 目标 | 内容 |
+|------|------|------|
+| 第一层 · 提取 | 快速识别 | 页面主题、内容类型、目标读者 |
+| 第二层 · 分析 | 深入拆解 | 关键论点、数据/证据、逻辑脉络、优缺点 |
+| 第三层 · 洞察 | 超越内容 | 隐含假设、盲区、可操作的启发、与读者的关联 |
+
+### 输出格式
+
+```
+# 📄 [标题]
+> **来源**: [域名] | **类型**: [文章/产品/文档/...] | **日期**: [...]
+
+## 📌 核心摘要        ← 2-3 句话概括
+## 🔍 深度分析        ← 关键要点 + 数据与证据 + 逻辑脉络
+## 💡 洞察与启发      ← 深层见解 + 局限性/盲区
+## ⚡ 行动建议        ← 1-3 条可执行建议（可省略）
+## 🏷️ 标签            ← 3-6 个精准关键词
+```
+
+### 自适应规则
+
+分析重点根据页面类型自动调整：
+
+- **文章/博客** → 重点分析论点和逻辑脉络
+- **产品页** → 重点分析功能、优缺点、适用场景
+- **数据/表格** → 重点提取数据、趋势、异常值
+- **文档/Wiki** → 重点梳理知识结构和核心概念
+- **讨论/论坛** → 重点归纳各方观点和共识/分歧
+
+### 与 download 的区别
+
+| 维度 | summarize | download |
+|------|-----------|----------|
+| 输出方式 | 聊天消息（流式） | 文件下载 |
+| 数据源 | 页面全文纯文本 | 结构化 DataElement |
+| 骨架依赖 | 不依赖骨架 | 不依赖骨架 |
+| AI 角色 | 内容分析师 | 数据提取器 |
 
 ## PipelineCallbacks 接口
 
@@ -369,7 +413,7 @@ export const queuedTaskStorage = storage.defineItem<QueuedTask | null>(
 | `phase1.ts` | `PHASE1_SYSTEM_PROMPT`, `buildPhase1Prompt(automation)` | Phase 1 意图检测 |
 | `phase2.ts` | `PHASE2_SYSTEM_PROMPT`, `MODE_FIRST`, `MODE_STREAMING`, `MODE_RETRY`, `buildPhase2Prompt()`, `buildPhase2UserMessage()`, `buildStreamingUserMessage()` | Phase 2 操作决策 |
 | `extract.ts` | `EXTRACT_SYSTEM_PROMPT`, `buildExtractPrompt()` | download 数据提取 |
-| `summarize.ts` | `SUMMARIZE_SYSTEM_PROMPT`, `buildSummarizePrompt()` | summarize 页面分析 |
+| `summarize.ts` | `SUMMARIZE_SYSTEM_PROMPT`, `buildSummarizePrompt(userRequest, pageText)` | summarize 页面分析（三层递进框架） |
 | `translate.ts` | `TRANSLATE_SYSTEM_PROMPT`, `buildSelectionTranslateMessage()`, `buildAutoTranslateMessage()` | 翻译 |
 
 ## 流式 AI 调用

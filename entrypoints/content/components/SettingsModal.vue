@@ -1344,6 +1344,7 @@ function importModels(e: Event) {
   color: var(--aib-text);
   transition: all 0.15s ease;
   font-family: inherit;
+  white-space: nowrap;
 }
 
 .aib-btn-icon:hover {

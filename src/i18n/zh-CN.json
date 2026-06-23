@@ -1,7 +1,7 @@
 {
   "app": {
     "name": "小灵",
-    "fullName": "LingBot Browser",
+    "fullName": "LingBot",
     "subtitle": "AI 语音浏览器助手"
   },
   "fab": {
@@ -16,19 +16,19 @@
       "evening": "晚上好"
     },
     "prompt": "今天聊点什么？",
-    "tags": "语音对话 · 网页自动化 · 智能翻译 · 智能笔记 · OCR 识别 · 数据提取 · 报告生成",
+    "tags": "语音对话 · 网页自动化 · 网页分析 · 智能翻译 · 智能笔记 · OCR 识别 · 数据提取 · 报告生成",
     "suggestions": {
       "automation": {
         "title": "网页自动化",
-        "desc": "帮我自动滚动页面，提取所有商品名称和价格"
+        "desc": "帮我滚动到页面底部"
       },
       "voice": {
         "title": "语音控制",
         "desc": "打开百度，搜索今天的科技新闻"
       },
       "translate": {
-        "title": "智能翻译",
-        "desc": "把当前页面翻译成英文"
+        "title": "网页分析",
+        "desc": "分析总结当前页面的核心内容"
       },
       "report": {
         "title": "报告生成",

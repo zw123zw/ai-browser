@@ -395,10 +395,12 @@ mark { background: #fef08a; color: #1e293b; padding: 1px 2px; border-radius: 2px
     <tr><td>清空对话</td><td>点击侧边栏头部的 🗑️ 图标</td><td>弹出确认对话框，确认后清空所有消息</td></tr>
     <tr><td>删除单条消息</td><td>右键点击消息 → 选择「删除」</td><td>只删除这一条消息</td></tr>
     <tr><td>复制消息内容</td><td>右键点击消息 → 选择「复制内容」</td><td>复制到剪贴板</td></tr>
+    <tr><td>收藏消息</td><td>右键点击消息 → 选择「收藏」</td><td>保存到本地存储，方便后续查阅</td></tr>
     <tr><td>中断 AI 回复</td><td>点击输入框旁的 ⏹ 停止按钮</td><td>停止当前流式输出</td></tr>
     <tr><td>滚动到底部</td><td>向上滚动后，点击右下角 ⬇ 按钮</td><td>快速回到最新消息</td></tr>
   </tbody>
 </table>
+<div class="trigger-tip"><strong>💡 试试这样说：</strong><br>右键点击任意 AI 回复 → 选择「收藏」，消息会被保存到本地存储中。</div>
 <blockquote><strong>注意：</strong> 清空对话后，下次发送消息时不会携带任何历史上下文，相当于开始一个全新的对话。</blockquote>
 
 <h3>2.8 消息内容交互</h3>
@@ -537,12 +539,19 @@ mark { background: #fef08a; color: #1e293b; padding: 1px 2px; border-radius: 2px
 </table>
 <div class="trigger-tip"><strong>💡 试试这样说：</strong><br>"打开新标签页" · "关闭当前标签页" · "切换到 B 站" · "帮我切换到 GitHub 标签页"</div>
 
-<h3>3.9 数据提取</h3>
+<h3>3.9 数据提取与页面总结</h3>
 <ul>
   <li><strong><code>/download</code></strong> — 提取页面文本数据，AI 自动格式化后生成可下载文件</li>
-  <li><strong><code>/summarize</code></strong> — 提取页面全文，AI 进行分析总结，输出结构化摘要</li>
+  <li><strong><code>/summarize</code></strong> — 提取页面全文，AI 进行三层递进深度分析，输出结构化 Markdown 笔记</li>
 </ul>
-<div class="trigger-tip"><strong>💡 试试这样说：</strong><br>"把这个页面的内容总结一下" · "提取页面上的所有链接" · "把页面上的商品信息整理成表格" · "下载这个页面的数据为 Excel"</div>
+<p><strong>页面总结分析框架：</strong></p>
+<ul>
+  <li><strong>第一层 · 提取</strong> — 快速识别页面主题、内容类型、目标读者</li>
+  <li><strong>第二层 · 分析</strong> — 深入拆解关键论点、数据证据、逻辑脉络</li>
+  <li><strong>第三层 · 洞察</strong> — 超越内容的深层见解、盲区、行动建议</li>
+</ul>
+<p>输出包含：核心摘要、深度分析（关键要点 + 数据与证据 + 逻辑脉络）、洞察与启发、行动建议、关键词标签。自动适配不同内容类型（文章、产品页、数据表格、文档、讨论帖）。</p>
+<div class="trigger-tip"><strong>💡 试试这样说：</strong><br>"把这个页面的内容总结一下" · "分析一下这篇技术文章的核心观点" · "提取页面上的所有链接" · "把页面上的商品信息整理成表格" · "下载这个页面的数据为 Excel"</div>
 
 <h3>3.10 跨标签页任务恢复</h3>
 <p>当自动化操作涉及页面跳转时：当前执行进度自动保存 → 新页面打开后自动恢复 → 已完成步骤跳过 → 30 秒过期保护。</p>
@@ -899,7 +908,7 @@ mark { background: #fef08a; color: #1e293b; padding: 1px 2px; border-radius: 2px
 <div class="footer">
   <p><strong>小灵 LingBot</strong> 使用指南 · v1.3.1 · MIT License</p>
   <p><a href="index.html">← 返回首页</a></p>
-  <p>生成日期：2026-06-24</p>
+  <p>生成日期：2026-06-23</p>
 </div>
 </main>
 

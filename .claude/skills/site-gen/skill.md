@@ -1,6 +1,6 @@
 ---
 name: site-gen
-description: "扫描项目代码和 PRD，生成使用指南（guide.md + guide.html），输出到 docs/site/ 文件夹。"
+description: "扫描项目代码和 PRD，生成使用指南（guide.md + guide.html），输出到 docs/site/ 文件夹。支持增量更新。"
 ---
 
 # Site Gen — 使用文档生成
@@ -11,15 +11,15 @@ description: "扫描项目代码和 PRD，生成使用指南（guide.md + guide.
 
 ```
 docs/site/
-├── guide.html    # 使用指南 HTML（每次生成）
-└── guide.md      # 使用指南 Markdown（每次生成）
+├── guide.html    # 使用指南 HTML
+└── guide.md      # 使用指南 Markdown
 ```
 
 > **注意：** 首页 `index.html` 手动维护，此技能不生成也不修改。
 
 ## 触发命令
 
-- `/site-gen` — 全量生成 guide.md + guide.html
+- `/site-gen` — 生成 guide.md + guide.html（首次全量，后续增量）
 
 ---
 
@@ -50,6 +50,76 @@ docs/site/
 
 ---
 
+## 增量更新机制
+
+### 首次检测
+
+检查 `docs/site/guide.md` 是否存在：
+- **不存在** → 全量生成
+- **存在** → 增量更新
+
+### 章节与源文件映射
+
+guide.md 的每个章节对应一组源文件，用于增量检测：
+
+| 章节 | 关键源文件 |
+|------|-----------|
+| 快速开始 | `package.json`, `entrypoints/content/index.ts`, `entrypoints/content/App.vue` |
+| AI 对话 | `src/input/pipeline.ts`, `src/input/router.ts`, `src/composables/usePipeline.ts`, `entrypoints/content/components/ChatPanel.vue`, `entrypoints/content/components/MessageList.vue`, `entrypoints/content/components/InputBar.vue`, `entrypoints/content/components/EmptyChat.vue` |
+| 网页自动化 | `src/automation/**/*`, `src/browser/action-executor.ts`, `src/browser/skeleton.ts` |
+| 语音控制 | `src/voice/**/*`, `entrypoints/content/components/VoicePanel.vue` |
+| 智能翻译 | `src/browser/translate-service.ts`, `src/browser/translate-popup.ts`, `src/browser/translate-click.ts`, `src/browser/translate-parser.ts` |
+| 文件处理 | `src/utils/file-parsers.ts`, `src/utils/file-type.ts`, `src/utils/file-generators.ts`, `src/utils/file-tag-parser.ts`, `src/utils/ocr.ts` |
+| 图表生成 | `src/utils/echart-renderer.ts`, `src/utils/file-generators.ts` |
+| 设置说明 | `entrypoints/content/components/SettingsModal.vue`, `src/stores/settings.ts`, `src/themes.ts` |
+| 主题 | `src/themes.ts`, `src/styles/global.css` |
+| 快捷命令 | `src/input/prompts/common.ts`, `src/input/tag-parser.ts` |
+| 使用技巧 | 依赖以上所有模块变化 |
+| 常见问题 | 依赖以上所有模块变化 |
+
+### 增量更新流程
+
+```
+1. 读取现有 guide.md，按 ## 标题拆分为章节列表
+2. 用 git diff 或文件 mtime 检测自上次生成以来哪些源文件有变化
+3. 匹配章节映射表，确定需要更新的章节集合
+4. 只重新生成有变化的章节内容（读取对应源文件 → 重新写该章节）
+5. 未变化的章节保留原样
+6. 检测新增模块（有源文件但无对应章节）→ 追加新章节
+7. 检测已删除功能（有章节但源文件已不存在）→ 移除该章节
+8. 基于更新后的 guide.md 重新生成 guide.html
+```
+
+### 变化检测方式
+
+优先使用 `git diff`（精确），回退到文件 mtime：
+
+```bash
+# 方式1：git diff 检测变化的源文件
+git diff --name-only HEAD~1 -- src/ entrypoints/ | head -50
+
+# 方式2：检测最近修改的文件（fallback）
+find src/ entrypoints/ -name "*.ts" -o -name "*.vue" -newer docs/site/guide.md | head -50
+```
+
+### 增量报告
+
+每次执行后输出：
+
+```
+✅ 使用指南更新完成（增量模式）
+
+检测变化：N 个源文件
+更新章节：X 个（列出章节名）
+新增章节：Y 个（如有）
+删除章节：Z 个（如有）
+未变更章节：W 个（跳过）
+
+文档：docs/site/guide.md + guide.html
+```
+
+---
+
 ## 执行流程
 
 ### Step 0: 读取项目信息
@@ -59,7 +129,13 @@ cat package.json
 git tag --sort=-creatordate | head -1
 ```
 
-### Step 1: 扫描
+### Step 1: 判断模式
+
+检查 `docs/site/guide.md` 是否存在：
+- 不存在 → **全量模式**，执行 Step 2a
+- 存在 → **增量模式**，执行 Step 2b
+
+### Step 2a: 全量扫描
 
 并行读取所有组件和功能入口文件：
 
@@ -81,13 +157,25 @@ git tag --sort=-creatordate | head -1
 - 所有状态变化和视觉反馈
 - 所有提示文字和默认值
 
-### Step 2: 生成使用指南（guide.md + guide.html）
+### Step 2b: 增量扫描
 
-> **⚠️ 强制规则：每次执行必须同时重新生成 guide.md 和 guide.html，禁止只更新其中一个。**
+```bash
+# 检测变化的源文件
+git diff --name-only HEAD~1 -- src/ entrypoints/ 2>/dev/null || \
+find src/ entrypoints/ -name "*.ts" -o -name "*.vue" -newer docs/site/guide.md
+```
+
+1. 读取现有 `docs/site/guide.md`，按 `##` 标题拆分为章节
+2. 匹配章节映射表，确定需要更新的章节
+3. 只读取变化章节对应的源文件
+4. 检测新增模块/已删除模块
+
+### Step 3: 生成使用指南（guide.md + guide.html）
+
+> **⚠️ 强制规则：每次执行必须同时更新 guide.md 和 guide.html，禁止只更新其中一个。**
 > **⚠️ 强制规则：guide.html 必须基于最新的 guide.md 内容生成，内容必须完全一致。**
-> **⚠️ 强制规则：禁止跳过生成步骤，即使检测到内容"已是最新的"也必须重新生成。**
 
-**先写 `docs/site/guide.md`**，结构：
+**全量模式** — 完整生成 `docs/site/guide.md`，结构：
 
 ```
 # {产品名称} 使用指南
@@ -108,6 +196,8 @@ git tag --sort=-creatordate | head -1
 ## 12. ❓ 常见问题
 ```
 
+**增量模式** — 只替换有变化的章节，保留未变化的。
+
 **每个章节必须包含「触发示例」区块：**
 
 ```markdown
@@ -118,7 +208,7 @@ git tag --sort=-creatordate | head -1
 > - "/navigate https://github.com"
 ```
 
-**再基于 MD 生成 `docs/site/guide.html`**，要求：
+**再基于 MD 生成/更新 `docs/site/guide.html`**，要求：
 - 单文件自包含（CSS 内联，无外部依赖）
 - 左侧固定目录导航 + 顶部搜索框
 - 表格斑马纹、代码块复制按钮

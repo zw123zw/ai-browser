@@ -1,8 +1,8 @@
 {
   "app": {
     "name": "LingBot",
-    "fullName": "LingBot Browser",
-    "subtitle": "AI Chat and Web Automation Extension"
+    "fullName": "LingBot",
+    "subtitle": "AI Voice Browser Assistant"
   },
   "fab": {
     "tooltip": "LingBot · AI Voice Chat Assistant"
@@ -16,19 +16,19 @@
       "evening": "Good evening"
     },
     "prompt": "What shall we talk about?",
-    "tags": "Voice Chat · Web Automation · Smart Translation · Smart Notes · OCR · Data Extraction · Report Generation",
+    "tags": "Voice Chat · Web Automation · Page Analysis · Smart Translation · Smart Notes · OCR · Data Extraction · Report Generation",
     "suggestions": {
       "automation": {
         "title": "Web Automation",
-        "desc": "Auto-scroll the page and extract all product names and prices"
+        "desc": "Scroll to the bottom of the page"
       },
       "voice": {
         "title": "Voice Control",
         "desc": "Open Baidu and search for today's tech news"
       },
       "translate": {
-        "title": "Smart Translation",
-        "desc": "Translate this page into English"
+        "title": "Page Analysis",
+        "desc": "Analyze and summarize the key content of this page"
       },
       "report": {
         "title": "Report Generation",
