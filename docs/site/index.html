@@ -63,6 +63,11 @@ body::after{content:'';position:fixed;top:0;left:0;width:100%;height:4px;backgro
 .feature-card h3{font-size:18px;font-weight:700;margin-bottom:8px;color:var(--cyan)}
 .feature-card p{font-size:14px;color:var(--text-soft);line-height:1.6}
 
+/* Feature tags */
+.feature-tags{display:flex;flex-wrap:wrap;gap:12px;justify-content:center;margin-bottom:40px}
+.feature-tag{padding:8px 20px;border:1px solid rgba(0,229,255,.25);border-radius:24px;font-size:14px;color:var(--cyan);background:rgba(0,229,255,.05);transition:all .3s;cursor:default}
+.feature-tag:hover{border-color:var(--cyan);background:rgba(0,229,255,.1);box-shadow:0 0 20px rgba(0,229,255,.15);transform:translateY(-2px)}
+
 /* ===== PROVIDERS ===== */
 .providers-wrap{overflow:hidden;position:relative;padding:20px 0}
 .providers-track{display:flex;gap:40px;animation:marquee 30s linear infinite;width:max-content}
@@ -98,6 +103,8 @@ body::after{content:'';position:fixed;top:0;left:0;width:100%;height:4px;backgro
 @media(max-width:640px){
   .hero{padding:60px 16px}
   .features-grid{grid-template-columns:1fr}
+  .feature-tags{gap:8px}
+  .feature-tag{padding:6px 14px;font-size:13px}
   .steps{flex-direction:column;align-items:center}
   .step-line{display:none!important}
   .hero-buttons{flex-direction:column;align-items:center}
@@ -150,6 +157,17 @@ body::after{content:'';position:fixed;top:0;left:0;width:100%;height:4px;backgro
 <section class="section">
   <div class="container">
     <h2 class="section-title fade-in">核心功能</h2>
+    <!-- Feature tags inspired by welcome page -->
+    <div class="feature-tags fade-in">
+      <span class="feature-tag">🗣️ 语音对话</span>
+      <span class="feature-tag">⚡ 网页自动化</span>
+      <span class="feature-tag">🔍 网页分析</span>
+      <span class="feature-tag">🌐 智能翻译</span>
+      <span class="feature-tag">📝 智能笔记</span>
+      <span class="feature-tag">👁️ OCR 识别</span>
+      <span class="feature-tag">📥 数据提取</span>
+      <span class="feature-tag">📋 报告生成</span>
+    </div>
     <div class="features-grid">
       <div class="feature-card fade-in">
         <span class="feature-icon">💬</span>
@@ -157,7 +175,7 @@ body::after{content:'';position:fixed;top:0;left:0;width:100%;height:4px;backgro
         <p>支持 11 个 AI 提供商，GPT-4o、Claude、Gemini、DeepSeek 等主流大模型一键切换，流式输出，深度思考。</p>
       </div>
       <div class="feature-card fade-in">
-        <span class="feature-icon">🌐</span>
+        <span class="feature-icon">⚡</span>
         <h3>网页自动化</h3>
         <p>自然语言控制浏览器 — 点击、输入、滚动、搜索、导航。AI 自动分析页面结构，逐步执行操作。</p>
       </div>
@@ -167,9 +185,19 @@ body::after{content:'';position:fixed;top:0;left:0;width:100%;height:4px;backgro
         <p>双引擎语音识别（本地 Sherpa-ONNX + Web Speech API），中英双语，连续对话，语音播报。</p>
       </div>
       <div class="feature-card fade-in">
+        <span class="feature-icon">🔍</span>
+        <h3>网页分析</h3>
+        <p>智能分析当前页面内容，提取核心信息，生成结构化摘要。支持表格数据提取和关键信息定位。</p>
+      </div>
+      <div class="feature-card fade-in">
         <span class="feature-icon">🌍</span>
         <h3>智能翻译</h3>
         <p>划词翻译、自动翻译、点击翻译三种模式，8 种目标语言，代码智能保护，技术文档无障碍阅读。</p>
+      </div>
+      <div class="feature-card fade-in">
+        <span class="feature-icon">📝</span>
+        <h3>智能笔记</h3>
+        <p>对话内容一键保存为笔记，支持 Markdown 格式导出。自动整理关键信息，构建个人知识库。</p>
       </div>
       <div class="feature-card fade-in">
         <span class="feature-icon">📎</span>
@@ -180,6 +208,11 @@ body::after{content:'';position:fixed;top:0;left:0;width:100%;height:4px;backgro
         <span class="feature-icon">📊</span>
         <h3>图表与报告</h3>
         <p>AI 生成柱状图、折线图、饼图、雷达图，内联渲染。一键导出 PNG/JSON，自动生成文件报告。</p>
+      </div>
+      <div class="feature-card fade-in">
+        <span class="feature-icon">📥</span>
+        <h3>数据提取</h3>
+        <p>从网页中智能提取结构化数据，支持表格、列表、商品信息等。一键导出为 JSON 或 Excel 格式。</p>
       </div>
     </div>
   </div>
