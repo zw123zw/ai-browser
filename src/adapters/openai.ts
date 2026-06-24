@@ -1,6 +1,6 @@
 import { BaseAdapter } from './base';
 import { Logger } from '@/src/utils/logger';
-import { proxyFetchStream, proxyFetch } from './proxy';
+import { proxyFetch } from './proxy';
 import type { ChatMessage, ChatRequestOptions, StreamChunk } from '@/src/types';
 
 const log = new Logger('Adapter:OpenAI');
@@ -216,7 +216,7 @@ export class OpenAIAdapter extends BaseAdapter {
     try {
       let buffer = '';
       let eventType = ''; // 记录 Anthropic 事件类型
-      await proxyFetchStream({ url, method: 'POST', headers, body, signal: opts.signal }, (chunk) => {
+      await this.proxyStream({ url, method: 'POST', headers, body, signal: opts.signal }, (chunk) => {
         buffer += chunk;
         // 按行分割处理
         const lines = buffer.split('\n');
@@ -261,6 +261,10 @@ export class OpenAIAdapter extends BaseAdapter {
       }
       return;
     } catch (proxyError) {
+      // 中止时不降级到直接请求
+      if (opts.signal?.aborted) {
+        throw new DOMException('The operation was aborted.', 'AbortError');
+      }
       log.warn('代理请求失败，尝试直接请求:', proxyError);
     }
 

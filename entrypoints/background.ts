@@ -137,15 +137,18 @@ export default defineBackground(() => {
             return;
           }
 
-          // 返回成功，包含 requestId
-          sendResponse({ success: true, streaming: true, requestId });
-
           // 读取流并转发到 content script
           const reader = res.body?.getReader();
-          if (!reader || !sender.tab?.id) return;
+          if (!reader || !sender.tab?.id) {
+            sendResponse({ success: false, error: '无法获取响应流' });
+            return;
+          }
 
-          // 存储活跃流，便于中止
+          // 先注册活跃流，再通知 content script（避免 abort-stream 到达时流尚未注册）
           activeStreams.set(requestId, { reader, tabId: sender.tab.id, abortController });
+
+          // 返回成功，包含 requestId
+          sendResponse({ success: true, streaming: true, requestId });
 
           const decoder = new TextDecoder();
           let buffer = '';

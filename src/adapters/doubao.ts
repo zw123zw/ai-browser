@@ -7,7 +7,7 @@
 
 import { BaseAdapter } from './base';
 import { Logger } from '@/src/utils/logger';
-import { proxyFetchStream } from './proxy';
+// proxyStream 继承自 BaseAdapter
 import type { ChatMessage, ChatRequestOptions, StreamChunk } from '@/src/types';
 
 const log = new Logger('Adapter:Doubao');
@@ -81,7 +81,7 @@ export class DoubaoAdapter extends BaseAdapter {
     // 尝试通过代理请求
     try {
       let buffer = '';
-      await proxyFetchStream({ url, method: 'POST', headers, body, signal: opts.signal }, (chunk) => {
+      await this.proxyStream({ url, method: 'POST', headers, body, signal: opts.signal }, (chunk) => {
         buffer += chunk;
         const lines = buffer.split('\n');
         buffer = lines.pop() || '';
@@ -96,6 +96,10 @@ export class DoubaoAdapter extends BaseAdapter {
       log.info('请求完成', { duration: `${duration}ms` });
       return;
     } catch (proxyError) {
+      // 中止时不降级到直接请求
+      if (opts.signal?.aborted) {
+        throw new DOMException('The operation was aborted.', 'AbortError');
+      }
       log.warn('代理请求失败，尝试直接请求:', proxyError);
     }
 

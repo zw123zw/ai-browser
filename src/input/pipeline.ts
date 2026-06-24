@@ -27,8 +27,7 @@ import type { Command, SemanticSkeleton } from '@/src/browser/types'
 
 const log = new Logger('Pipeline')
 
-const MAX_RETRY = 5
-const MAX_TOTAL_STEPS = 20
+const MAX_TOTAL_STEPS = 50
 
 /**
  * 去掉历史消息中的重数据，保留操作上下文
@@ -329,6 +328,11 @@ export class InputPipeline {
       return
     }
 
+    // Phase 1 → Phase 2 之间检查 abort
+    if (this.options.getSignal?.()?.aborted) {
+      throw new DOMException('The operation was aborted.', 'AbortError')
+    }
+
     // 3. Phase 2 — 移除"思考中"消息，只展示解析后的执行结果
     log.info('[流程] Phase 1 → [action] → 进入 Phase 2')
     callbacks.onActionDetected()
@@ -364,7 +368,7 @@ export class InputPipeline {
       })
 
       callbacks.onCommandsParsed([cmd], i + 1)
-      const result = await this.executor.execute(cmd)
+      const result = await this.executor.execute(cmd, this.options.getSignal?.())
       callbacks.onCommandResult(cmd.action, result.success, result.message)
 
       if (result.success) {
@@ -391,11 +395,10 @@ export class InputPipeline {
   // ═══════════════════════════════════════════════
 
   private async processPhase2WithRetry(text: string, callbacks: PipelineCallbacks, initialCompleted?: Array<{ action: string; elementId?: string; description?: string }>): Promise<void> {
-    log.info('[Phase 2] ─── 流式执行模式 ───', { maxRetry: MAX_RETRY, resumedSteps: initialCompleted?.length || 0 })
+    log.info('[Phase 2] ─── 流式执行模式 ───', { resumedSteps: initialCompleted?.length || 0 })
 
     const completed: Array<{ action: string; elementId?: string; description?: string }> = initialCompleted ? [...initialCompleted] : []
     const completedKeys = new Set<string>(completed.map(c => `${c.action}:${c.description || ''}`))  // 指令去重 key 集合
-    let consecutiveErrors = 0
     let lastError = ''
     let lastFailedCommand: { action: string; elementId?: string; description?: string; text?: string; url?: string } | null = null
     let lastFullSkeleton: string | null = null
@@ -421,7 +424,6 @@ export class InputPipeline {
       log.info(`[Phase 2] ─── 第 ${completed.length + 1} 步 ───`, {
         skeletonElements: skeleton.elements.length,
         completedCount: completed.length,
-        consecutiveErrors,
       })
 
       // AI 生成 1 条指令（根据进入模式选择提示词）
@@ -450,7 +452,6 @@ export class InputPipeline {
           // 清除错误状态，用新上下文重试
           lastError = ''
           lastFailedCommand = null
-          consecutiveErrors = 0
           continue
         } catch (err) {
           // 用户取消（abort）
@@ -513,6 +514,8 @@ export class InputPipeline {
                 callbacks.onCommandResult('download', true, '数据提取完成')
                 log.info('[Phase 2] ═══ download 完成 ═══')
               } catch (err) {
+                // 中止请求直接抛出，不当作执行失败
+                if (err instanceof DOMException && err.name === 'AbortError') throw err
                 const errMsg = err instanceof Error ? err.message : String(err)
                 callbacks.onCommandResult('download', false, errMsg)
                 lastError = `[download] ${errMsg}`
@@ -551,6 +554,8 @@ export class InputPipeline {
                 callbacks.onCommandResult('summarize', true, '分析完成')
                 log.info('[Phase 2] ═══ summarize 完成 ═══')
               } catch (err) {
+                // 中止请求直接抛出，不当作执行失败
+                if (err instanceof DOMException && err.name === 'AbortError') throw err
                 const errMsg = err instanceof Error ? err.message : String(err)
                 callbacks.onCommandResult('summarize', false, errMsg)
                 lastError = `[summarize] ${errMsg}`
@@ -580,7 +585,7 @@ export class InputPipeline {
             log.info('[Phase 2] ── click 前置保存 queued task ──')
           }
 
-          const result = await this.executor.execute(cmd)
+          const result = await this.executor.execute(cmd, this.options.getSignal?.())
           totalExecutions++
 
           // 延迟清除 queued task
@@ -608,7 +613,6 @@ export class InputPipeline {
           if (result.success) {
             completed.push({ action: cmd.action, elementId: cmd.elementId, description: cmd.description })
             completedKeys.add(cmdKey)
-            consecutiveErrors = 0
             lastError = ''
             lastFailedCommand = null
             lastFullSkeleton = null
@@ -647,7 +651,6 @@ export class InputPipeline {
             // 失败 → 记录错误，批量时跳过继续，单条时走重试
             lastError = `[${cmd.action}] ${result.message}`
             lastFailedCommand = { action: cmd.action, elementId: cmd.elementId, description: cmd.description, text: cmd.text, url: cmd.url }
-            consecutiveErrors++
             log.warn('[Phase 2] 指令执行失败', { action: cmd.action, error: lastError })
             if (!isBatch) {
               callbacks.onRetryMessage(`🔄 正在重试... (${totalExecutions}/${MAX_TOTAL_STEPS})`, completed.length + 1, lastFailedCommand)
@@ -674,7 +677,6 @@ export class InputPipeline {
         lastError = '当前视口骨架未找到目标元素，已提取全页骨架'
         lastFailedCommand = null
         lastFullSkeleton = fullSkeleton
-        consecutiveErrors++
         callbacks.onRetryMessage(`🔄 正在重试... (${totalExecutions}/${MAX_TOTAL_STEPS})`, completed.length + 1, lastFailedCommand)
         continue
       }

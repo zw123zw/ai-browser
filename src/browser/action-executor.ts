@@ -172,7 +172,7 @@ export class ActionExecutor {
   /**
    * 执行单条指令
    */
-  async execute(cmd: Command): Promise<ActionResult> {
+  async execute(cmd: Command, signal?: AbortSignal): Promise<ActionResult> {
     log.info('═══ 执行指令开始 ═══', { action: cmd.action, elementId: cmd.elementId, description: cmd.description })
 
     // iframe 元素（f_ 前缀）→ 通过 background 中转注入到 iframe 执行
@@ -206,7 +206,7 @@ export class ActionExecutor {
         case 'press':     result = await this.executeKeyboard(cmd.key || ''); break
         case 'focus':     result = await this.executeFocus(element!); break
         case 'hover':     result = await this.executeHover(element!); break
-        case 'wait':      result = await this.executeWait(cmd.ms || 1000); break
+        case 'wait':      result = await this.executeWait(cmd.ms || 1000, signal); break
         case 'newTab':    result = await this.executeTabAction('newTab'); break
         case 'closeTab':  result = await this.executeTabAction('closeTab'); break
         case 'switchTab': result = await this.executeTabAction('switchTab', cmd.tabQuery || cmd.description); break
@@ -218,6 +218,8 @@ export class ActionExecutor {
       log.info('═══ 执行指令完成 ═══', { action: cmd.action, success: result.success, message: result.message })
       return result
     } catch (error) {
+      // abort 直接抛出，不当作执行失败
+      if (error instanceof DOMException && error.name === 'AbortError') throw error
       const msg = `执行异常: ${error instanceof Error ? error.message : String(error)}`
       log.error(msg, error)
       return { success: false, message: msg }
@@ -673,9 +675,18 @@ export class ActionExecutor {
     return { success: true, message: '悬停成功' }
   }
 
-  /** 等待 */
-  private async executeWait(ms: number): Promise<ActionResult> {
-    await new Promise(resolve => setTimeout(resolve, ms))
+  /** 等待（支持 abort 中断） */
+  private async executeWait(ms: number, signal?: AbortSignal): Promise<ActionResult> {
+    if (signal?.aborted) {
+      throw new DOMException('The operation was aborted.', 'AbortError')
+    }
+    await new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(resolve, ms)
+      signal?.addEventListener('abort', () => {
+        clearTimeout(timer)
+        reject(new DOMException('The operation was aborted.', 'AbortError'))
+      }, { once: true })
+    })
     return { success: true, message: `等待 ${ms}ms` }
   }
 
