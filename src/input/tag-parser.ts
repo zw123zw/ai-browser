@@ -14,6 +14,55 @@ import type { Command } from '@/src/browser/types'
 
 const log = new Logger('TagParser')
 
+/**
+ * JSON.parse 失败时的回退解析
+ *
+ * AI 生成的 [command] JSON 中，text 字段可能包含未转义的双引号
+ * （如文章内容中的 "我们要支持上传 2GB 的视频"），导致 JSON.parse 失败。
+ *
+ * 回退策略：用正则提取 action / elementId / url / done，
+ * text 字段用位置匹配（从 "text":" 到最后的 ","done":）。
+ */
+function parseCommandFallback(raw: string): Command | null {
+  try {
+    const action = raw.match(/"action"\s*:\s*"([^"]+)"/)?.[1]
+    if (!action) return null
+
+    const elementId = raw.match(/"elementId"\s*:\s*"([^"]+)"/)?.[1]
+    const url = raw.match(/"url"\s*:\s*"([^"]+)"/)?.[1]
+    const description = raw.match(/"description"\s*:\s*"([^"]+)"/)?.[1]
+    const doneMatch = raw.match(/"done"\s*:\s*(\d+)/)
+    const done = doneMatch ? Number(doneMatch[1]) : undefined
+
+    // text 字段：从 "text":" 开始，到 ","done": 或末尾 "}" 结束
+    // 用贪婪匹配取最后一个分隔符
+    let text: string | undefined
+    const textStart = raw.indexOf('"text":"')
+    if (textStart !== -1) {
+      const valueStart = textStart + '"text":"'.length
+      // 从末尾找 ","done": 或 "}"
+      const doneIdx = raw.lastIndexOf('","done":')
+      const endIdx = doneIdx > valueStart ? doneIdx : raw.lastIndexOf('"')
+      if (endIdx > valueStart) {
+        text = raw.slice(valueStart, endIdx)
+          .replace(/\\"/g, '"')   // 还原转义引号
+          .replace(/\\n/g, '\n')  // 还原换行
+          .replace(/\\\\/g, '\\') // 还原转义反斜杠
+      }
+    }
+
+    const cmd: Command = { action }
+    if (elementId) cmd.elementId = elementId
+    if (url) cmd.url = url
+    if (description) cmd.description = description
+    if (text) cmd.text = text
+    if (done !== undefined) cmd.done = done
+    return cmd
+  } catch {
+    return null
+  }
+}
+
 /** 提取结果 */
 export interface ExtractedTags {
   /** [chat] 内的文本（Phase 1 纯聊天回复时有值） */
@@ -98,7 +147,14 @@ export function extractTags(rawText: string): ExtractedTags {
           commands.push(JSON.parse(content))
         }
       } catch {
-        log.warn('command JSON 解析失败', { raw: content.slice(0, 100) })
+        // JSON.parse 失败（内容含未转义引号等），用正则回退提取
+        const fallback = parseCommandFallback(content)
+        if (fallback) {
+          commands.push(fallback)
+          log.info('command JSON 回退解析成功', { action: fallback.action })
+        } else {
+          log.warn('command JSON 解析失败', { raw: content.slice(0, 100) })
+        }
       }
     }
     if (commands.length > 0) {

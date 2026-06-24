@@ -169,8 +169,12 @@ export class IntentDetector {
 
     // 添加历史上下文（最近 6 条消息，过滤空内容，去掉骨架/HTML避免累积）
     const recentMsgs = this.options.getRecentMessages?.() || []
+    // 跳过最后一条 user 消息（已在下方嵌入，避免重复）
+    const lastUserIdx = recentMsgs.findLastIndex(m => m.role === 'user')
     let validMsgCount = 0
-    for (const msg of recentMsgs) {
+    for (let i = 0; i < recentMsgs.length; i++) {
+      if (i === lastUserIdx) continue
+      const msg = recentMsgs[i]
       if (msg.content && msg.content.trim()) {
         const cleaned = stripHeavyData(msg.content)
         messages.push({

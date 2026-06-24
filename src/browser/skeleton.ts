@@ -33,14 +33,11 @@ export type SkeletonScope = 'viewport' | 'full'
 /** 视口骨架最大元素数（减少 token 消耗） */
 const MAX_SKELETON_ELEMENTS = 200
 
-/** href 截断长度 */
-const MAX_HREF_LENGTH = 80
+/** href 截断长度（仅 href 截断，避免超长 URL） */
+const MAX_HREF_LENGTH = 200
 
 /** placeholder 截断长度 */
 const MAX_PLACEHOLDER_LENGTH = 50
-
-/** value 截断长度 */
-const MAX_VALUE_LENGTH = 20
 
 /**
  * 骨架管理器
@@ -407,19 +404,27 @@ function extractElement(el: HTMLElement, id: string): SkeletonElement | null {
   const altText = !ariaLabel ? el.querySelector('img')?.getAttribute('alt') : null
   const ariaLabelValue = ariaLabel || altText || null
 
+  // contenteditable 标记
+  const isContentEditable = el.getAttribute('contenteditable') === 'true' || el.getAttribute('contenteditable') === ''
+
   // 代码编辑器容器（CodeMirror/Monaco/Ace）— 提取编辑器内容作为 value
   const isEditor = el.classList.contains('CodeMirror') ||
     el.classList.contains('monaco-editor') ||
     el.classList.contains('ace_editor') ||
     el.classList.contains('bytemd-editor')
 
-  if (!text && !el.getAttribute('role') && !hasIcon && !hasFormContent && !labelText && !ariaLabelValue && !isEditor) return null
+  if (!text && !el.getAttribute('role') && !hasIcon && !hasFormContent && !labelText && !ariaLabelValue && !isEditor && !isContentEditable) return null
 
   const base: SkeletonElement = { id, tag }
 
   // ── 1. 身份标识：role ──
   const role = extractRole(el, tag)
   if (role) base.role = role
+
+  // contenteditable 标记为 textbox
+  if (isContentEditable && !base.role) {
+    base.role = 'textbox'
+  }
 
   // 代码编辑器容器：标记为 textbox，AI 知道可以输入
   if (isEditor && !base.role) {
@@ -429,7 +434,7 @@ function extractElement(el: HTMLElement, id: string): SkeletonElement | null {
       const cm = (el as any).CodeMirror
       if (cm) {
         const val = cm.getValue?.() || ''
-        if (val) base.value = val.slice(0, MAX_VALUE_LENGTH)
+        if (val) base.value = val
       }
     } catch { /* */ }
   }
@@ -441,7 +446,7 @@ function extractElement(el: HTMLElement, id: string): SkeletonElement | null {
     // input/textarea 有 value 时显示已输入内容，让 AI 知道输入是否成功
     const val = (el as HTMLInputElement).value
     if (val) {
-      base.text = val.length > MAX_VALUE_LENGTH ? val.slice(0, MAX_VALUE_LENGTH) + '...' : val
+      base.text = val
     }
   } else if (labelText) {
     // 表单元素有关联 label 时，用 label 字段标识（不占 text，避免与 label 元素去重）
@@ -492,7 +497,7 @@ function extractElement(el: HTMLElement, id: string): SkeletonElement | null {
     }
     // value：密码框不提取（安全考虑）
     if (inputType !== 'password' && inputEl.value) {
-      base.value = inputEl.value.slice(0, MAX_VALUE_LENGTH)
+      base.value = inputEl.value
     }
     // checked
     if ((inputType === 'checkbox' || inputType === 'radio') && inputEl.checked) {
@@ -507,10 +512,18 @@ function extractElement(el: HTMLElement, id: string): SkeletonElement | null {
   if (tag === 'textarea') {
     const textareaEl = el as HTMLTextAreaElement
     if (textareaEl.value) {
-      base.value = textareaEl.value.slice(0, MAX_VALUE_LENGTH)
+      base.value = textareaEl.value
     }
     if (textareaEl.required || el.getAttribute('aria-required') === 'true') {
       base.required = true
+    }
+  }
+
+  // contenteditable 元素：提取 innerText 作为 value
+  if (isContentEditable) {
+    const content = el.innerText?.trim() || ''
+    if (content) {
+      base.value = content
     }
   }
 
@@ -705,7 +718,7 @@ function getDirectText(el: HTMLElement): string {
     }
   }
   // 注意：不再 fallback 到 aria-label/title（这些走 ariaLabel 字段独立输出）
-  return text.trim().slice(0, 100)
+  return text.trim()
 }
 
 /**
@@ -724,7 +737,7 @@ function findAssociatedLabelText(el: HTMLElement): string | null {
     const label = document.querySelector(`label[for="${CSS.escape(elId)}"]`)
     if (label) {
       const text = label.textContent?.trim()
-      if (text) return text.slice(0, 100)
+      if (text) return text
     }
   }
 
@@ -747,7 +760,7 @@ function findAssociatedLabelText(el: HTMLElement): string | null {
     const refEl = document.getElementById(labelledBy)
     if (refEl) {
       const text = refEl.textContent?.trim()
-      if (text) return text.slice(0, 100)
+      if (text) return text
     }
   }
 
@@ -761,7 +774,7 @@ function findAssociatedLabelText(el: HTMLElement): string | null {
     const label = container.querySelector(':scope > label')
     if (label) {
       const text = label.textContent?.trim()
-      if (text) return text.slice(0, 100)
+      if (text) return text
     }
   }
 
@@ -876,6 +889,8 @@ async function extractIframeSkeletons(
 function iframeExtractFunc(scope: string, vpWidth: number, vpHeight: number): { url: string; elements: unknown[] } {
   const SKIP = 'script,style,noscript,meta,link,br,hr'
   const TAGS = ['a', 'button', 'input', 'select', 'textarea', 'video', 'audio']
+  const MAX_HREF_LENGTH = 200
+  const MAX_PLACEHOLDER_LENGTH = 50
   let idCounter = 0
 
   function isClickable(el: HTMLElement): boolean {
@@ -906,7 +921,7 @@ function iframeExtractFunc(scope: string, vpWidth: number, vpHeight: number): { 
         if (ct) { t = ct; break }
       }
     }
-    return t.trim().slice(0, 100)
+    return t.trim()
   }
 
   function extract(el: HTMLElement, id: string): Record<string, unknown> | null {
@@ -918,7 +933,13 @@ function iframeExtractFunc(scope: string, vpWidth: number, vpHeight: number): { 
     const ariaLabel = el.getAttribute('aria-label') || el.getAttribute('title') || null
     const altText = !ariaLabel ? el.querySelector('img')?.getAttribute('alt') : null
     const ariaLabelValue = ariaLabel || altText || null
-    if (!text && !el.getAttribute('role') && !hasIcon && !hasFormContent && !ariaLabelValue) return null
+    const isContentEditable = el.getAttribute('contenteditable') === 'true' || el.getAttribute('contenteditable') === ''
+    const isEditor = el.classList.contains('CodeMirror') ||
+      el.classList.contains('monaco-editor') ||
+      el.classList.contains('ace_editor') ||
+      el.classList.contains('bytemd-editor')
+
+    if (!text && !el.getAttribute('role') && !hasIcon && !hasFormContent && !ariaLabelValue && !isEditor && !isContentEditable) return null
 
     const base: Record<string, unknown> = { id, tag }
     const explicitRole = el.getAttribute('role')
@@ -928,34 +949,39 @@ function iframeExtractFunc(scope: string, vpWidth: number, vpHeight: number): { 
       if (t === 'submit' || t === 'reset') base.role = 'button'
       else if (t !== 'checkbox' && t !== 'radio') base.role = 'textbox'
     } else if (tag === 'select') base.role = 'combobox'
+    else if (isContentEditable) base.role = 'textbox'
 
     if (text) base.text = text
     else if (hasFormContent) {
       const v = (el as HTMLInputElement).value
-      if (v) base.text = v.length > 20 ? v.slice(0, 20) + '...' : v
+      if (v) base.text = v
     } else if (hasIcon && ariaLabelValue) base.ariaLabel = ariaLabelValue
     else if (hasIcon) base.text = '(icon)'
     if (ariaLabelValue && base.text !== ariaLabelValue) base.ariaLabel = ariaLabelValue
-    if (isForm && el.getAttribute('placeholder')) base.placeholder = el.getAttribute('placeholder')!.slice(0, 50)
+    if (isForm && el.getAttribute('placeholder')) base.placeholder = el.getAttribute('placeholder')!.slice(0, MAX_PLACEHOLDER_LENGTH)
 
     if (tag === 'a') {
       const href = el.getAttribute('href')
       if (href && href !== '#' && !href.startsWith('javascript:')) {
-        try { base.href = new URL(href, el.baseURI).href.slice(0, 80) } catch { /* */ }
+        try { base.href = new URL(href, el.baseURI).href.slice(0, MAX_HREF_LENGTH) } catch { /* */ }
       }
     }
     if (tag === 'input') {
       const inp = el as HTMLInputElement
       const t = inp.type || 'text'
       if (t !== 'checkbox' && t !== 'radio') base.inputType = t
-      if (t !== 'password' && inp.value) base.value = inp.value.slice(0, 20)
+      if (t !== 'password' && inp.value) base.value = inp.value
       if ((t === 'checkbox' || t === 'radio') && inp.checked) base.checked = true
       if (inp.required) base.required = true
     }
     if (tag === 'textarea') {
       const ta = el as HTMLTextAreaElement
-      if (ta.value) base.value = ta.value.slice(0, 20)
+      if (ta.value) base.value = ta.value
       if (ta.required) base.required = true
+    }
+    if (isContentEditable) {
+      const content = el.innerText?.trim() || ''
+      if (content) base.value = content
     }
     if (isForm || tag === 'button') {
       const d = (el as HTMLInputElement).disabled || el.getAttribute('aria-disabled') === 'true'

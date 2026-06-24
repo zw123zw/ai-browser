@@ -821,8 +821,12 @@ export class InputPipeline {
     // 构建消息列表：历史上下文 + 当前用户消息（与 callAI 一致）
     const messages: Array<{ id: string; role: 'user' | 'assistant'; content: string; timestamp: number }> = []
     const recentMsgs = this.options.getRecentMessages?.() || []
+    // 跳过最后一条 user 消息（已在下方 [原始请求] 中嵌入，避免重复）
+    const lastUserIdx = recentMsgs.findLastIndex(m => m.role === 'user')
     let validMsgCount = 0
-    for (const msg of recentMsgs) {
+    for (let i = 0; i < recentMsgs.length; i++) {
+      if (i === lastUserIdx) continue
+      const msg = recentMsgs[i]
       if (msg.content && msg.content.trim()) {
         const cleaned = stripHeavyData(msg.content)
         messages.push({ id: Date.now().toString(), role: msg.role, content: cleaned, timestamp: Date.now() })

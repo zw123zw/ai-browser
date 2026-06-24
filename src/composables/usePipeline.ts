@@ -414,9 +414,15 @@ export function usePipeline() {
       // 还原跨标签页的历史消息（如果有）
       if (task.recentMessages?.length && convStore.conversation) {
         const existingCount = convStore.conversation.messages.length
+        // 用 role+content 构建已有消息集合，避免跨标签页重复
+        const existingKeys = new Set(
+          convStore.conversation.messages.map(m => `${m.role}::${m.content}`)
+        )
+        let addedCount = 0
         for (const msg of task.recentMessages) {
-          // 跳过原始请求的第一条 user 消息（processInput 已经加过了，避免重复）
-          if (msg.role === 'user' && msg.content === task.originalRequest) continue
+          const key = `${msg.role}::${msg.content}`
+          if (existingKeys.has(key)) continue
+          existingKeys.add(key)
           convStore.conversation.messages.push({
             id: uuid(),
             role: msg.role as 'user' | 'assistant',
@@ -424,8 +430,9 @@ export function usePipeline() {
             timestamp: Date.now(),
             status: 'done',
           })
+          addedCount++
         }
-        log.info('[恢复] 还原历史消息', { count: task.recentMessages.length, existingCount })
+        log.info('[恢复] 还原历史消息', { total: task.recentMessages.length, existingCount, addedCount })
       }
 
       await getPipeline().resumeQueuedTask(task, callbacks)

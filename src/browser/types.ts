@@ -33,7 +33,7 @@ export interface SkeletonElement {
 
   // ═══ 4. 表单属性 ═══
   inputType?: string        // input type: text/password/email/tel/search/number/date/file ...
-  value?: string            // 当前输入值（截断 20 字符，密码框不提取）
+  value?: string            // 当前输入值（完整不截断，密码框不提取）
   checked?: boolean         // checkbox/radio 是否选中（仅 true 时输出）
   required?: boolean        // 是否必填（仅 true 时输出）
 

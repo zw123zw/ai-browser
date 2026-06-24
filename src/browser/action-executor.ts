@@ -417,54 +417,95 @@ export class ActionExecutor {
     return { success: true, message: '点击成功' }
   }
 
-  /** 输入：focus → 设置值 → 触发 input/change 事件（兼容 React/Vue/各种编辑器） */
+  /**
+   * 输入文本到编辑器
+   *
+   * 支持的编辑器类型：
+   * - CodeMirror 5 (ByteMD / 掘金 / 各种 Markdown 编辑器)
+   * - CodeMirror 6 (新一代编辑器)
+   * - Monaco (代码编辑器)
+   * - Ace (代码编辑器)
+   * - Quill (.ql-editor)
+   * - TinyMCE (.mce-content-body)
+   * - CKEditor (.ck-editor)
+   * - ProseMirror / TipTap (.ProseMirror)
+   * - Draft.js (.DraftEditor-root)
+   * - WangEditor (.w-e-text-container)
+   * - 通用 contenteditable 元素
+   * - 标准 input / textarea
+   */
   private async executeType(el: HTMLElement, text: string): Promise<ActionResult> {
     el.focus()
     el.dispatchEvent(new FocusEvent('focus', { bubbles: true }))
 
-    // 1. CodeMirror 编辑器（ByteMD 等）
-    const cmElement = el.closest('.CodeMirror') as HTMLElement & {
-      CodeMirror?: {
-        setValue: (v: string) => void
-        trigger?: (name: string, ...args: unknown[]) => void
+    // ═══════════════════════════════════════════════════════
+    // 1. 代码编辑器（CM5 / CM6 / Monaco / Ace）
+    //    content script 隔离世界无法直接访问页面 JS 属性
+    //    优先用 Clipboard paste 事件（通用可靠），兜底注入脚本
+    // ═══════════════════════════════════════════════════════
+    const isCodeEditor = !!el.closest('.CodeMirror, .cm-editor, .monaco-editor, .ace_editor')
+    if (isCodeEditor) {
+      // 方案 A：execCommand（最简单，部分编辑器支持）
+      el.focus()
+      const execOk = document.execCommand('insertText', false, text)
+      if (execOk) {
+        log.info('executeType execCommand 成功', { textLen: text.length })
+        return { success: true, message: `输入成功: ${text.slice(0, 50)}...` }
+      }
+
+      // 方案 B：Clipboard API + paste 事件（通用兜底）
+      try {
+        const dt = new DataTransfer()
+        dt.setData('text/plain', text)
+        const pasteEvent = new ClipboardEvent('paste', {
+          bubbles: true,
+          cancelable: true,
+          clipboardData: dt,
+        })
+        el.dispatchEvent(pasteEvent)
+        log.info('executeType paste 事件已派发', { textLen: text.length })
+        return { success: true, message: `输入成功: ${text.slice(0, 50)}...` }
+      } catch {
+        log.warn('executeType paste 事件失败，尝试脚本注入')
+      }
+
+      // 方案 C：注入脚本到页面上下文（最后兜底）
+      const cmEl = el.closest('.CodeMirror')
+      if (cmEl) {
+        const escaped = JSON.stringify(text)
+        const script = document.createElement('script')
+        script.textContent = [
+          `var c=document.querySelector('.CodeMirror')?.CodeMirror`,
+          `if(c){c.setValue(${escaped});c.trigger?.('change')}`,
+        ].join(';')
+        document.head.appendChild(script)
+        document.head.removeChild(script)
+        log.info('executeType 脚本注入兜底', { textLen: text.length })
+        return { success: true, message: `输入成功: ${text.slice(0, 50)}...` }
       }
     }
-    if (cmElement?.CodeMirror) {
-      cmElement.CodeMirror.setValue(text)
-      // 触发 change 事件，让 ByteMD 等上层框架同步内容
-      cmElement.CodeMirror.trigger?.('change')
-      return { success: true, message: `输入成功: ${text}` }
-    }
 
-    // 2. Monaco 编辑器
-    const monacoElement = el.closest('.monaco-editor') as HTMLElement & { __editor?: { setValue: (v: string) => void } }
-    if (monacoElement?.__editor) {
-      monacoElement.__editor.setValue(text)
-      // 触发 input 事件，让上层框架同步
-      monacoElement.dispatchEvent(new Event('input', { bubbles: true }))
-      return { success: true, message: `输入成功: ${text}` }
-    }
-
-    // 3. Ace 编辑器
-    const aceElement = el.closest('.ace_editor') as HTMLElement & { env?: { editor?: { session?: { setValue: (v: string) => void } } } }
-    if (aceElement?.env?.editor?.session) {
-      aceElement.env.editor.session.setValue(text)
-      // 触发 input 事件，让上层框架同步
-      aceElement.dispatchEvent(new Event('input', { bubbles: true }))
-      return { success: true, message: `输入成功: ${text}` }
-    }
-
-    // 4. contenteditable 元素（Quill/TinyMCE/CKEditor/ProseMirror/TipTap 等）
-    if (el.getAttribute('contenteditable') === 'true' || el.isContentEditable) {
-      // 选中所有内容，然后插入新文本
+    // ═══════════════════════════════════════════════════════
+    // 2. contenteditable 富文本编辑器
+    //    Quill / TinyMCE / CKEditor / ProseMirror / TipTap /
+    //    Draft.js / WangEditor / 通用 contenteditable
+    //    document.execCommand 模拟用户输入，编辑器自然响应
+    // ═══════════════════════════════════════════════════════
+    const editableEl = el.isContentEditable
+      ? el
+      : el.closest('[contenteditable="true"]') as HTMLElement
+    if (editableEl) {
+      editableEl.focus()
       document.execCommand('selectAll', false, undefined)
       document.execCommand('insertText', false, text)
-      return { success: true, message: `输入成功: ${text}` }
+      log.info('executeType contenteditable', { tag: editableEl.tagName, className: editableEl.className })
+      return { success: true, message: `输入成功: ${text.slice(0, 50)}...` }
     }
 
-    // 5. 标准 input/textarea
+    // ═══════════════════════════════════════════════════════
+    // 3. 标准 input / textarea
+    // ═══════════════════════════════════════════════════════
     if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
-      // 使用 nativeInputValueSetter 绕过 React/Vue 受控组件
       const proto = el instanceof HTMLInputElement
         ? HTMLInputElement.prototype
         : HTMLTextAreaElement.prototype
@@ -474,12 +515,14 @@ export class ActionExecutor {
       } else {
         el.value = text
       }
+      el.dispatchEvent(new Event('input', { bubbles: true }))
+      el.dispatchEvent(new Event('change', { bubbles: true }))
+      return { success: true, message: `输入成功: ${text.slice(0, 50)}...` }
     }
 
-    el.dispatchEvent(new Event('input', { bubbles: true }))
-    el.dispatchEvent(new Event('change', { bubbles: true }))
-
-    return { success: true, message: `输入成功: ${text}` }
+    // ═══ 兜底 ═══
+    log.warn('executeType 无法识别的编辑器', { tag: el.tagName, className: el.className, id: el.id })
+    return { success: false, message: `无法识别的编辑器类型 (${el.tagName}.${el.className})，请尝试其他操作方式` }
   }
 
   /** 清空输入框 */
