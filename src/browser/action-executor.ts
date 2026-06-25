@@ -1175,11 +1175,27 @@ export class ActionExecutor {
 
       // 0. 尝试 Escape 键关闭（最常见的弹窗关闭方式）
       if (round === 0) {
+        // 记录 Escape 前所有可见的弹窗相关元素
+        const modalSelector = 'dialog, [role="dialog"], [role="alertdialog"], [aria-modal="true"], .modal, .el-dialog__wrapper, .ant-modal-wrap, .MuiDialog-root, .v-dialog, [class*="overlay"], [class*="mask"], [class*="modal-backdrop"], [class*="dialog"]'
+        const visibleBefore = Array.from(document.querySelectorAll(modalSelector))
+          .filter(el => isElementVisible(el as HTMLElement))
+
         const activeEl = document.activeElement || document.body
         activeEl.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true, cancelable: true }))
         activeEl.dispatchEvent(new KeyboardEvent('keyup', { key: 'Escape', code: 'Escape', bubbles: true, cancelable: true }))
-        // 等待一帧让 Escape 生效
-        await new Promise(resolve => requestAnimationFrame(resolve))
+        // 等待足够时间让 Escape 生效和关闭动画完成
+        await new Promise(resolve => setTimeout(resolve, 300))
+
+        // 检查之前可见的弹窗：已从 DOM 移除 或 不再可见
+        let closedByEscape = 0
+        for (const el of visibleBefore) {
+          if (!el.isConnected || !isElementVisible(el as HTMLElement)) closedByEscape++
+        }
+        if (closedByEscape > 0) {
+          closedCount += closedByEscape
+          closed = true
+          log.info('Escape 关闭了弹窗', { closedByEscape })
+        }
       }
 
       // 1. 原生 dialog[open]

@@ -222,7 +222,7 @@ table {
   min-width: 60px;
   max-width: 100vw;
   background: var(--aib-bg);
-  z-index: 2147483646;
+  z-index: 2147483647;
   transform: translateX(100%);
   transition: transform 0.25s ease;
   display: flex;
@@ -1697,13 +1697,11 @@ table {
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
   transition:
     border-color 0.2s ease,
-    box-shadow 0.2s ease,
-    transform 0.2s ease;
+    box-shadow 0.2s ease;
 }
 .aib-input-card:focus-within {
   border-color: var(--aib-primary);
   box-shadow: 0 0 0 3px var(--aib-primary-soft), 0 6px 24px var(--aib-primary-glow);
-  transform: translateY(-2px);
 }
 .aib-input-area {
   width: 100%;
