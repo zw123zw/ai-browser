@@ -126,6 +126,13 @@
         "click": { "label": "点击翻译", "desc": "点击段落翻译整块内容" },
         "off": { "label": "关闭", "desc": "不启用翻译功能" }
       },
+      "note": "笔记配置",
+      "noteModes": {
+        "selection": { "label": "划词笔记", "desc": "选中文字后弹出笔记浮层，AI 优化内容" },
+        "click": { "label": "点击笔记", "desc": "点击段落生成笔记，AI 优化内容" },
+        "auto": { "label": "自动笔记", "desc": "页面加载时自动 AI 分析总结" },
+        "off": { "label": "关闭", "desc": "不启用笔记功能" }
+      },
       "cancel": "取消",
       "save": "保存",
       "saved": "通用配置已保存",

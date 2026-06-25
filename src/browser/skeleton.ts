@@ -271,7 +271,8 @@ export function extractSkeleton(doc: Document, scope: SkeletonScope = 'viewport'
   const seenByParent = new Map<string, Set<string>>()
   const filtered = elements.filter(el => {
     if (parentsToRemove.has(el.id)) return false
-    if (!el.text && !['a', 'button', 'input', 'select', 'textarea'].includes(el.tag)) return false
+    // 保留有文字的元素、原生交互元素、contenteditable 元素、以及 role='textbox' 的元素
+    if (!el.text && !['a', 'button', 'input', 'select', 'textarea'].includes(el.tag) && !el.contentEditable && el.role !== 'textbox') return false
     if (el.text && el.text !== '(icon)') {
       const parentKey = el.parent || '_root'
       if (!seenByParent.has(parentKey)) seenByParent.set(parentKey, new Set())
@@ -656,9 +657,10 @@ function extractElement(el: HTMLElement, id: string): SkeletonElement | null {
   const role = extractRole(el, tag)
   if (role) base.role = role
 
-  // contenteditable 标记为 textbox
-  if (isContentEditable && !base.role) {
-    base.role = 'textbox'
+  // contenteditable 标记
+  if (isContentEditable) {
+    base.contentEditable = true
+    if (!base.role) base.role = 'textbox'
   }
 
   // 代码编辑器容器：标记为 textbox，AI 知道可以输入
@@ -704,7 +706,7 @@ function extractElement(el: HTMLElement, id: string): SkeletonElement | null {
   }
 
   // placeholder
-  if (isFormElement) {
+  if (isFormElement || isContentEditable) {
     const ph = el.getAttribute('placeholder')
     if (ph) base.placeholder = ph.slice(0, MAX_PLACEHOLDER_LENGTH)
   }
@@ -1222,7 +1224,7 @@ function iframeExtractFunc(scope: string, vpWidth: number, vpHeight: number): { 
     } else if (hasIcon && ariaLabelValue) base.ariaLabel = ariaLabelValue
     else if (hasIcon) base.text = '(icon)'
     if (ariaLabelValue && base.text !== ariaLabelValue) base.ariaLabel = ariaLabelValue
-    if (isForm && el.getAttribute('placeholder')) base.placeholder = el.getAttribute('placeholder')!.slice(0, MAX_PLACEHOLDER_LENGTH)
+    if ((isForm || isContentEditable) && el.getAttribute('placeholder')) base.placeholder = el.getAttribute('placeholder')!.slice(0, MAX_PLACEHOLDER_LENGTH)
 
     if (tag === 'a') {
       const href = el.getAttribute('href')

@@ -82,16 +82,15 @@ function deleteMessage() {
 async function bookmarkMessage() {
   if (!ctxMenu.value) return;
   const msg = ctxMenu.value.message;
-  try {
-    const key = 'aib-bookmarks';
-    const stored = await chrome.storage.local.get(key);
-    const list: Array<{ id: string; content: string; role: string; timestamp: number }> = stored[key] ?? [];
-    list.push({ id: msg.id, content: msg.content, role: msg.role, timestamp: Date.now() });
-    await chrome.storage.local.set({ [key]: list });
-    toast.success('已收藏');
-  } catch {
-    toast.error('收藏失败');
-  }
+  // 打开笔记收藏弹框
+  window.dispatchEvent(new CustomEvent('aib-bookmark-note', {
+    detail: {
+      content: msg.content,
+      url: '',
+      scrollY: 0,
+      source: 'chat' as const,
+    },
+  }));
   closeMenu();
 }
 

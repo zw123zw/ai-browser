@@ -38,7 +38,7 @@ export default defineConfig({
     },
     web_accessible_resources: [
       {
-        resources: ['icon.png', 'guide.md'],
+        resources: ['icon.png', 'guide-zh.md', 'guide-en.md'],
         matches: ['<all_urls>'],
       },
       {

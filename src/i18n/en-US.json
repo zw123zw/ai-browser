@@ -126,6 +126,13 @@
         "click": { "label": "Click", "desc": "Click paragraph to translate" },
         "off": { "label": "Off", "desc": "Disable translation" }
       },
+      "note": "Notes",
+      "noteModes": {
+        "selection": { "label": "Selection Note", "desc": "AI-optimized note popup on text selection" },
+        "click": { "label": "Click Note", "desc": "Click paragraph to generate AI note" },
+        "auto": { "label": "Auto Note", "desc": "Auto AI analysis on page load" },
+        "off": { "label": "Off", "desc": "Disable notes" }
+      },
       "cancel": "Cancel",
       "save": "Save",
       "saved": "General settings saved",

@@ -42,6 +42,7 @@ export interface SkeletonElement {
   disabled?: boolean        // 是否禁用（仅 true 时输出）
   expanded?: boolean        // 展开/折叠状态（仅 true 时输出）
   selected?: boolean        // 选中状态（仅 true 时输出）
+  contentEditable?: boolean // 是否为 contenteditable 元素（仅 true 时输出）
 
   // ═══ 6. 滑块属性（range input / role="slider"）═══
   min?: number              // 滑块最小值

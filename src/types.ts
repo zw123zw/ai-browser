@@ -127,6 +127,8 @@ export interface AppSettings {
   translateTargetLang?: string;
   /** 翻译模式：selection=划词翻译, auto=自动翻译, click=点击翻译, off=关闭 */
   translateMode?: 'selection' | 'auto' | 'click' | 'off';
+  /** 笔记模式：selection=划词笔记, click=点击笔记, auto=自动笔记, off=关闭 */
+  noteMode?: NoteMode;
   /** 网页自动化开关（默认 true）：关闭后移除所有自动化提示词，退化为纯聊天 */
   automationEnabled?: boolean;
   /** 界面语言：zh-CN=中文, en-US=英文 */
@@ -156,4 +158,48 @@ export interface ChatRequestOptions {
   provider?: string;
   messages: ChatMessage[];
   signal?: AbortSignal;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// 笔记系统
+// ═══════════════════════════════════════════════════════════════
+
+/** 笔记模式 */
+export type NoteMode = 'selection' | 'click' | 'auto' | 'off';
+
+/** 单条笔记条目 */
+export interface NoteEntry {
+  /** 唯一 id */
+  id: string;
+  /** 笔记内容（markdown） */
+  content: string;
+  /** 来源 URL */
+  url: string;
+  /** 保存时的滚动条位置 */
+  scrollY: number;
+  /** 划词/选中的文本（可选） */
+  selectedText?: string;
+  /** 来源类型：selection=划词, click=点击, chat=聊天消息收藏, auto=自动笔记 */
+  source: 'selection' | 'click' | 'chat' | 'auto';
+  /** 保存时间 */
+  timestamp: number;
+}
+
+/** 笔记标题（包含多条条目） */
+export interface NoteTitle {
+  /** 唯一 id */
+  id: string;
+  /** 标题名 */
+  title: string;
+  /** 条目列表（按时间排序） */
+  entries: NoteEntry[];
+  /** 创建时间 */
+  createdAt: number;
+  /** 更新时间 */
+  updatedAt: number;
+}
+
+/** 全部笔记数据 */
+export interface NotesData {
+  titles: NoteTitle[];
 }

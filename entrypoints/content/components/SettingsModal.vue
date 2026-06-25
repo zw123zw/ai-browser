@@ -6,7 +6,7 @@ import { useSettingsStore } from '@/src/stores/settings';
 import { useConversationsStore } from '@/src/stores/conversations';
 import { useToast } from '@/src/composables/useToast';
 import { abortPipeline } from '@/src/composables/usePipeline';
-import type { ModelConfig, Provider } from '@/src/types';
+import type { ModelConfig, NoteMode, Provider } from '@/src/types';
 import { eventToShortcut } from '@/src/utils/shortcut';
 import { THEMES } from '@/src/themes';
 import { useI18n, type Locale } from '@/src/i18n';
@@ -85,24 +85,16 @@ const tab = ref<'ai' | 'general' | 'user'>('ai');
 // ========== 使用文档 ==========
 const showDocs = ref(false);
 const docsHtml = ref('');
-const docsLoading = ref(false);
 const md = new MarkdownIt({ html: false, linkify: true, typographer: true });
 
-async function openDocs() {
+// 使用 Vite raw 导入 md 文件
+import guideZh from '@/docs/site/guide-zh.md?raw';
+import guideEn from '@/docs/site/guide-en.md?raw';
+
+function openDocs() {
   showDocs.value = true;
-  docsLoading.value = true;
-  const guideFile = locale.value === 'en-US' ? 'guide-en.md' : 'guide-zh.md';
-  try {
-    const resp = await fetch(chrome.runtime.getURL(guideFile));
-    if (resp.ok) {
-      docsHtml.value = md.render(await resp.text());
-    } else {
-      docsHtml.value = '<p>文档加载失败 / Failed to load guide</p>';
-    }
-  } catch {
-    docsHtml.value = '<p>文档加载失败 / Failed to load guide</p>';
-  }
-  docsLoading.value = false;
+  const content = locale.value === 'en-US' ? guideEn : guideZh;
+  docsHtml.value = md.render(content);
 }
 
 function closeDocs() {
@@ -398,6 +390,7 @@ const generalForm = reactive({
   autoSendSelection: resolveAutoSend(store.settings.autoSendSelection),
   translateTargetLang: store.settings.translateTargetLang || '中文',
   translateMode: resolveTranslateMode(store.settings),
+  noteMode: (store.settings.noteMode || 'off') as NoteMode,
   maxContext: store.settings.maxContext || 100,
 });
 
@@ -412,6 +405,13 @@ const translateModeOptions = computed(() => [
   { value: 'auto' as const, label: t('settings.general.translateModes.auto.label'), desc: t('settings.general.translateModes.auto.desc') },
   { value: 'click' as const, label: t('settings.general.translateModes.click.label'), desc: t('settings.general.translateModes.click.desc') },
   { value: 'off' as const, label: t('settings.general.translateModes.off.label'), desc: t('settings.general.translateModes.off.desc') },
+]);
+
+const noteModeOptions = computed(() => [
+  { value: 'selection' as const, label: t('settings.general.noteModes.selection.label'), desc: t('settings.general.noteModes.selection.desc') },
+  { value: 'click' as const, label: t('settings.general.noteModes.click.label'), desc: t('settings.general.noteModes.click.desc') },
+  { value: 'auto' as const, label: t('settings.general.noteModes.auto.label'), desc: t('settings.general.noteModes.auto.desc') },
+  { value: 'off' as const, label: t('settings.general.noteModes.off.label'), desc: t('settings.general.noteModes.off.desc') },
 ]);
 
 const translateLangOptions = [
@@ -477,6 +477,7 @@ async function saveGeneral() {
     autoSendSelection: generalForm.autoSendSelection,
     translateTargetLang: generalForm.translateTargetLang,
     translateMode: generalForm.translateMode,
+    noteMode: generalForm.noteMode,
   });
   toast.success(t('settings.general.saved'));
   emit('close');
@@ -491,6 +492,7 @@ async function saveAndClearHistory() {
     autoSendSelection: generalForm.autoSendSelection,
     translateTargetLang: generalForm.translateTargetLang,
     translateMode: generalForm.translateMode,
+    noteMode: generalForm.noteMode,
   });
   const convStore = useConversationsStore();
   await convStore.resetConversation();
@@ -947,6 +949,29 @@ function importModels(e: Event) {
               </div>
             </div>
 
+            <!-- 笔记配置 -->
+            <div class="aib-form-row">
+              <label>{{ t('settings.general.note') }}</label>
+              <div class="aib-translate-section">
+                <div class="aib-radio-group">
+                  <div
+                    v-for="opt in noteModeOptions"
+                    :key="opt.value"
+                    :class="['aib-radio-card', { 'aib-radio-active': generalForm.noteMode === opt.value }]"
+                    @click="generalForm.noteMode = opt.value"
+                  >
+                    <div class="aib-radio-dot">
+                      <span v-if="generalForm.noteMode === opt.value" class="aib-radio-dot-fill" />
+                    </div>
+                    <div class="aib-radio-body">
+                      <span class="aib-radio-label">{{ opt.label }}</span>
+                      <span class="aib-radio-desc">{{ opt.desc }}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <div class="aib-tab-footer">
               <div style="flex:1" />
               <button class="aib-btn" @click="emit('close')">{{ t('settings.general.cancel') }}</button>
@@ -1103,8 +1128,7 @@ function importModels(e: Event) {
         </button>
       </div>
       <div class="aib-docs-body">
-        <div v-if="docsLoading" class="aib-docs-loading">{{ t('common.loading') }}</div>
-        <div v-else class="aib-docs-content" v-html="docsHtml" />
+        <div class="aib-docs-content" v-html="docsHtml" />
       </div>
     </div>
   </div>

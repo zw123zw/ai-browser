@@ -1,5 +1,5 @@
 import { storage } from 'wxt/storage';
-import type { AppSettings, Conversation, ModelConfig, Provider } from '@/src/types';
+import type { AppSettings, Conversation, ModelConfig, NotesData, Provider } from '@/src/types';
 import rawModels from '@/src/local-config.json';
 
 /** 从 local-config.json 映射到 ModelConfig */
@@ -42,6 +42,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   autoSendSelection: 'auto',
   translateTargetLang: '中文',
   translateMode: 'off',
+  noteMode: 'off',
   automationEnabled: true,
   locale: 'zh-CN',
   models: localModels,
@@ -91,4 +92,10 @@ export interface QueuedTask {
 export const queuedTaskStorage = storage.defineItem<QueuedTask | null>(
   'local:aib-queued-task',
   { fallback: null }
+)
+
+/** 笔记数据存储 */
+export const notesStorage = storage.defineItem<NotesData>(
+  'local:ai-browser-notes',
+  { fallback: { titles: [] } }
 )

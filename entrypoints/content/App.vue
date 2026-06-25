@@ -3,15 +3,20 @@ import { nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import FloatingButton from './components/FloatingButton.vue';
 import ChatDrawer from './components/ChatDrawer.vue';
 import SettingsModal from './components/SettingsModal.vue';
+import NoteBookmarkDialog from './components/NoteBookmarkDialog.vue';
+import NoteViewerDialog from './components/NoteViewerDialog.vue';
 import ToastContainer from './components/ToastContainer.vue';
 import { useSettingsStore } from '@/src/stores/settings';
 import { useConversationsStore } from '@/src/stores/conversations';
+import { useNotesStore } from '@/src/stores/notes';
 import { matchShortcut } from '@/src/utils/shortcut';
 import { getThemeById } from '@/src/themes';
 import { drawerOpenStorage } from '@/src/storage';
 import { executeAutomationAction } from '@/src/automation/actions';
 import { initI18n, useI18n } from '@/src/i18n';
 import { Logger } from '@/src/utils/logger';
+import { v4 as uuid } from 'uuid';
+import type { NoteEntry } from '@/src/types';
 
 const log = new Logger('App');
 
@@ -21,7 +26,24 @@ const rootEl = ref<HTMLElement | null>(null);
 
 const settingsStore = useSettingsStore();
 const convStore = useConversationsStore();
+const notesStore = useNotesStore();
 const { setLocale } = useI18n();
+
+// 笔记收藏弹框状态
+const showBookmarkDialog = ref(false);
+const bookmarkData = ref<{ content: string; url: string; scrollY: number; selectedText?: string; source: NoteEntry['source'] } | null>(null);
+
+// 笔记查看弹框状态
+const showNoteViewer = ref(false);
+
+function toggleNoteViewer() {
+  showNoteViewer.value = !showNoteViewer.value;
+}
+
+// 关闭聊天抽屉（供笔记跳转前调用）
+function closeDrawer() {
+  open.value = false;
+}
 
 function toggle() {
   open.value = !open.value;
@@ -129,9 +151,62 @@ watch(open, async (val) => {
   chrome.runtime?.sendMessage?.({ type: 'aib-drawer-changed', open: val }).catch?.(() => {});
 });
 
+// 处理自动笔记占位消息：插入一条 assistant 消息
+function onAutoNoteStart(e: Event) {
+  const detail = (e as CustomEvent).detail;
+  if (!detail?.id || !convStore.conversation) return;
+
+  convStore.conversation.messages.push({
+    id: detail.id,
+    role: 'assistant',
+    content: detail.content || '📝 正在生成笔记...',
+    timestamp: Date.now(),
+    status: 'streaming',
+  });
+  convStore.conversation.updatedAt = Date.now();
+}
+
+// 处理自动笔记结果：更新占位消息内容
+function onAutoNoteResult(e: Event) {
+  const detail = (e as CustomEvent).detail;
+  if (!detail?.content || !convStore.conversation) return;
+
+  // 查找占位消息并更新
+  const existing = convStore.conversation.messages.find((m) => m.id === detail.id);
+  if (existing) {
+    existing.content = detail.content;
+    existing.status = 'done';
+  } else {
+    // 兜底：找不到占位消息，直接插入新消息
+    convStore.conversation.messages.push({
+      id: detail.id || uuid(),
+      role: 'assistant',
+      content: detail.content,
+      timestamp: Date.now(),
+      status: 'done',
+    });
+  }
+  convStore.conversation.updatedAt = Date.now();
+  log.info('[自动笔记] 已更新聊天消息', { length: detail.content.length });
+}
+
+// 处理笔记收藏请求：打开收藏弹框
+function onBookmarkNote(e: Event) {
+  const detail = (e as CustomEvent).detail;
+  if (!detail?.content) return;
+  bookmarkData.value = {
+    content: detail.content,
+    url: detail.url || '',
+    scrollY: detail.scrollY || 0,
+    selectedText: detail.selectedText,
+    source: detail.source || 'selection',
+  };
+  showBookmarkDialog.value = true;
+}
+
 onMounted(async () => {
   try {
-    await Promise.all([settingsStore.init(), convStore.init()]);
+    await Promise.all([settingsStore.init(), convStore.init(), notesStore.init()]);
   } catch (error) {
     log.error('Store 初始化失败:', error);
   }
@@ -149,12 +224,22 @@ onMounted(async () => {
   chrome.runtime?.onMessage?.addListener(onMessage);
   document.addEventListener('keydown', onKeydown, true);
   document.addEventListener('mouseup', onMouseup, true);
+  window.addEventListener('aib-auto-note-start', onAutoNoteStart);
+  window.addEventListener('aib-auto-note-result', onAutoNoteResult);
+  window.addEventListener('aib-bookmark-note', onBookmarkNote);
+  window.addEventListener('aib-toggle-note-viewer', toggleNoteViewer);
+  window.addEventListener('aib-close-drawer', closeDrawer);
 });
 
 onUnmounted(() => {
   chrome.runtime?.onMessage?.removeListener?.(onMessage);
   document.removeEventListener('keydown', onKeydown, true);
   document.removeEventListener('mouseup', onMouseup, true);
+  window.removeEventListener('aib-auto-note-start', onAutoNoteStart);
+  window.removeEventListener('aib-auto-note-result', onAutoNoteResult);
+  window.removeEventListener('aib-bookmark-note', onBookmarkNote);
+  window.removeEventListener('aib-toggle-note-viewer', toggleNoteViewer);
+  window.removeEventListener('aib-close-drawer', closeDrawer);
 });
 </script>
 
@@ -167,6 +252,15 @@ onUnmounted(() => {
       @open-settings="showSettings = true"
     />
     <SettingsModal v-if="showSettings" @close="showSettings = false" />
+    <NoteBookmarkDialog
+      v-if="showBookmarkDialog && bookmarkData"
+      :data="bookmarkData"
+      @close="showBookmarkDialog = false; bookmarkData = null"
+    />
+    <NoteViewerDialog
+      v-if="showNoteViewer"
+      @close="showNoteViewer = false"
+    />
     <ToastContainer />
   </div>
 </template>
