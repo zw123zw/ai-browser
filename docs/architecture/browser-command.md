@@ -396,7 +396,21 @@ function hasModalOverlay(doc: Document): boolean
 | 3 | 框架弹窗 | Bootstrap `.modal.show`、Element UI `.el-dialog__wrapper`、Ant Design `.ant-modal-wrap`、Material UI `.MuiDialog-root`、Vuetify `.v-dialog--active` |
 | 4 | 通用遮罩 | class/id 含 overlay/mask/modal-backdrop/dialog-mask，面积 > 50% 视口 |
 
-### 4.5 三重元素定位（findElement）
+### 4.5 元素需求分类
+
+`execute()` 入口根据 `action` 判断是否需要定位 DOM 元素：
+
+| 不需要元素的操作 | 说明 |
+|-----------------|------|
+| `navigate` | 通过 background 新标签页打开 |
+| `wait` | 纯定时器 |
+| `scroll` | 操作整个页面/容器 |
+| `keyboard` / `press` | 作用于 `document.activeElement` |
+| `newTab` / `closeTab` / `switchTab` / `nextTab` / `prevTab` | 委托 background |
+
+其余操作（`click`、`type`、`clear`、`select`、`focus`、`hover`、`video`）必须先通过 `findElement()` 定位元素，未找到则直接返回失败。
+
+### 4.6 三重元素定位（findElement）
 
 ```typescript
 private findElement(cmd: Command): HTMLElement | null
@@ -420,7 +434,7 @@ return null → 执行失败
 3. 匹配 `textContent`、`aria-label`、`title`、`placeholder` 四个属性
 4. 过滤不可见元素（display:none / visibility:hidden）
 
-### 4.6 点击执行（executeClick）
+### 4.7 点击执行（executeClick）
 
 ```typescript
 private async executeClick(el: HTMLElement): Promise<ActionResult>
@@ -446,25 +460,43 @@ pointerdown → mousedown → focus → pointerup → mouseup → click
 
 **window.open monkey-patching**：临时替换 `window.open`，检测事件处理器是否打开了新标签页，准确设置 `openedNewTab` 标志。
 
-### 4.7 输入执行（executeType）
+### 4.8 输入执行（executeType）
 
 ```typescript
 private async executeType(el: HTMLElement, text: string): Promise<ActionResult>
 ```
 
-**五种输入策略**（按优先级）：
+**三大类输入策略**（按优先级）：
 
-| 优先级 | 目标类型 | 策略 |
-|--------|----------|------|
-| 1 | CodeMirror | `cmElement.CodeMirror.setValue(text)` |
-| 2 | Monaco | `monacoElement.__editor.setValue(text)` |
-| 3 | Ace | `aceElement.env.editor.session.setValue(text)` |
-| 4 | contenteditable | `document.execCommand('selectAll')` + `document.execCommand('insertText')` |
-| 5 | 标准 input/textarea | `nativeInputValueSetter` + `input`/`change` 事件 |
+#### 1. 代码编辑器（CodeMirror 5/6、Monaco、Ace）
 
-**nativeInputValueSetter**：通过 `Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set` 获取原生 setter，绕过 React/Vue 受控组件对 value 赋值的拦截。
+content script 运行在隔离世界（isolated world），无法直接访问页面 JS 属性（如 `CodeMirror.setValue`）。采用三层降级策略：
 
-### 4.8 滚动执行（executeScroll）
+| 优先级 | 策略 | 原理 |
+|--------|------|------|
+| 1 | `document.execCommand('insertText')` | 最简单，部分编辑器支持 |
+| 2 | `ClipboardEvent('paste')` + `DataTransfer` | 通用兜底，模拟用户粘贴 |
+| 3 | `<script>` 注入（仅 CM5） | 注入 `document.querySelector('.CodeMirror').CodeMirror.setValue()` 到页面上下文 |
+
+编辑器检测：`el.closest('.CodeMirror, .cm-editor, .monaco-editor, .ace_editor')`
+
+#### 2. contenteditable 富文本编辑器
+
+Quill、TinyMCE、CKEditor、ProseMirror/TipTap、Draft.js、WangEditor、通用 contenteditable：
+
+```
+el.focus() → document.execCommand('selectAll') → document.execCommand('insertText', false, text)
+```
+
+检测：`el.isContentEditable` 或 `el.closest('[contenteditable="true"]')`
+
+#### 3. 标准 input / textarea
+
+通过 `Object.getOwnPropertyDescriptor(proto, 'value').set` 获取原生 setter，绕过 React/Vue 受控组件拦截。设置值后派发 `input` + `change` 事件。
+
+**兜底**：无法识别的编辑器类型返回失败，提示用户尝试其他操作方式。
+
+### 4.9 滚动执行（executeScroll）
 
 ```typescript
 private async executeScroll(direction: string, amount?: number): Promise<ActionResult>
@@ -505,7 +537,7 @@ await new Promise(resolve =>
 )
 ```
 
-### 4.9 键盘执行（executeKeyboard）
+### 4.10 键盘执行（executeKeyboard）
 
 ```typescript
 private async executeKeyboard(key: string): Promise<ActionResult>
@@ -528,7 +560,7 @@ private async executeKeyboard(key: string): Promise<ActionResult>
 1. 从 `activeElement` 向上找 `<form>`，调用 `form.requestSubmit()`
 2. 兜底：全局找搜索输入框（`input[type="search"]`、`input[name="q"]`、`input[name="keyword"]`、`input[name="wd"]`、`input[placeholder*="搜索"]`、`input[placeholder*="search"]`）并提交
 
-### 4.10 视频控制（executeVideo）
+### 4.11 视频控制（executeVideo）
 
 ```typescript
 private async executeVideo(el: HTMLElement, subAction: string, value?: number): Promise<ActionResult>
@@ -552,7 +584,7 @@ video 元素查找：先检查 el 本身是否为 `HTMLVideoElement`，再 `quer
 
 时间格式化：`formatTime()` 将秒数转为 `mm:ss` 格式。
 
-### 4.11 其他操作
+### 4.12 其他操作
 
 **executeSelect** — 下拉框选择：设置 `el.value` + 触发 `change` 事件。
 
@@ -560,13 +592,15 @@ video 元素查找：先检查 el 本身是否为 `HTMLVideoElement`，再 `quer
 
 **executeHover** — 悬停：派发完整鼠标事件链 `pointerover → pointerenter → mouseover → mouseenter → pointermove → mousemove`。
 
-**executeWait** — 等待：`setTimeout` 延迟指定毫秒。
+**executeWait** — 等待：`setTimeout` 延迟指定毫秒，支持 `AbortSignal` 中断（`signal.aborted` 时抛出 `AbortError`）。
 
 **executeNavigate** — 导航：通过 `chrome.runtime.sendMessage` 委托 background 新标签页打开（避免 popup 拦截）。
 
 **executeTabAction** — 标签页操作：通过 `chrome.runtime.sendMessage` 委托 background 执行 `newTab`/`closeTab`/`switchTab`。
 
-### 4.12 Skeleton ID 管理（skeleton-id.ts）
+**executeIframeAction** — iframe 操作：当 `elementId` 以 `f_` 前缀开头时，表示目标元素在 iframe 内。通过 `chrome.runtime.sendMessage({ type: 'execute-iframe-action' })` 委托 background 使用 `chrome.scripting.executeScript` 注入 `iframeActionFunc` 到目标 iframe 执行。支持 click、type、clear、select、focus、hover 六种操作。`iframeActionFunc` 是自包含函数，不依赖外部导入。
+
+### 4.13 Skeleton ID 管理（skeleton-id.ts）
 
 ```typescript
 // 模块级计数器，跨调用不重置
@@ -582,7 +616,7 @@ function initAllSkeletonIds(): void                         // 首次加载打�
 - `syncIdCounter()` 扫描已有 ID 同步计数器到最大值，避免 ID 冲突
 - 跳过标签：`script, style, noscript, meta, link, br, hr`
 
-### 4.13 全页骨架（local-html.ts）
+### 4.14 全页骨架（local-html.ts）
 
 ```typescript
 function extractFullPageSkeleton(): string | null

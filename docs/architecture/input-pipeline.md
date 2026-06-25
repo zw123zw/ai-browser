@@ -97,13 +97,14 @@ Phase 1 系统提示词定义 4 种输出格式：
 | `[FILE:xxx]...[/FILE]` | 文件输出 | 作为聊天消息返回 |
 | 直接回复 | 聊天/问答 | 作为聊天消息返回 |
 
+**Phase 1 流式输出优化**：Phase 1 流式输出时实时检测 `[action` 或 `[command` 关键词。一旦检测到操作标签，调用 `callbacks.onChatDelta('', undefined, true)` 清空已流式输出的内容（`clearContent=true`），用户只看到"思考中"而非半截标签文本。
+
 ```typescript
 export interface Phase1Detection {
   isChat: boolean
   responseText?: string
   rawText: string
-  commands?: Command[]        // 快速通道指令
-}
+  commands?: Command[]        // 快速通道指令（跳过 Phase 2）
 
 // Phase 1 快速通道：不需要页面骨架的指令
 // 路径：Phase 1 -> [command] -> ActionExecutor -> 完成
@@ -135,32 +136,72 @@ Phase 2 输出 3 种格式：
 ### 流式执行循环
 
 ```typescript
-const MAX_RETRY = 5
-const MAX_TOTAL_STEPS = 50
+const MAX_TOTAL_STEPS = 50  // 总执行次数上限（成功+失败+重试）
 
-// 核心循环：每次生成 1 条指令 -> 执行 -> 反馈 -> 下一条
 while (totalExecutions < MAX_TOTAL_STEPS) {
-  // 1. 提取骨架
-  const skeleton = this.skeletonManager.getSkeleton()
+  // ★ 多重 abort 检查点：循环开始 / 骨架提取后 / AI 请求后 / 指令执行后
+  if (signal?.aborted) throw new AbortError()
 
-  // 2. AI 生成指令
-  const result = await this.callStreamingAI(text, skeleton, completed, lastError, ...)
+  // 1. 提取骨架（含跨域 iframe 内元素）
+  const skeleton = await this.skeletonManager.getSkeletonWithIframes()
 
-  // 3. 处理结果
+  // 2. 选择模式：首次 / 继续 / 重试
+  const coreRule = isFirstEntry ? MODE_FIRST : (lastError ? MODE_RETRY : MODE_STREAMING)
+
+  // 3. AI 生成指令（带历史上下文，stripHeavyData 清理骨架 JSON）
+  const result = await this.callStreamingAI(text, skeleton, completed, lastError,
+    lastFailedCommand, lastFullSkeleton, coreRule, userInputContext)
+
+  // 4. 处理结果
+  // ── 无标签 → 任务完成 ──
+  if (!result.commands?.length && !result.needFull && !result.needInput) break
+
+  // ── need_input → 暂停，等待用户输入后继续 ──
+  if (result.needInput) {
+    userInputContext = await callbacks.onNeedInput(message)
+    continue
+  }
+
+  // ── command → 执行指令（支持单条 + 批量数组） ──
   if (result.commands?.length) {
-    // 执行指令
     for (const cmd of result.commands) {
-      const execResult = await this.executor.execute(cmd)
-      // ...
+      // 指令去重：key = action:url/elementId/description:text
+      const cmdKey = `${cmd.action}:${cmd.url || cmd.elementId || cmd.description || ''}:${cmd.text || ''}`
+      if (completedKeys.has(cmdKey)) continue
+
+      // ★ download/summarize → 独立处理流程，不走 ActionExecutor
+      if (cmd.action === 'download') { /* extractDataElements → AI → onFileOutput */ }
+      if (cmd.action === 'summarize') { /* extractPageText → AI → onChatDelta */ }
+
+      // ★ click + done:0 → 前置保存 queued task（跨标签页续接）
+      if (cmd.action === 'click' && cmd.done !== 1) {
+        await queuedTaskStorage.setValue(pendingTask)
+      }
+
+      const result = await this.executor.execute(cmd, signal)
+
+      // navigate → 保存任务到 storage，中断循环等待新页续接
+      if (cmd.action === 'navigate' && result.success) {
+        await queuedTaskStorage.setValue(task)
+        break  // 原标签页停止
+      }
+
+      // _blank 新开页 → 保留 queued task，中断循环
+      if (result.openedNewTab) break
+
+      // done:1 → 最后一步执行成功，直接结束
+      if (cmd.done === 1) break
+
+      // 等待页面更新（批量 200ms / 单条 500ms）
+      await sleep(isBatch ? 200 : 500, signal)
     }
   }
+
+  // ── need_full → 提取全页骨架后重试 ──
   if (result.needFull) {
-    // 提取全页骨架后重试
-    const fullSkeleton = extractFullPageSkeleton()
-  }
-  if (result.needInput) {
-    // 暂停等待用户输入
-    userInputContext = await callbacks.onNeedInput(message)
+    lastFullSkeleton = await extractFullPageSkeletonAsync()
+    totalExecutions++  // need_full 也计数
+    continue
   }
 }
 ```
@@ -177,10 +218,12 @@ Phase 2 支持数组格式的批量指令：
 ```
 
 批量执行逻辑：
-- `cmds` 数组逐条执行，`isBatch` 标记批量模式
-- `batchStopped` 标记：navigate / _blank / done:1 时中断批量
+- `cmds` 数组逐条执行，`isBatch = cmds.length > 1`
+- `batchStopped` 标记：navigate / _blank 新开页 / done:1 时中断批量
 - 批量模式下 sleep 缩短为 200ms（单条 500ms）
-- 指令去重：`completedKeys` Set 防止重复执行
+- 指令去重 key：`action:url/elementId/description:text`，`completedKeys` Set 防止重复执行
+- 单条失败走重试流程，批量失败跳过继续下一条
+- download/summarize 为特殊 action，不走 ActionExecutor，有独立的 DOM 提取 + AI 调用流程
 
 ## Tag Parser -- 标签提取
 
@@ -428,7 +471,11 @@ const systemPrompt = buildPhase2Prompt(automation).replace('{coreRule}', coreRul
 const userContent = buildStreamingUserMessage(text, skeleton, completed, lastError, lastFailedCommand, lastFullSkeleton, userInputContext)
 
 // 历史消息：最近 N 条（stripHeavyData 去掉骨架 JSON 减少 token）
-const messages = [...recentMsgs, { role: 'user', content: `${systemPrompt}\n\n${userContent}` }]
+// 注意：跳过最后一条 user 消息（已在 [原始请求] 中嵌入，避免重复）
+const messages = [...filteredRecentMsgs, { role: 'user', content: `${systemPrompt}\n\n${userContent}` }]
+```
+
+> `stripHeavyData` 在 `intent-detector.ts` 和 `pipeline.ts` 中各有一份（相同逻辑），清理历史消息中的系统提示词、`[页面骨架]` JSON、`[全页骨架]` JSON、`[失败指令]` JSON，保留 `[原始请求]`、`[已完成]`、`[上次错误]`、`[用户补充信息]`。
 ```
 
 `buildStreamingUserMessage` 消息结构：

@@ -25,7 +25,8 @@ docs/architecture/
 ├── translation.md         # 翻译系统
 ├── voice.md               # 语音系统
 ├── storage.md             # 存储层
-└── file-parsing.md        # 文件处理
+├── file-parsing.md        # 文件处理
+└── utils.md               # 工具函数
 ```
 
 ---
@@ -35,16 +36,17 @@ docs/architecture/
 | 文档 | 源文件 |
 |------|--------|
 | `README.md` | `package.json`, `entrypoints/background.ts`, `entrypoints/content/index.ts`, `entrypoints/content/App.vue` |
-| `browser-command.md` | `src/browser/types.ts`, `src/browser/skeleton.ts`, `src/browser/action-executor.ts`, `src/browser/local-html.ts`, `src/browser/index.ts` |
-| `input-pipeline.md` | `src/input/types.ts`, `src/input/router.ts`, `src/input/intent-detector.ts`, `src/input/pipeline.ts`, `src/input/tag-parser.ts`, `src/input/prompts/*.ts`, `src/input/index.ts`, `src/composables/usePipeline.ts` |
-| `ai-adapters.md` | `src/adapters/base.ts`, `src/adapters/openai.ts`, `src/adapters/qwen.ts`, `src/adapters/wenxin.ts`, `src/adapters/gemini.ts`, `src/adapters/doubao.ts`, `src/adapters/proxy.ts`, `src/adapters/index.ts` |
-| `state-management.md` | `src/stores/settings.ts`, `src/stores/conversations.ts`, `src/stores/voice.ts` |
+| `browser-command.md` | `src/browser/*.ts`（排除 `__tests__/` 和 `*.test.ts`） |
+| `input-pipeline.md` | `src/input/**/*.ts`, `src/composables/usePipeline.ts` |
+| `ai-adapters.md` | `src/adapters/*.ts` |
+| `state-management.md` | `src/stores/*.ts`, `src/utils/storage-sync.ts` |
 | `background-service.md` | `entrypoints/background.ts` |
-| `content-script.md` | `entrypoints/content/index.ts`, `entrypoints/content/App.vue`, `entrypoints/content/components/**/*.vue`, `src/composables/usePipeline.ts` |
-| `translation.md` | `src/browser/translate-service.ts`, `src/browser/translate-popup.ts`, `src/browser/translate-click.ts`, `src/browser/translate-parser.ts` |
-| `voice.md` | `src/voice/**/*` |
-| `storage.md` | `src/storage/index.ts` |
-| `file-parsing.md` | `src/utils/file-parsers.ts`, `src/utils/file-type.ts`, `src/utils/file-generators.ts`, `src/utils/file-tag-parser.ts`, `src/utils/echart-renderer.ts`, `src/utils/ocr.ts` |
+| `content-script.md` | `entrypoints/content/index.ts`, `entrypoints/content/App.vue`, `entrypoints/content/components/**/*.vue`, `src/composables/usePipeline.ts`, `src/composables/useToast.ts` |
+| `translation.md` | `src/browser/translate-*.ts`, `src/browser/code-filter.ts` |
+| `voice.md` | `src/voice/**/*.ts` |
+| `storage.md` | `src/storage/**/*.ts`, `src/utils/storage-sync.ts` |
+| `file-parsing.md` | `src/utils/file-*.ts`, `src/utils/echart-renderer.ts`, `src/utils/ocr.ts` |
+| `utils.md` | `src/utils/logger.ts`, `src/utils/log-storage.ts`, `src/utils/cache.ts`, `src/utils/shortcut.ts`, `src/utils/markdown.ts` |
 
 ---
 
@@ -59,26 +61,40 @@ docs/architecture/
 ### 变化检测
 
 ```bash
-# 方式1：git diff 检测变化的源文件
-git diff --name-only HEAD~1 -- src/ entrypoints/
+# 方式1：git diff 检测变化的源文件（含未提交的改动）
+git diff --name-only HEAD -- src/ entrypoints/
+git diff --name-only --cached -- src/ entrypoints/
+git ls-files --others --exclude-standard -- src/ entrypoints/
 
 # 方式2：检测最近修改的文件（fallback）
 find src/ entrypoints/ -name "*.ts" -o -name "*.vue" -newer docs/architecture/README.md
 ```
+
+**注意：必须同时检查已暂存、已修改、未跟踪的文件，不能只看 HEAD~1。**
 
 ### 增量流程
 
 ```
 1. 扫描 src/ 和 entrypoints/ 目录，获取当前所有模块
 2. 读取 docs/architecture/ 已有文档列表
-3. 检测源文件变化（git diff 或 mtime）
+3. 检测源文件变化（git diff + git ls-files --others）
 4. 匹配模块映射表，确定需要更新的文档集合
-5. 只读取变化模块的源文件，重新生成对应文档
-6. 检测新增模块（有目录但无文档）→ 生成新文档
+5. ★ 读取变化模块的【所有】源文件（不是只读变化的文件），重新生成对应文档
+6. 检测新增模块（有目录但无文档）→ 读取所有源文件，生成新文档
 7. 检测已删除模块（有文档但源目录已不存在）→ 删除孤立文档
 8. 更新 README.md（模块列表可能变化）
 9. 同步根目录 README.md
 ```
+
+### ⚠️ 关键规则：必须读取模块内所有源文件
+
+**增量模式不等于只读变化的文件。** 当确定某个模块需要更新时：
+
+1. 用 `Glob` 扫描该模块目录下所有 `.ts` 文件（排除 `__tests__/` 和 `.test.ts`）
+2. 用 `Read` 逐个读取每个源文件的完整内容
+3. 基于所有源文件的完整理解生成文档
+
+**禁止：只读 diff 中变化的 1-2 个文件就写文档。** 这会导致遗漏跨文件依赖、类型定义、设计模式。
 
 ### 新增模块处理
 
@@ -213,3 +229,49 @@ find src/ entrypoints/ -name "*.ts" -o -name "*.vue" -newer docs/architecture/RE
 6. **关键设计决策** — 架构层面的重要选择和原因
 
 同步到根目录 README.md 时，模块链接使用 `./docs/architecture/` 前缀。
+
+---
+
+## 常见错误与避免
+
+### ❌ 错误 1：只读变化的文件就写文档
+
+```
+# 错误做法
+git diff → 发现 skeleton.ts 变了 → 只读 skeleton.ts → 重写 browser-command.md
+```
+
+**后果：** 遗漏 `action-executor.ts`、`code-filter.ts`、`skeleton-id.ts` 等同模块文件的内容。
+
+```
+# 正确做法
+git diff → 发现 skeleton.ts 变了 → 读取 src/browser/ 下所有 .ts 文件 → 重写 browser-command.md
+```
+
+### ❌ 错误 2：只检查 HEAD~1 的 diff
+
+```
+# 错误做法
+git diff --name-only HEAD~1 -- src/
+```
+
+**后果：** 未 commit 的改动、多次 commit 的累积变化被遗漏。
+
+```
+# 正确做法（三合一检查）
+git diff --name-only HEAD -- src/           # 已修改未暂存
+git diff --name-only --cached -- src/       # 已暂存未提交
+git ls-files --others --exclude-standard    # 未跟踪的新文件
+```
+
+### ❌ 错误 3：凭记忆写文档，不读源码
+
+**后果：** 函数签名、类型定义、常量值与代码不一致。
+
+**规则：** 每次生成文档前，必须用 `Read` 工具读取源文件。读完再写，不读不写。
+
+### ❌ 错误 4：映射表遗漏文件
+
+**后果：** 新增的文件（如 `code-filter.ts`、`storage-sync.ts`）不在映射表中，增量更新时不会被读取。
+
+**规则：** 映射表用 `src/module/*.ts` 通配符，而不是逐个列出文件名。新增文件自动纳入。
