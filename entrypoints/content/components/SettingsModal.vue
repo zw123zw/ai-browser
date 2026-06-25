@@ -91,15 +91,16 @@ const md = new MarkdownIt({ html: false, linkify: true, typographer: true });
 async function openDocs() {
   showDocs.value = true;
   docsLoading.value = true;
+  const guideFile = locale.value === 'en-US' ? 'guide-en.md' : 'guide-zh.md';
   try {
-    const resp = await fetch(chrome.runtime.getURL('guide.md'));
+    const resp = await fetch(chrome.runtime.getURL(guideFile));
     if (resp.ok) {
       docsHtml.value = md.render(await resp.text());
     } else {
-      docsHtml.value = '<p>文档加载失败</p>';
+      docsHtml.value = '<p>文档加载失败 / Failed to load guide</p>';
     }
   } catch {
-    docsHtml.value = '<p>文档加载失败</p>';
+    docsHtml.value = '<p>文档加载失败 / Failed to load guide</p>';
   }
   docsLoading.value = false;
 }
