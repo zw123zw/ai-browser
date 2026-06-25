@@ -172,18 +172,18 @@ html[data-lang="en"] .nav-link[data-lang="zh"] { display: none; }
 
 guide.md 的每个章节对应一组源文件，用于增量检测：
 
-| 章节 | 关键源文件 |
+| 章节 | 关键源文件（用通配符覆盖目录下所有文件） |
 |------|-----------|
 | 快速开始 | `package.json`, `entrypoints/content/index.ts`, `entrypoints/content/App.vue` |
-| AI 对话 | `src/input/pipeline.ts`, `src/input/router.ts`, `src/composables/usePipeline.ts`, `entrypoints/content/components/ChatPanel.vue`, `entrypoints/content/components/MessageList.vue`, `entrypoints/content/components/InputBar.vue`, `entrypoints/content/components/EmptyChat.vue` |
-| 网页自动化 | `src/automation/**/*`, `src/browser/action-executor.ts`, `src/browser/skeleton.ts` |
-| 语音控制 | `src/voice/**/*`, `entrypoints/content/components/VoicePanel.vue` |
-| 智能翻译 | `src/browser/translate-service.ts`, `src/browser/translate-popup.ts`, `src/browser/translate-click.ts`, `src/browser/translate-parser.ts` |
-| 文件处理 | `src/utils/file-parsers.ts`, `src/utils/file-type.ts`, `src/utils/file-generators.ts`, `src/utils/file-tag-parser.ts`, `src/utils/ocr.ts` |
+| AI 对话 | `src/input/**/*.ts`, `src/composables/usePipeline.ts`, `entrypoints/content/components/Chat*.vue`, `entrypoints/content/components/Message*.vue`, `entrypoints/content/components/Input*.vue`, `entrypoints/content/components/Empty*.vue` |
+| 网页自动化 | `src/automation/**/*.ts`, `src/browser/action-executor.ts`, `src/browser/skeleton*.ts` |
+| 语音控制 | `src/voice/**/*.ts`, `entrypoints/content/components/Voice*.vue` |
+| 智能翻译 | `src/browser/translate-*.ts`, `src/browser/code-filter.ts` |
+| 文件处理 | `src/utils/file-*.ts`, `src/utils/ocr.ts`, `src/utils/echart-renderer.ts` |
 | 图表生成 | `src/utils/echart-renderer.ts`, `src/utils/file-generators.ts` |
-| 设置说明 | `entrypoints/content/components/SettingsModal.vue`, `src/stores/settings.ts`, `src/themes.ts` |
+| 设置说明 | `entrypoints/content/components/Settings*.vue`, `src/stores/settings.ts`, `src/themes.ts` |
 | 主题 | `src/themes.ts`, `src/styles/global.css` |
-| 快捷命令 | `src/input/prompts/common.ts`, `src/input/tag-parser.ts` |
+| 快捷命令 | `src/input/prompts/**/*.ts`, `src/input/tag-parser.ts`, `src/input/router.ts` |
 | 使用技巧 | 依赖以上所有模块变化 |
 | 常见问题 | 依赖以上所有模块变化 |
 
@@ -191,11 +191,11 @@ guide.md 的每个章节对应一组源文件，用于增量检测：
 
 ```
 1. 读取现有 guide.md，按 ## 标题拆分为章节列表
-2. 用 git diff 或文件 mtime 检测自上次生成以来哪些源文件有变化
+2. 用 git diff + git ls-files --others 检测自上次生成以来哪些源文件有变化
 3. 匹配章节映射表，确定需要更新的章节集合
-4. 只重新生成有变化的章节内容（读取对应源文件 → 重新写该章节）
+4. ★ 读取变化章节涉及的【所有】源文件（不是只读变化的文件），重新生成该章节
 5. 未变化的章节保留原样
-6. 检测新增模块（有源文件但无对应章节）→ 追加新章节
+6. 检测新增模块（有源文件但无对应章节）→ 读取所有源文件，追加新章节
 7. 检测已删除功能（有章节但源文件已不存在）→ 移除该章节
 8. 基于更新后的 guide.md 重新生成 guide.html
 ```
@@ -205,12 +205,16 @@ guide.md 的每个章节对应一组源文件，用于增量检测：
 优先使用 `git diff`（精确），回退到文件 mtime：
 
 ```bash
-# 方式1：git diff 检测变化的源文件
-git diff --name-only HEAD~1 -- src/ entrypoints/ | head -50
+# 方式1：git diff 检测变化的源文件（含未提交改动）
+git diff --name-only HEAD -- src/ entrypoints/ | head -50           # 已修改未暂存
+git diff --name-only --cached -- src/ entrypoints/ | head -50       # 已暂存未提交
+git ls-files --others --exclude-standard -- src/ entrypoints/ | head -50  # 未跟踪新文件
 
 # 方式2：检测最近修改的文件（fallback）
 find src/ entrypoints/ -name "*.ts" -o -name "*.vue" -newer docs/site/guide.md | head -50
 ```
+
+**注意：必须同时检查已暂存、已修改、未跟踪的文件，不能只看 HEAD~1。**
 
 ### 增量报告
 
@@ -249,16 +253,19 @@ git tag --sort=-creatordate | head -1
 
 并行读取所有组件和功能入口文件：
 
-| 目的 | 路径 |
+| 目的 | 路径（用 Glob 扫描，再逐个 Read） |
 |------|------|
 | UI 组件 | `entrypoints/content/components/*.vue` |
-| 命令定义 | `src/input/prompts/common.ts` |
-| 浏览器命令 | `src/browser/action-executor.ts` |
-| AI 提供商 | `src/types.ts` (Provider, AppSettings) |
-| 语音命令 | `src/voice/commandParser.ts` |
-| 翻译功能 | `src/browser/translate-service.ts`, `src/browser/translate-click.ts` |
-| 文件类型 | `src/utils/file-parsers.ts`, `src/utils/file-type.ts` |
-| 主题 | `src/themes.ts` |
+| 输入系统 | `src/input/**/*.ts` |
+| 浏览器命令 | `src/browser/*.ts`（排除 `__tests__/` 和 `*.test.ts`） |
+| AI 适配器 | `src/adapters/*.ts` |
+| 语音功能 | `src/voice/**/*.ts` |
+| 翻译功能 | `src/browser/translate-*.ts`, `src/browser/code-filter.ts` |
+| 文件处理 | `src/utils/file-*.ts`, `src/utils/ocr.ts`, `src/utils/echart-renderer.ts` |
+| 存储与状态 | `src/stores/*.ts`, `src/storage/**/*.ts`, `src/utils/storage-sync.ts` |
+| 工具函数 | `src/utils/logger.ts`, `src/utils/cache.ts`, `src/utils/shortcut.ts`, `src/utils/markdown.ts` |
+| 主题样式 | `src/themes.ts`, `src/styles/global.css` |
+| 类型定义 | `src/types.ts` |
 | PRD | `.trellis/tasks/*/prd.md` |
 
 扫描时提取每个组件的：
@@ -270,15 +277,32 @@ git tag --sort=-creatordate | head -1
 ### Step 2b: 增量扫描
 
 ```bash
-# 检测变化的源文件
-git diff --name-only HEAD~1 -- src/ entrypoints/ 2>/dev/null || \
+# 检测变化的源文件（必须同时检查已暂存、已修改、未跟踪文件）
+git diff --name-only HEAD -- src/ entrypoints/ 2>/dev/null
+git diff --name-only --cached -- src/ entrypoints/ 2>/dev/null
+git ls-files --others --exclude-standard -- src/ entrypoints/ 2>/dev/null
+# fallback: 文件 mtime
 find src/ entrypoints/ -name "*.ts" -o -name "*.vue" -newer docs/site/guide.md
 ```
 
 1. 读取现有 `docs/site/guide.md`，按 `##` 标题拆分为章节
 2. 匹配章节映射表，确定需要更新的章节
-3. 只读取变化章节对应的源文件
+3. ★ **读取变化章节对应的【所有】源文件**（不是只读变化的文件），详见下方规则
 4. 检测新增模块/已删除模块
+
+### ⚠️ 关键规则：必须读取章节涉及的所有源文件
+
+**增量模式不等于只读变化的文件。** 当确定某个章节需要更新时：
+
+1. 用 `Glob` 扫描该章节映射表中列出的**所有目录**下的 `.ts` / `.vue` 文件
+2. 用 `Read` 逐个读取每个源文件的完整内容
+3. 基于所有源文件的完整理解重新生成该章节
+
+**示例：** "AI 对话"章节映射了 `src/input/` 和 `src/composables/`，如果 `pipeline.ts` 变了：
+- ❌ 错误：只读 `pipeline.ts` → 重写章节
+- ✅ 正确：读取 `src/input/` 下所有 `.ts` + `src/composables/usePipeline.ts` → 重写章节
+
+**禁止：只读 diff 中变化的 1-2 个文件就写章节。** 这会导致功能描述不全、触发示例遗漏。
 
 ### Step 3: 生成使用指南（guide.md + guide.html）
 
@@ -354,3 +378,53 @@ find src/ entrypoints/ -name "*.ts" -o -name "*.vue" -newer docs/site/guide.md
 - ❌ 内部架构（适配器、骨架、SSE、存储 key）
 - ❌ 实现参数（防抖间隔、重试次数、最大步数等）
 - ❌ 开发命令（dev/build/test）
+
+---
+
+## 常见错误与避免
+
+### ❌ 错误 1：只读变化的文件就写章节
+
+```
+# 错误做法
+git diff → 发现 pipeline.ts 变了 → 只读 pipeline.ts → 重写"AI 对话"章节
+```
+
+**后果：** 遗漏 `router.ts`、`tag-parser.ts`、`usePipeline.ts` 等同章节文件的功能描述。
+
+```
+# 正确做法
+git diff → 发现 pipeline.ts 变了 → 读取 src/input/ 下所有 .ts + src/composables/usePipeline.ts → 重写章节
+```
+
+### ❌ 错误 2：只检查 HEAD~1 的 diff
+
+```
+# 错误做法
+git diff --name-only HEAD~1 -- src/
+```
+
+**后果：** 未 commit 的改动、多次 commit 的累积变化被遗漏。
+
+```
+# 正确做法（三合一检查）
+git diff --name-only HEAD -- src/           # 已修改未暂存
+git diff --name-only --cached -- src/       # 已暂存未提交
+git ls-files --others --exclude-standard    # 未跟踪的新文件
+```
+
+### ❌ 错误 3：凭记忆写文档，不读源码
+
+**后果：** 功能描述过时、触发示例错误、遗漏新增功能。
+
+**规则：** 每次生成章节前，必须用 `Read` 工具读取源文件。读完再写，不读不写。
+
+### ❌ 错误 4：映射表用具体文件名而非通配符
+
+```
+# 错误做法 — 新增文件不会被自动覆盖
+| AI 对话 | src/input/pipeline.ts, src/input/router.ts |
+
+# 正确做法 — 新增文件自动纳入
+| AI 对话 | src/input/**/*.ts |
+```
