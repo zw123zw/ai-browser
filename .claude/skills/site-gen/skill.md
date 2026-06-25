@@ -1,6 +1,6 @@
 ---
 name: site-gen
-description: "扫描项目代码和 PRD，生成使用指南（guide.md + guide.html），输出到 docs/site/ 文件夹。支持增量更新。"
+description: "扫描项目代码和 PRD，生成中英双语使用指南（guide.md + guide.html），输出到 docs/site/ 文件夹。支持增量更新。"
 ---
 
 # Site Gen — 使用文档生成
@@ -47,6 +47,116 @@ docs/site/
 - **每个功能配触发示例** — 用户该怎么说/输入才能触发对应功能
 - **截图标记保留** — `📸 截图：xxx` 方便后续补图
 - **HTML 自包含** — 单文件、内联样式、无外部依赖，可离线浏览
+- **中英双语** — 所有用户可见文本必须同时提供中文和英文版本
+
+---
+
+## 中英双语实现方案
+
+### 原则
+
+- 所有用户可见文本用 `[data-lang]` 属性包裹中英文版本
+- 不需要翻译的元素（代码、品牌名、技术术语、URL）不加属性，始终显示
+- 默认显示中文，用户可通过切换按钮切换到英文
+- 语言偏好持久化到 `localStorage`
+
+### guide.md 双语格式
+
+```markdown
+## 1. 🚀 快速开始 / Quick Start
+
+安装扩展后，点击工具栏图标即可开始使用。
+
+> After installing the extension, click the toolbar icon to get started.
+
+### 1.1 安装 / Installation
+
+从 Chrome 应用商店安装小灵扩展。
+
+> Install LingBot from the Chrome Web Store.
+```
+
+规则：
+- `##` 和 `###` 标题：中文 / English 用 ` / ` 分隔
+- 正文段落：中文段落后紧跟 `>` 引用块写英文翻译
+- 表格：每行中文后紧跟一行英文（用 `<!-- en -->` 注释标记）
+- 触发示例：中文示例后紧跟英文示例
+
+### guide.html 双语 HTML 结构
+
+```html
+<!-- 短文本（标题、按钮、标签） -->
+<h2>
+  <span data-lang="zh">🚀 快速开始</span>
+  <span data-lang="en">🚀 Quick Start</span>
+</h2>
+
+<!-- 段落 -->
+<p data-lang="zh">安装扩展后，点击工具栏图标即可开始使用。</p>
+<p data-lang="en">After installing the extension, click the toolbar icon to get started.</p>
+
+<!-- 列表项 -->
+<li data-lang="zh">支持多种 AI 模型</li>
+<li data-lang="en">Supports multiple AI models</li>
+
+<!-- 表格行 -->
+<tr data-lang="zh"><td>功能</td><td>说明</td></tr>
+<tr data-lang="en"><td>Feature</td><td>Description</td></tr>
+
+<!-- 触发示例 -->
+<div class="trigger-tip" data-lang="zh">💡 试试这样说：...</div>
+<div class="trigger-tip" data-lang="en">💡 Try saying: ...</div>
+
+<!-- 不翻译的元素（代码、品牌名、技术术语） -->
+<code>npm install</code>  <!-- 始终显示，不加 data-lang -->
+<span>LingBot</span>     <!-- 品牌名，始终显示 -->
+```
+
+### guide.html 双语 CSS（追加到 `<style>` 末尾）
+
+```css
+/* ===== i18n Language Toggle ===== */
+[data-lang="en"] { display: none; }
+html[data-lang="en"] [data-lang="en"] { display: revert; }
+html[data-lang="en"] [data-lang="zh"] { display: none; }
+html[data-lang="en"] .nav-link[data-lang="en"] { display: block; }
+html[data-lang="en"] .nav-link[data-lang="zh"] { display: none; }
+.lang-toggle {
+  padding: 4px 10px; border: 1px solid var(--border);
+  border-radius: 6px; background: var(--bg-soft);
+  color: var(--text); font-size: 13px; cursor: pointer;
+  transition: background .2s;
+}
+.lang-toggle:hover { background: var(--border); }
+```
+
+### guide.html 双语 JS（追加到 `<script>` 末尾）
+
+```js
+/* ===== i18n Language Toggle ===== */
+(function() {
+  const saved = localStorage.getItem('aib-lang') || 'zh';
+  document.documentElement.dataset.lang = saved;
+  const btn = document.querySelector('.lang-toggle');
+  if (btn) {
+    btn.textContent = saved === 'zh' ? 'EN' : '中';
+    btn.addEventListener('click', function() {
+      const next = document.documentElement.dataset.lang === 'zh' ? 'en' : 'zh';
+      document.documentElement.dataset.lang = next;
+      localStorage.setItem('aib-lang', next);
+      btn.textContent = next === 'zh' ? 'EN' : '中';
+    });
+  }
+})();
+```
+
+### guide.html 切换按钮位置
+
+在 header 的 `.header-actions` 中，搜索框左侧插入：
+
+```html
+<button class="lang-toggle" title="Switch Language">EN</button>
+```
 
 ---
 
@@ -175,36 +285,42 @@ find src/ entrypoints/ -name "*.ts" -o -name "*.vue" -newer docs/site/guide.md
 > **⚠️ 强制规则：每次执行必须同时更新 guide.md 和 guide.html，禁止只更新其中一个。**
 > **⚠️ 强制规则：guide.html 必须基于最新的 guide.md 内容生成，内容必须完全一致。**
 
-**全量模式** — 完整生成 `docs/site/guide.md`，结构：
+**全量模式** — 完整生成 `docs/site/guide.md`（中英双语），结构：
 
 ```
-# {产品名称} 使用指南
+# {产品名称} 使用指南 / User Guide
 
-> {产品描述}
+> {产品描述} / {Description in English}
 
-## 1. 🚀 快速开始
-## 2. 💬 AI 对话
-## 3. 🌐 网页自动化
-## 4. 🎤 语音控制
-## 5. 🌍 智能翻译
-## 6. 📎 文件处理
-## 7. 📊 图表生成与文件输出
-## 8. ⚙️ 设置说明
-## 9. 🎨 主题
-## 10. ⌨️ 快捷命令
-## 11. 💡 使用技巧
-## 12. ❓ 常见问题
+## 1. 🚀 快速开始 / Quick Start
+## 2. 💬 AI 对话 / AI Chat
+## 3. 🌐 网页自动化 / Web Automation
+## 4. 🎤 语音控制 / Voice Control
+## 5. 🌍 智能翻译 / Smart Translation
+## 6. 📎 文件处理 / File Processing
+## 7. 📊 图表生成与文件输出 / Charts & File Output
+## 8. ⚙️ 设置说明 / Settings
+## 9. 🎨 主题 / Themes
+## 10. ⌨️ 快捷命令 / Quick Commands
+## 11. 💡 使用技巧 / Tips
+## 12. ❓ 常见问题 / FAQ
 ```
 
 **增量模式** — 只替换有变化的章节，保留未变化的。
 
-**每个章节必须包含「触发示例」区块：**
+**每个章节必须包含「触发示例」区块（中英双语）：**
 
 ```markdown
 > **💡 试试这样说：**
 >
 > - "滚动到页面底部"
 > - "帮我打开百度，搜索 AI 新闻"
+> - "/navigate https://github.com"
+
+> **💡 Try saying:**
+>
+> - "Scroll to the bottom of the page"
+> - "Open Baidu and search for AI news"
 > - "/navigate https://github.com"
 ```
 
@@ -213,7 +329,8 @@ find src/ entrypoints/ -name "*.ts" -o -name "*.vue" -newer docs/site/guide.md
 - 左侧固定目录导航 + 顶部搜索框
 - 表格斑马纹、代码块复制按钮
 - 深色/浅色主题切换
-- 页头：SVG Logo + 产品名称（package.json）+ 版本号（git tag）
+- **中英双语切换**（`[data-lang]` 属性 + 切换按钮 + localStorage 持久化）
+- 页头：SVG Logo + 产品名称（package.json）+ 版本号（git tag）+ **语言切换按钮**
 - 页脚：`← 返回首页`（链接 index.html）+ GitHub + 下载 + 生成日期
 - 触发示例用 `.trigger-tip` 样式（💡 图标 + 蓝色左边框）
 
@@ -221,14 +338,14 @@ find src/ entrypoints/ -name "*.ts" -o -name "*.vue" -newer docs/site/guide.md
 
 ## 内容标准
 
-每个功能必须包含：
-1. **是什么** — 一句话说明
-2. **怎么用** — 操作步骤
-3. **触发示例** — 用户该怎么说/输入（`> **💡 试试这样说：**`）
-4. **使用示例** — 具体场景
-5. **效果/反馈** — 操作后看到什么
+每个功能必须包含（中英双语）：
+1. **是什么 / What** — 一句话说明
+2. **怎么用 / How** — 操作步骤
+3. **触发示例 / Try** — 用户该怎么说/输入（`> **💡 试试这样说：** / Try saying:`）
+4. **使用示例 / Example** — 具体场景
+5. **效果/反馈 / Feedback** — 操作后看到什么
 6. **📸 截图** — 截图占位
-7. **⚠️ 注意** — 仅在有坑时写
+7. **⚠️ 注意 / Note** — 仅在有坑时写
 
 ### 不写的内容
 

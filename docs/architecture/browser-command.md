@@ -54,7 +54,13 @@ src/browser/
 ├── skeleton-id.ts      # data-skeleton-id 打标工具（模块级计数器）
 ├── skeleton.ts         # 语义骨架提取器 + SkeletonManager
 ├── action-executor.ts  # 指令执行引擎（ActionExecutor）
-└── local-html.ts       # 全页骨架提取（[need_full] 兜底）
+├── local-html.ts       # 全页骨架提取（[need_full] 兜底）
+├── code-filter.ts      # 代码内容过滤器（翻译防误翻，三层过滤）
+├── translate-service.ts    # 翻译服务（选中翻译 + 自动翻译）
+├── translate-popup.ts      # 选中翻译浮动弹窗 UI
+├── translate-click.ts      # 点击翻译（语义块检测 + WeakMap 缓存）
+├── translate-parser.ts     # 翻译结果解析器（三层容错）
+└── skeleton.test.ts        # 骨架提取单元测试（Vitest）
 ```
 
 ---
@@ -132,6 +138,35 @@ graph TB
 - **优点**：永不过期，不存在 DOM 变化后缓存失效的问题，实现简单可靠。
 - **代价**：每次提取的 DOM 扫描开销（通过 `MAX_SKELETON_ELEMENTS = 200` 上限控制）。
 - **动机**：SPA 应用 DOM 频繁变化，缓存管理的复杂度远大于重新扫描的成本。
+
+#### SkeletonManager API
+
+```typescript
+class SkeletonManager {
+  // 视口骨架（仅可见区域，上限 200 元素）
+  getSkeleton(): SemanticSkeleton
+
+  // 全页骨架（无元素上限）
+  getFullSkeleton(): SemanticSkeleton
+
+  // 视口骨架 + 跨域 iframe 元素（通过 chrome.scripting 注入）
+  async getSkeletonWithIframes(): Promise<SemanticSkeleton>
+
+  // 全页骨架 + 跨域 iframe 元素
+  async getFullSkeletonWithIframes(): Promise<SemanticSkeleton>
+
+  invalidate(): void   // 无操作（无缓存设计）
+  dispose(): void      // 无操作（接口兼容）
+  cachedUrl: string    // 始终返回 ''（接口兼容）
+}
+```
+
+独立提取函数（不依赖 SkeletonManager 实例）：
+
+```typescript
+function extractSkeleton(doc: Document, scope?: SkeletonScope): SemanticSkeleton
+function extractFullSkeleton(doc: Document): SemanticSkeleton  // scope='full' 的便捷封装
+```
 
 #### 三重元素定位
 
@@ -537,9 +572,10 @@ video 元素查找：先检查 el 本身是否为 `HTMLVideoElement`，再 `quer
 // 模块级计数器，跨调用不重置
 let idCounter = 0
 
-function ensureSkeletonId(el: HTMLElement): string   // 单元素打标
-function ensureAllSkeletonIds(): void                 // 全量打标
-function initAllSkeletonIds(): void                   // 首次加载打标（带日志）
+function ensureSkeletonId(el: HTMLElement): string         // 单元素打标
+function ensureAllSkeletonIds(): void                       // 全量打标（document）
+function ensureAllSkeletonIdsForDoc(doc: Document): void    // 指定 Document 打标（用于同源 iframe）
+function initAllSkeletonIds(): void                         // 首次加载打标（带日志）
 ```
 
 - ID 格式：`e1`, `e2`, `e3`, ...（`data-skeleton-id` 属性）
@@ -698,7 +734,7 @@ sequenceDiagram
 | 参数 | 值 | 位置 | 说明 |
 |------|-----|------|------|
 | `MAX_SKELETON_ELEMENTS` | 200 | skeleton.ts | 视口骨架最大元素数 |
-| `MAX_HREF_LENGTH` | 80 | skeleton.ts | href 截断长度 |
+| `MAX_HREF_LENGTH` | 200 | skeleton.ts | href 截断长度 |
 | `MAX_PLACEHOLDER_LENGTH` | 50 | skeleton.ts | placeholder 截断长度 |
 | `MAX_VALUE_LENGTH` | 20 | skeleton.ts | value 截断长度 |
 | text 截断长度 | 100 | skeleton.ts `getDirectText` | 用户可见文字截断 |

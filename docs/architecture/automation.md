@@ -35,10 +35,10 @@
 │  ┌────────────────────────────────────────────────┐  │
 │  │            Selector Collections                │  │
 │  │                                                │  │
-│  │  SEARCH_INPUT_SELECTORS   (12 selectors)       │  │
-│  │  SEARCH_RESULT_SELECTORS  (13 selectors)       │  │
-│  │  NEXT_PAGE_SELECTORS      (8 selectors)        │  │
-│  │  PREV_PAGE_SELECTORS      (7 selectors)        │  │
+│  │  SEARCH_INPUT_SELECTORS   (14 selectors)       │  │
+│  │  SEARCH_RESULT_SELECTORS  (14 selectors)       │  │
+│  │  NEXT_PAGE_SELECTORS      (10 selectors)       │  │
+│  │  PREV_PAGE_SELECTORS      (8 selectors)        │  │
 │  │                                                │  │
 │  │  findElement(selectors)  -> first match         │  │
 │  │  findElements(selectors) -> first group match   │  │

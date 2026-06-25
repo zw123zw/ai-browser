@@ -75,9 +75,9 @@ interface TranslateResult {
 4. `restorePlaceholders()` 回填代码占位符
 5. 返回译文字符串
 
-#### 自动翻译 (translateVisible)
+#### 自动翻译 (translateVisible / translateIncremental)
 
-基于 IntersectionObserver 的批量翻译流程：
+基于 IntersectionObserver 的批量翻译流程。`translateIncremental()` 是 `translateVisible()` 的别名（接口兼容）：
 
 1. `ensureAllSkeletonIds()` 全量打标（`data-skeleton-id` 属性）
 2. `extractAllTextElements()` 提取页面所有文本元素

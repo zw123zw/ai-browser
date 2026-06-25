@@ -136,7 +136,7 @@ Phase 2 输出 3 种格式：
 
 ```typescript
 const MAX_RETRY = 5
-const MAX_TOTAL_STEPS = 20
+const MAX_TOTAL_STEPS = 50
 
 // 核心循环：每次生成 1 条指令 -> 执行 -> 反馈 -> 下一条
 while (totalExecutions < MAX_TOTAL_STEPS) {

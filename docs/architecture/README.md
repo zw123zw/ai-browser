@@ -18,7 +18,7 @@ LingBot Browser is a Chrome extension that combines AI-powered chat, voice inter
 | Type System | TypeScript + vue-tsc | Static analysis and compile-time checks |
 | Styling | Pure CSS (`aib-` prefixed) | Scoped styles in Shadow DOM |
 | Storage | `wxt/storage` + `chrome.storage.local` | Persistent and session storage with cross-tab sync |
-| Voice | Web Speech API + MediaRecorder | Dual-engine speech recognition and TTS |
+| Voice | Sherpa-onnx WASM + Web Speech API | Dual-engine speech recognition (local WASM primary, browser API fallback) + TTS |
 | Architecture | Manifest V3 Service Worker | Background processing and CORS proxy |
 
 ## Layered Architecture
@@ -95,6 +95,8 @@ graph TB
 | File Processing | Parsing, generation, OCR, charts | [file-parsing.md](./file-parsing.md) |
 | Voice Automation | Action execution, selector adaptation | [automation.md](./automation.md) |
 | Internationalization | Chinese/English, reactive language switching | [i18n.md](./i18n.md) |
+| Composables | usePipeline (AI orchestration), useToast (notifications) | [state-management.md](./state-management.md) |
+| Utilities | Logger, storage-sync, cache, markdown, OCR, ECharts, file parsers | [file-parsing.md](./file-parsing.md) |
 
 ## Data Flow
 
@@ -123,15 +125,18 @@ Input Pipeline (src/input/)
 ### Voice Interaction Flow
 
 ```
-Voice Input (Web Speech API / MediaRecorder)
+Voice Input (Sherpa-onnx WASM / Web Speech API fallback)
     |
     v
-Voice Manager (state machine)
-    |-- Wake word detection
-    |-- Continuous / push-to-talk mode
+Voice Session (state machine: IDLE → LISTENING → PROCESSING → SPEAKING → loop)
     |
     v
-Transcription --> Input Pipeline --> (standard flow above)
+Transcription --> AI Intent Detection --> Command Parser (【code】blocks)
+    |                                          |
+    |                                    Automation Actions
+    |                                          |
+    v                                          v
+Input Pipeline (standard flow)          executeAutomationAction()
     |
     v
 TTS Output (speechSynthesis) <-- AI response text

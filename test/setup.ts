@@ -24,6 +24,7 @@ const chromeMock = {
       set: vi.fn().mockResolvedValue(undefined),
       remove: vi.fn().mockResolvedValue(undefined),
       clear: vi.fn().mockResolvedValue(undefined),
+      getBytesInUse: vi.fn().mockResolvedValue(0),
     },
     sync: {
       get: vi.fn().mockResolvedValue({}),
@@ -77,6 +78,22 @@ class MockSpeechRecognition {
 globalThis.SpeechRecognition = MockSpeechRecognition
 // @ts-ignore
 globalThis.webkitSpeechRecognition = MockSpeechRecognition
+
+// SpeechSynthesisUtterance mock
+class MockSpeechSynthesisUtterance {
+  text = ''
+  lang = 'zh-CN'
+  rate = 1.0
+  volume = 1.0
+  onstart: (() => void) | null = null
+  onend: (() => void) | null = null
+  onerror: ((event: any) => void) | null = null
+  constructor(text?: string) {
+    this.text = text || ''
+  }
+}
+// @ts-ignore
+globalThis.SpeechSynthesisUtterance = MockSpeechSynthesisUtterance
 
 // speechSynthesis mock
 globalThis.speechSynthesis = {

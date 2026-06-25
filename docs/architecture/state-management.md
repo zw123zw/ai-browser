@@ -440,6 +440,26 @@ function buildRequestMessages(conv: Conversation): ChatMessage[] {
 
 两者都会先调用 `abortPipeline()` 中断进行中的指令流，再 `currentAborter.abort()` 中断 AI 请求。
 
+#### abort()
+
+独立的中止方法，供外部直接调用（如 usePipeline 的 abort 流程）：
+
+```typescript
+abort(): void  // 中断当前 AI 流式请求（currentAborter.abort()）
+```
+
+与 `clearCurrent()` / `resetConversation()` 的区别：`abort()` 仅中断请求，不清空消息或会话状态。
+
+#### deleteMessage(msgId: string)
+
+删除单条消息：
+
+```typescript
+deleteMessage(msgId: string): void  // 从 messages 数组中移除指定 ID 的消息
+```
+
+用于用户手动删除对话中的某条消息（右键菜单 → 删除）。
+
 #### 草稿与滚动位置持久化
 
 通过 `defineStorageSync` 自动同步到 `conversationStorage`：

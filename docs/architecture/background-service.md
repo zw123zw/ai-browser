@@ -33,6 +33,8 @@ Background Service Worker 是扩展的后台中枢，运行在 Manifest V3 的 S
 |---------|------|------|
 | `get-tab-id` | Content -> BG | 获取当前标签页 ID（跨标签页续接） |
 | `read-local-file` | Content -> BG | 读取 `file://` 本地文件（Content Script 受限） |
+| `extract-iframe-skeleton` | Content -> BG | 在所有 iframe 中执行骨架提取（chrome.scripting） |
+| `execute-iframe-action` | Content -> BG | 在所有 iframe 中执行 DOM 操作（click/type/select/focus/hover/clear） |
 | `proxy-fetch` | Content -> BG | 代理普通 HTTP 请求（规避 CORS） |
 | `proxy-fetch-stream` | Content -> BG | 代理 SSE 流式请求 |
 | `stream-chunk` | BG -> Content | 转发流式数据块 |
