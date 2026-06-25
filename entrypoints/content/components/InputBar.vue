@@ -345,12 +345,17 @@ function removeAttachment(i: number) {
 function autoResize() {
   const el = textarea.value;
   if (!el) return;
-  el.style.height = 'auto';
-  el.style.height = Math.min(el.scrollHeight, 200) + 'px';
+  // 先缩小到 0 再设实际高度，确保 scrollHeight 准确
+  // 使用 0 而非 'auto'，避免 'auto' → 固定值之间的布局抖动丢失焦点
+  el.style.height = '0px';
+  const newH = Math.min(el.scrollHeight, 200);
+  el.style.height = newH + 'px';
+  // 同步修正滚动位置，避免因高度塌缩导致父容器滚动
+  el.scrollTop = 0;
 }
 
 watch(() => text.value, (newVal, oldVal) => {
-  nextTick(autoResize);
+  autoResize();
   // 用户手动编辑时退出历史模式（非历史导航引起的变更）
   if (historyIndex.value >= 0 && newVal !== historyCache?.[historyIndex.value]) {
     exitHistoryMode();
@@ -540,7 +545,6 @@ onUnmounted(() => document.removeEventListener('click', onDocClick, true));
       class="aib-input-area"
       :placeholder="placeholder"
       rows="1"
-      @input="autoResize"
       @keydown="onKeydown"
       @paste="onPaste"
     />

@@ -11,6 +11,13 @@ import type { Command, ActionResult } from './types'
 
 const log = new Logger('ActionExecutor')
 
+/** 检查元素是否可见（display:none / visibility:hidden / offsetParent） */
+function isElementVisible(el: HTMLElement): boolean {
+  const style = window.getComputedStyle(el)
+  if (style.display === 'none' || style.visibility === 'hidden') return false
+  return el.offsetParent !== null || style.position === 'fixed'
+}
+
 // ═══════════════════════════════════════════════
 // 自动滚动状态（持久化到 chrome.storage.local，跨页面/标签页共享）
 // ═══════════════════════════════════════════════
@@ -181,7 +188,7 @@ export class ActionExecutor {
     }
 
     // 不需要元素的操作（keyboard/press 作用于当前焦点元素，tab 操作走 background）
-    const needsElement = !['navigate', 'wait', 'scroll', 'keyboard', 'press', 'newTab', 'closeTab', 'switchTab', 'nextTab', 'prevTab'].includes(cmd.action)
+    const needsElement = !['navigate', 'wait', 'scroll', 'keyboard', 'press', 'newTab', 'closeTab', 'switchTab', 'nextTab', 'prevTab', 'closeModal'].includes(cmd.action)
     let element: HTMLElement | null = null
 
     if (needsElement) {
@@ -196,24 +203,27 @@ export class ActionExecutor {
     try {
       let result: ActionResult
       switch (cmd.action) {
-        case 'click':     result = await this.executeClick(element!); break
-        case 'type':      result = await this.executeType(element!, cmd.text || ''); break
-        case 'clear':     result = await this.executeClear(element!); break
-        case 'scroll':    result = await this.executeScroll(cmd.direction || 'down', cmd.amount); break
-        case 'navigate':  result = await this.executeNavigate(cmd.url || ''); break
-        case 'select':    result = await this.executeSelect(element!, cmd.text || ''); break
+        case 'click':      result = await this.executeClick(element!); break
+        case 'type':       result = await this.executeType(element!, cmd.text || ''); break
+        case 'clear':      result = await this.executeClear(element!); break
+        case 'scroll':     result = await this.executeScroll(cmd.direction || 'down', cmd.amount); break
+        case 'navigate':   result = await this.executeNavigate(cmd.url || ''); break
+        case 'select':     result = await this.executeSelect(element!, cmd.text || ''); break
         case 'keyboard':
-        case 'press':     result = await this.executeKeyboard(cmd.key || ''); break
-        case 'focus':     result = await this.executeFocus(element!); break
-        case 'hover':     result = await this.executeHover(element!); break
-        case 'wait':      result = await this.executeWait(cmd.ms || 1000, signal); break
-        case 'newTab':    result = await this.executeTabAction('newTab'); break
-        case 'closeTab':  result = await this.executeTabAction('closeTab'); break
-        case 'switchTab': result = await this.executeTabAction('switchTab', cmd.tabQuery || cmd.description); break
-        case 'nextTab':   result = await this.executeTabAction('switchTab', 'next'); break
-        case 'prevTab':   result = await this.executeTabAction('switchTab', 'prev'); break
-        case 'video':     result = await this.executeVideo(element!, cmd.subAction || '', cmd.value); break
-        default:          result = { success: false, message: `未知操作类型: ${cmd.action}` }
+        case 'press':      result = await this.executeKeyboard(cmd.key || ''); break
+        case 'focus':      result = await this.executeFocus(element!); break
+        case 'hover':      result = await this.executeHover(element!); break
+        case 'wait':       result = await this.executeWait(cmd.ms || 1000, signal); break
+        case 'newTab':     result = await this.executeTabAction('newTab'); break
+        case 'closeTab':   result = await this.executeTabAction('closeTab'); break
+        case 'switchTab':  result = await this.executeTabAction('switchTab', cmd.tabQuery || cmd.description); break
+        case 'nextTab':    result = await this.executeTabAction('switchTab', 'next'); break
+        case 'prevTab':    result = await this.executeTabAction('switchTab', 'prev'); break
+        case 'video':      result = await this.executeVideo(element!, cmd.subAction || '', cmd.value); break
+        case 'upload':     result = await this.executeUpload(element!, cmd.fileData, cmd); break
+        case 'slider':     result = await this.executeSlider(element!, cmd.value); break
+        case 'closeModal': result = await this.executeCloseModal(); break
+        default:           result = { success: false, message: `未知操作类型: ${cmd.action}` }
       }
       log.info('═══ 执行指令完成 ═══', { action: cmd.action, success: result.success, message: result.message })
       return result
@@ -228,18 +238,66 @@ export class ActionExecutor {
 
   // ========== 三重元素定位 ==========
 
+  /**
+   * 在 Shadow DOM 中递归查找元素
+   *
+   * CSS 选择器无法穿透 shadow boundary，
+   * 需要手动遍历所有 shadowRoot 查找匹配的 data-skeleton-id。
+   */
+  private findInShadowDom(skeletonId: string): HTMLElement | null {
+    const allElements = document.body.querySelectorAll('*')
+    for (const el of allElements) {
+      const htmlEl = el as HTMLElement
+      if (htmlEl.shadowRoot) {
+        const found = this.searchShadowRoot(htmlEl.shadowRoot, skeletonId, 1)
+        if (found) return found
+      }
+    }
+    return null
+  }
+
+  /** 递归搜索 shadowRoot 内的元素（最大 10 层深度） */
+  private searchShadowRoot(shadowRoot: ShadowRoot, skeletonId: string, depth: number): HTMLElement | null {
+    if (depth > 10) return null
+
+    // 使用 CSS.escape 转义特殊字符，防止选择器注入
+    const direct = shadowRoot.querySelector(`[data-skeleton-id="${CSS.escape(skeletonId)}"]`) as HTMLElement | null
+    if (direct) return direct
+
+    // 递归进入嵌套的 shadowRoot
+    const allEls = shadowRoot.querySelectorAll('*')
+    for (const el of allEls) {
+      const htmlEl = el as HTMLElement
+      if (htmlEl.shadowRoot) {
+        const found = this.searchShadowRoot(htmlEl.shadowRoot, skeletonId, depth + 1)
+        if (found) return found
+      }
+    }
+    return null
+  }
+
   private findElement(cmd: Command): HTMLElement | null {
     log.info('findElement 开始', { elementId: cmd.elementId, fallbackSelector: cmd.fallbackSelector, description: cmd.description })
 
     // 第一优先：elementId（骨架中的 id）
     if (cmd.elementId) {
+      // 先在主文档中查找
       const el = document.querySelector(`[data-skeleton-id="${cmd.elementId}"]`)
       if (el) {
         log.info('findElement 通过 elementId 找到元素', { elementId: cmd.elementId, tag: el.tagName, className: (el as HTMLElement).className })
         return el as HTMLElement
-      } else {
-        log.warn('findElement elementId 未找到元素', { elementId: cmd.elementId })
       }
+
+      // Shadow DOM 元素（sd 前缀）：在 shadowRoot 中递归查找
+      if (cmd.elementId.startsWith('sd')) {
+        const shadowEl = this.findInShadowDom(cmd.elementId)
+        if (shadowEl) {
+          log.info('findElement 通过 Shadow DOM 找到元素', { elementId: cmd.elementId, tag: shadowEl.tagName })
+          return shadowEl
+        }
+      }
+
+      log.warn('findElement elementId 未找到元素', { elementId: cmd.elementId })
     }
 
     // 第二优先：fallbackSelector（CSS 选择器）
@@ -868,6 +926,385 @@ export class ActionExecutor {
    * 通过 chrome.scripting.executeScript 注入操作函数到目标 iframe，
    * 在 iframe 上下文中执行 click/type/select/focus/hover。
    */
+
+  // ========== 文件上传 ==========
+
+  /**
+   * 上传文件到 <input type="file">
+   *
+   * 使用 DataTransfer API 将文件填入 file input，
+   * 触发 change 事件使页面框架（React/Vue/Angular）检测到文件变化。
+   *
+   * 智能修正：
+   * 1. 目标不是 file input → 自动查找组件内隐藏的 <input type="file">
+   * 2. fileData 是字符串 → 自动包装为 { base64, name, mimeType } 结构
+   */
+  private async executeUpload(
+    el: HTMLElement,
+    fileData?: { base64: string; name: string; mimeType: string } | string,
+    cmd?: Command,
+  ): Promise<ActionResult> {
+    // ═══ 智能定位：目标不是 file input 时，自动查找隐藏的 file input ═══
+    if (!(el instanceof HTMLInputElement) || el.type !== 'file') {
+      const fileInput = this.findHiddenFileInput(el)
+      if (fileInput) {
+        log.info('upload 自动定位到隐藏的 file input', { originalTag: el.tagName, foundTag: fileInput.tagName })
+        el = fileInput
+      } else {
+        return { success: false, message: '目标元素不是 file input，也未找到隐藏的文件选择框' }
+      }
+    }
+
+    // ═══ 智能修正：fileData 格式自动转换 ═══
+    let normalizedFileData: { base64: string; name: string; mimeType: string } | undefined
+
+    if (fileData && typeof fileData === 'object') {
+      // 正常格式：{ base64, name, mimeType }
+      normalizedFileData = fileData
+    } else if (fileData && typeof fileData === 'string') {
+      // AI 错误格式：fileData 是纯文本或 data URL，name 从多个来源推断
+      const name = cmd?.filename
+        || extractFilenameFromDescription(cmd?.description)
+        || 'upload.txt'
+      const mimeType = guessMimeType(name)
+
+      // 处理 data URL 格式（data:application/octet-stream;base64,...）
+      let base64: string
+      const dataUrlMatch = fileData.match(/^data:([^;]*);base64,(.+)$/)
+      if (dataUrlMatch) {
+        base64 = dataUrlMatch[2]
+      } else {
+        base64 = btoa(unescape(encodeURIComponent(fileData)))
+      }
+
+      normalizedFileData = { base64, name, mimeType }
+      log.info('upload 自动修正 fileData 格式', { name, mimeType, contentLen: fileData.length, isDataUrl: !!dataUrlMatch })
+    }
+
+    if (!normalizedFileData) {
+      return { success: false, message: '未提供文件数据（需 fileData: { base64, name, mimeType }）' }
+    }
+
+    try {
+      // 聚焦元素（部分框架在 focus 时初始化上传状态）
+      el.focus()
+      el.dispatchEvent(new FocusEvent('focus', { bubbles: true }))
+
+      // base64 padding 修正（避免缺少 = 号导致 atob 异常）
+      const paddedBase64 = normalizedFileData.base64.padEnd(
+        normalizedFileData.base64.length + (4 - normalizedFileData.base64.length % 4) % 4, '=',
+      )
+
+      // base64 解码为 ArrayBuffer
+      const binaryStr = atob(paddedBase64)
+      const bytes = new Uint8Array(binaryStr.length)
+      for (let i = 0; i < binaryStr.length; i++) {
+        bytes[i] = binaryStr.charCodeAt(i)
+      }
+
+      // 创建 File 对象并通过 DataTransfer 填入
+      const file = new File([bytes], normalizedFileData.name, { type: normalizedFileData.mimeType })
+      const dt = new DataTransfer()
+      dt.items.add(file)
+      const inputEl = el as HTMLInputElement
+      inputEl.files = dt.files
+
+      // 触发事件序列：input → change（覆盖各类框架的监听）
+      el.dispatchEvent(new Event('input', { bubbles: true }))
+      el.dispatchEvent(new Event('change', { bubbles: true }))
+
+      log.info('文件上传成功', { name: normalizedFileData.name, mimeType: normalizedFileData.mimeType, size: bytes.length })
+      return { success: true, message: `文件已填入: ${normalizedFileData.name}` }
+    } catch (error) {
+      const msg = `文件上传失败: ${error instanceof Error ? error.message : String(error)}`
+      log.error(msg, error)
+      return { success: false, message: msg }
+    }
+  }
+
+  /**
+   * 智能查找隐藏的 <input type="file">
+   *
+   * 框架上传组件（Element UI / Ant Design / Bootstrap）通常用按钮触发隐藏的 file input。
+   * 查找策略：
+   * 1. 目标元素自身是 file input → 直接返回
+   * 2. 目标元素内部有 file input → 返回（如按钮内嵌 input）
+   * 3. 目标元素的父组件内有 file input → 返回（如 Element UI el-upload）
+   * 4. 全局查找隐藏的 file input → 返回第一个
+   */
+  private findHiddenFileInput(el: HTMLElement): HTMLInputElement | null {
+    // 1. 自身就是 file input
+    if (el instanceof HTMLInputElement && el.type === 'file') return el
+
+    // 2. 目标元素内部有 file input
+    const inner = el.querySelector('input[type="file"]') as HTMLInputElement | null
+    if (inner) return inner
+
+    // 3. 向上查找父组件（最多 5 层），找 file input
+    let parent: HTMLElement | null = el.parentElement
+    for (let i = 0; i < 5 && parent; i++) {
+      const sibling = parent.querySelector('input[type="file"]') as HTMLInputElement | null
+      if (sibling) return sibling
+      parent = parent.parentElement
+    }
+
+    // 4. 全局查找隐藏的 file input（兜底）
+    const allFileInputs = document.querySelectorAll('input[type="file"]')
+    for (const input of allFileInputs) {
+      const htmlInput = input as HTMLInputElement
+      // 只选隐藏的（visible 的可能是用户手动操作的）
+      if (!isElementVisible(htmlInput)) return htmlInput
+    }
+
+    return null
+  }
+
+  // ========== 滑块操作 ==========
+
+  /**
+   * 拖动滑块到指定值
+   *
+   * 支持标准 <input type="range"> 和自定义滑块（role="slider" + aria-valuemin/max）。
+   * 模拟完整鼠标事件序列：mousedown → mousemove（多次）→ mouseup。
+   */
+  private async executeSlider(el: HTMLElement, targetValue?: number): Promise<ActionResult> {
+    if (targetValue === undefined || targetValue === null) {
+      return { success: false, message: '未指定目标值（需 value 字段）' }
+    }
+
+    // 标准 range input
+    if (el instanceof HTMLInputElement && el.type === 'range') {
+      const min = parseFloat(el.min) || 0
+      const max = parseFloat(el.max) || 100
+      const step = parseFloat(el.step) || 1
+
+      // 钳位到有效范围
+      const clampedValue = Math.max(min, Math.min(max, targetValue))
+      // 对齐到 step + 浮点精度修正
+      const snappedValue = parseFloat((Math.round((clampedValue - min) / step) * step + min).toFixed(10))
+
+      // 设置值
+      const nativeSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
+      if (nativeSetter) {
+        nativeSetter.call(el, String(snappedValue))
+      } else {
+        el.value = String(snappedValue)
+      }
+
+      // 触发事件序列
+      el.dispatchEvent(new Event('input', { bubbles: true }))
+      el.dispatchEvent(new Event('change', { bubbles: true }))
+
+      log.info('滑块设置成功', { value: snappedValue, min, max, step })
+      return { success: true, message: `滑块已设为: ${snappedValue}` }
+    }
+
+    // 自定义滑块（role="slider"）
+    const role = el.getAttribute('role')
+    if (role === 'slider') {
+      const min = parseFloat(el.getAttribute('aria-valuemin') || '0') || 0
+      const max = parseFloat(el.getAttribute('aria-valuemax') || '100') || 100
+      const clampedValue = Math.max(min, Math.min(max, targetValue))
+
+      // 除零保护：max === min 时 ratio 为 NaN
+      const range = max - min
+      if (range === 0) {
+        el.setAttribute('aria-valuenow', String(min))
+        return { success: true, message: `滑块已设为: ${min}` }
+      }
+
+      // 获取元素位置，计算目标像素位置
+      const rect = el.getBoundingClientRect()
+      const targetRatio = (clampedValue - min) / range
+      const targetX = rect.left + rect.width * targetRatio
+      const targetY = rect.top + rect.height / 2
+
+      // 起点基于 aria-valuenow 计算当前位置（而非默认元素中心）
+      const currentValue = parseFloat(el.getAttribute('aria-valuenow') || String(min))
+      const startRatio = (Math.max(min, Math.min(max, currentValue)) - min) / range
+      const startX = rect.left + rect.width * startRatio
+      const startY = rect.top + rect.height / 2
+
+      el.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, clientX: startX, clientY: startY }))
+      el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, clientX: startX, clientY: startY }))
+
+      // 分步移动（模拟真实拖拽）
+      const steps = 5
+      for (let i = 1; i <= steps; i++) {
+        const x = startX + (targetX - startX) * (i / steps)
+        const y = startY + (targetY - startY) * (i / steps)
+        el.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, cancelable: true, clientX: x, clientY: y }))
+        el.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, cancelable: true, clientX: x, clientY: y }))
+      }
+
+      el.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, cancelable: true, clientX: targetX, clientY: targetY }))
+      el.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, clientX: targetX, clientY: targetY }))
+      el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, clientX: targetX, clientY: targetY }))
+
+      // 浮点精度修正 + 更新 aria-valuenow + 触发事件通知框架
+      const snappedValue = parseFloat(clampedValue.toFixed(10))
+      el.setAttribute('aria-valuenow', String(snappedValue))
+      el.dispatchEvent(new Event('change', { bubbles: true }))
+      el.dispatchEvent(new Event('input', { bubbles: true }))
+
+      log.info('自定义滑块操作成功', { value: snappedValue, min, max })
+      return { success: true, message: `滑块已拖到: ${snappedValue}` }
+    }
+
+    return { success: false, message: '目标元素不是滑块（需 input[type=range] 或 role=slider）' }
+  }
+
+  // ========== 弹窗关闭 ==========
+
+  /**
+   * 关闭页面弹窗/对话框
+   *
+   * 扫描策略（按优先级）：
+   * 1. 原生 dialog[open] → 调用 dialog.close()
+   * 2. ARIA dialog → 查找关闭按钮
+   * 3. 框架弹窗（Bootstrap/Element UI/Ant Design）→ 查找关闭按钮
+   * 4. 通用遮罩 → 查找固定定位元素内的关闭/取消按钮
+   * 循环关闭直到无弹窗（最多 10 层）。
+   */
+  private async executeCloseModal(): Promise<ActionResult> {
+    let closedCount = 0
+    const maxRounds = 10
+
+    for (let round = 0; round < maxRounds; round++) {
+      let closed = false
+
+      // 0. 尝试 Escape 键关闭（最常见的弹窗关闭方式）
+      if (round === 0) {
+        const activeEl = document.activeElement || document.body
+        activeEl.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true, cancelable: true }))
+        activeEl.dispatchEvent(new KeyboardEvent('keyup', { key: 'Escape', code: 'Escape', bubbles: true, cancelable: true }))
+        // 等待一帧让 Escape 生效
+        await new Promise(resolve => requestAnimationFrame(resolve))
+      }
+
+      // 1. 原生 dialog[open]
+      const dialogs = document.querySelectorAll('dialog[open]')
+      for (const dialog of dialogs) {
+        (dialog as HTMLDialogElement).close()
+        closed = true
+        closedCount++
+        log.info('关闭原生 dialog')
+      }
+
+      // 2. ARIA dialog/alertdialog → 查找关闭按钮
+      const ariaDialogs = document.querySelectorAll('[role="dialog"], [role="alertdialog"], [aria-modal="true"]')
+      for (const dialog of ariaDialogs) {
+        if (!isElementVisible(dialog as HTMLElement)) continue
+        const closeBtn = this.findCloseButton(dialog as HTMLElement)
+        if (closeBtn) {
+          this.triggerClick(closeBtn)
+          closed = true
+          closedCount++
+          log.info('关闭 ARIA 弹窗')
+        }
+      }
+
+      // 3. 常见框架弹窗
+      const frameworkSelectors = [
+        '.modal.show',                    // Bootstrap
+        '.el-dialog__wrapper',            // Element UI
+        '.ant-modal-wrap',                // Ant Design
+        '.MuiDialog-root',               // Material UI
+        '.v-dialog--active',              // Vuetify
+      ]
+      for (const sel of frameworkSelectors) {
+        const els = document.querySelectorAll(sel)
+        for (const el of els) {
+          if (!isElementVisible(el as HTMLElement)) continue
+          const closeBtn = this.findCloseButton(el as HTMLElement)
+          if (closeBtn) {
+            this.triggerClick(closeBtn)
+            closed = true
+            closedCount++
+            log.info('关闭框架弹窗', { selector: sel })
+          }
+        }
+      }
+
+      // 4. 通用遮罩层内的关闭/取消按钮
+      const overlaySelectors = [
+        '[class*="overlay"]',
+        '[class*="mask"]',
+        '[class*="modal-backdrop"]',
+        '[class*="dialog-mask"]',
+      ]
+      for (const sel of overlaySelectors) {
+        const els = document.querySelectorAll(sel)
+        for (const el of els) {
+          const htmlEl = el as HTMLElement
+          if (!isElementVisible(htmlEl)) continue
+          const rect = htmlEl.getBoundingClientRect()
+          if (rect.width > window.innerWidth * 0.5 && rect.height > window.innerHeight * 0.5) {
+            const closeBtn = this.findCloseButton(htmlEl)
+            if (closeBtn) {
+              this.triggerClick(closeBtn)
+              closed = true
+              closedCount++
+              log.info('关闭遮罩弹窗')
+            }
+          }
+        }
+      }
+
+      // 本轮没有关闭任何弹窗 → 退出循环
+      if (!closed) break
+
+      // 等待 200ms 让弹窗关闭动画完成（避免动画期间误判）
+      await new Promise(resolve => setTimeout(resolve, 200))
+    }
+
+    if (closedCount > 0) {
+      return { success: true, message: `已关闭 ${closedCount} 个弹窗` }
+    }
+    return { success: false, message: '未检测到弹窗' }
+  }
+
+  /**
+   * 在容器内查找关闭按钮
+   *
+   * 查找策略：
+   * 1. aria-label 含 close/close/dismiss/关闭/取消
+   * 2. class 含 close
+   * 3. 文字为 ×/✕/关闭/取消/知道了/确定/完成/好/Done/Close
+   * 自动跳过 disabled 按钮
+   */
+  private findCloseButton(container: HTMLElement): HTMLElement | null {
+    // 1. aria-label 含 close/dismiss/关闭/取消
+    const ariaClose = container.querySelector(
+      '[aria-label*="close" i], [aria-label*="dismiss" i], [aria-label*="关闭"], [aria-label*="取消"]',
+    ) as HTMLElement | null
+    if (ariaClose && this.isButtonEnabled(ariaClose)) return ariaClose
+
+    // 2. class 含 close（排除非按钮元素）
+    const classClose = container.querySelector(
+      '.close, .btn-close, [class*="close-btn"], [class*="close-icon"], [class*="modal-close"]',
+    ) as HTMLElement | null
+    if (classClose && isElementVisible(classClose) && this.isButtonEnabled(classClose)) return classClose
+
+    // 3. 文字匹配
+    const closeTexts = ['×', '✕', '✕', '关闭', '取消', '知道了', '确定', '完成', '好', 'OK', 'ok', 'Done', 'Close']
+    const buttons = container.querySelectorAll('button, [role="button"], a, span')
+    for (const btn of buttons) {
+      const text = btn.textContent?.trim() || ''
+      if (closeTexts.includes(text) && isElementVisible(btn as HTMLElement) && this.isButtonEnabled(btn as HTMLElement)) {
+        return btn as HTMLElement
+      }
+    }
+
+    return null
+  }
+
+  /** 检查按钮是否可用（未 disabled） */
+  private isButtonEnabled(el: HTMLElement): boolean {
+    if ((el as HTMLButtonElement).disabled) return false
+    if (el.getAttribute('aria-disabled') === 'true') return false
+    return true
+  }
   private async executeIframeAction(cmd: Command): Promise<ActionResult> {
     // 去掉 f_ 前缀，得到 iframe 内的真实 skeletonId
     const elementId = (cmd.elementId || '').replace(/^f_/, '')
@@ -910,89 +1347,35 @@ function formatTime(seconds: number): string {
   return `${m}:${s.toString().padStart(2, '0')}`
 }
 
-/**
- * 注入到 iframe 的自包含操作函数
- *
- * 不依赖外部导入，在 iframe 的隔离上下文中执行。
- * 支持：click、type、clear、select、focus、hover
- */
-function iframeActionFunc(
-  action: string,
-  elementId: string,
-  text: string,
-  key: string,
-): { success: boolean; message: string } {
-  // 查找元素
-  const el = document.querySelector(`[data-skeleton-id="${elementId}"]`) as HTMLElement | null
-  if (!el) return { success: false, message: `未找到元素: ${elementId}` }
+/** 从 AI 的 description 中提取文件名（如"上传.travis.yml文件到..." → ".travis.yml"） */
+function extractFilenameFromDescription(desc?: string): string | undefined {
+  if (!desc) return undefined
+  // 匹配常见文件名模式：xxx.xxx 或 .xxx
+  const match = desc.match(/([\w.-]+\.\w{1,10})/)
+  return match?.[1]
+}
 
-  function triggerClick(target: HTMLElement): void {
-    const rect = target.getBoundingClientRect()
-    const cx = rect.left + rect.width / 2
-    const cy = rect.top + rect.height / 2
-    target.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, clientX: cx, clientY: cy }))
-    target.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, clientX: cx, clientY: cy }))
-    target.dispatchEvent(new FocusEvent('focus', { bubbles: true }))
-    target.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, cancelable: true, clientX: cx, clientY: cy }))
-    target.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, clientX: cx, clientY: cy }))
-    target.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, clientX: cx, clientY: cy }))
+/** 根据文件扩展名猜测 MIME 类型 */
+function guessMimeType(filename: string): string {
+  const ext = filename.split('.').pop()?.toLowerCase() || ''
+  const map: Record<string, string> = {
+    // 文本
+    txt: 'text/plain', md: 'text/markdown', csv: 'text/csv', html: 'text/html', htm: 'text/html',
+    css: 'text/css', xml: 'text/xml', yml: 'text/yaml', yaml: 'text/yaml',
+    // 脚本
+    js: 'application/javascript', ts: 'application/javascript', json: 'application/json',
+    py: 'text/x-python', rb: 'text/x-ruby', java: 'text/x-java', c: 'text/x-c', cpp: 'text/x-c++',
+    // 文档
+    pdf: 'application/pdf', doc: 'application/msword', docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    xls: 'application/vnd.ms-excel', xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    ppt: 'application/vnd.ms-powerpoint', pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    // 图片
+    png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif',
+    svg: 'image/svg+xml', webp: 'image/webp', bmp: 'image/bmp', ico: 'image/x-icon',
+    // 压缩
+    zip: 'application/zip', gz: 'application/gzip', tar: 'application/x-tar', rar: 'application/vnd.rar',
+    // 音视频
+    mp3: 'audio/mpeg', wav: 'audio/wav', mp4: 'video/mp4', webm: 'video/webm', avi: 'video/x-msvideo',
   }
-
-  function triggerType(target: HTMLElement, value: string): void {
-    target.focus()
-    target.dispatchEvent(new FocusEvent('focus', { bubbles: true }))
-    // 使用原生 value setter 绕过框架拦截
-    const descriptor = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')
-      || Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')
-    if (descriptor?.set) {
-      descriptor.set.call(target, value)
-    } else {
-      (target as HTMLInputElement).value = value
-    }
-    target.dispatchEvent(new Event('input', { bubbles: true }))
-    target.dispatchEvent(new Event('change', { bubbles: true }))
-  }
-
-  try {
-    switch (action) {
-      case 'click': {
-        triggerClick(el)
-        return { success: true, message: '点击成功' }
-      }
-      case 'type': {
-        triggerType(el, text)
-        return { success: true, message: `输入成功: ${text}` }
-      }
-      case 'clear': {
-        triggerType(el, '')
-        return { success: true, message: '清空成功' }
-      }
-      case 'select': {
-        (el as HTMLSelectElement).value = text
-        el.dispatchEvent(new Event('change', { bubbles: true }))
-        return { success: true, message: `选择: ${text}` }
-      }
-      case 'focus': {
-        el.focus()
-        el.dispatchEvent(new FocusEvent('focus', { bubbles: true }))
-        return { success: true, message: '聚焦成功' }
-      }
-      case 'hover': {
-        const rect = el.getBoundingClientRect()
-        const cx = rect.left + rect.width / 2
-        const cy = rect.top + rect.height / 2
-        el.dispatchEvent(new PointerEvent('pointerover', { bubbles: true, clientX: cx, clientY: cy }))
-        el.dispatchEvent(new PointerEvent('pointerenter', { bubbles: false, clientX: cx, clientY: cy }))
-        el.dispatchEvent(new MouseEvent('mouseover', { bubbles: true, clientX: cx, clientY: cy }))
-        el.dispatchEvent(new MouseEvent('mouseenter', { bubbles: false, clientX: cx, clientY: cy }))
-        el.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: cx, clientY: cy }))
-        el.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: cx, clientY: cy }))
-        return { success: true, message: '悬停成功' }
-      }
-      default:
-        return { success: false, message: `iframe 不支持的操作: ${action}` }
-    }
-  } catch (err) {
-    return { success: false, message: `操作异常: ${err instanceof Error ? err.message : String(err)}` }
-  }
+  return map[ext] || 'application/octet-stream'
 }

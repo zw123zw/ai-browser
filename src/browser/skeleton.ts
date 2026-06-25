@@ -7,18 +7,21 @@
  * 核心原则：从可视窗口的顶层容器开始，递归扫描所有子元素，
  * 只要可点击（a/button/input/有点击事件/cursor:pointer）就提取。
  *
+ * 支持 Shadow DOM 递归遍历（最大 10 层）和嵌套 iframe 递归（最大 5 层）。
+ *
  * 字段分组（对齐无障碍树）：
  * - 身份：id/tag/role
  * - 内容：text/label/ariaLabel/placeholder
  * - 导航：href
- * - 表单：inputType/value/checked/required
+ * - 表单：inputType/value/checked/required/accept
+ * - 滑块：min/max/step
  * - 状态：disabled/expanded/selected
  * - 上下文：parent
  */
 
 import { Logger } from '@/src/utils/logger'
 import { INTERACTIVE_TAGS } from './types'
-import { ensureAllSkeletonIds, ensureAllSkeletonIdsForDoc } from './skeleton-id'
+import { ensureAllSkeletonIds, ensureAllSkeletonIdsForDoc, ensureSkeletonId } from './skeleton-id'
 import type { SkeletonElement, SemanticSkeleton } from './types'
 
 const log = new Logger('Skeleton')
@@ -38,6 +41,12 @@ const MAX_HREF_LENGTH = 200
 
 /** placeholder 截断长度 */
 const MAX_PLACEHOLDER_LENGTH = 50
+
+/** Shadow DOM 递归深度上限 */
+const SHADOW_DOM_MAX_DEPTH = 10
+
+/** iframe 递归深度上限 */
+const IFRAME_MAX_DEPTH = 5
 
 /**
  * 骨架管理器
@@ -159,6 +168,8 @@ export class SkeletonManager {
  * 3. 检查可见性（display:none/visibility:hidden/offsetParent）
  * 4. 检查是否在视口内（垂直+水平）— 仅 viewport 模式
  * 5. 过滤空文本 + 按 parent+text 去重
+ * 6. 递归遍历 Shadow DOM 内部元素（最大 10 层）
+ * 7. 递归处理嵌套 iframe（最大 5 层）
  *
  * @param doc 文档对象
  * @param scope 'viewport'（默认，仅视口内，200 上限）| 'full'（全页面，无上限）
@@ -167,10 +178,10 @@ export function extractSkeleton(doc: Document, scope: SkeletonScope = 'viewport'
   const elements: SkeletonElement[] = []
   const domParentIdMap = new Map<string, string>()
   const existingIds = new Map<string, boolean>()
-  let scannedCount = 0
-  let totalInteractive = 0
+  // 用对象引用传递，解决递归函数中值传递导致计数丢失的问题
+  const stats = { scannedCount: 0, totalInteractive: 0 }
 
-  // 全量打标：同步计数器 + 给所有元素打 data-skeleton-id（含懒加载元素）
+  // 全量打标：同步计数器 + 给所有元素打 data-skeleton-id（含懒加载元素 + Shadow DOM）
   ensureAllSkeletonIds()
 
   const allElements = doc.body.querySelectorAll('*')
@@ -191,7 +202,7 @@ export function extractSkeleton(doc: Document, scope: SkeletonScope = 'viewport'
       existingIds.set(id, true)
 
       if (!isClickable(htmlEl)) continue
-      totalInteractive++
+      stats.totalInteractive++
 
       if (!isElementVisible(htmlEl)) continue
 
@@ -221,7 +232,16 @@ export function extractSkeleton(doc: Document, scope: SkeletonScope = 'viewport'
 
   // 主文档提取
   extractFromDoc(doc, 0, 0)
-  scannedCount = allElements.length
+  stats.scannedCount = allElements.length
+
+  // ═══ Shadow DOM 递归遍历 ═══
+  // 遍历所有元素的 shadowRoot，递归提取内部可交互元素
+  for (const el of allElements) {
+    const htmlEl = el as HTMLElement
+    if (htmlEl.shadowRoot) {
+      extractFromShadowDom(htmlEl.shadowRoot, scope, 1, elements, existingIds, domParentIdMap, stats)
+    }
+  }
 
   // 过滤空文本元素 + 父子同文本去重（保留子级）+ 同级去重
   const elMap = new Map<string, SkeletonElement>()
@@ -270,9 +290,9 @@ export function extractSkeleton(doc: Document, scope: SkeletonScope = 'viewport'
   // 提取页面上的错误/状态提示文本（非交互元素，但对 AI 决策很重要）
   const alerts = extractAlerts(doc)
 
-  // iframe 处理：同源直接提取 + 跨域收集
-  const allIframes = doc.querySelectorAll('iframe')
+  // iframe 处理：同源递归提取 + 跨域收集
   let iframeIndex = 0
+  const allIframes = doc.querySelectorAll('iframe')
   for (const iframe of allIframes) {
     const iframeEl = iframe as HTMLIFrameElement
 
@@ -280,12 +300,25 @@ export function extractSkeleton(doc: Document, scope: SkeletonScope = 'viewport'
     try { iframeDoc = iframeEl.contentDocument } catch { /* 跨域 */ }
 
     if (iframeDoc?.body) {
-      // 同源 iframe：直接打标 + 提取
+      // 同源 iframe：直接打标 + 递归提取（含嵌套 iframe 和 Shadow DOM）
       ensureAllSkeletonIdsForDoc(iframeDoc)
       const iframeLabel = iframeEl.id || iframeEl.getAttribute('name') || `iframe${iframeIndex}`
-      scannedCount += iframeDoc.body.querySelectorAll('*').length
+      const iframeParent = `iframe.${iframeLabel}`
+      stats.scannedCount += iframeDoc.body.querySelectorAll('*').length
       const rect = iframeEl.getBoundingClientRect()
-      extractFromDoc(iframeDoc, rect.left, rect.top, `iframe.${iframeLabel}`)
+      extractFromDoc(iframeDoc, rect.left, rect.top, iframeParent)
+
+      // 递归处理 iframe 内的嵌套 iframe（最大 5 层）
+      extractNestedIframes(iframeDoc, rect.left, rect.top, iframeParent, 1, scope, elements, existingIds, domParentIdMap, stats)
+
+      // 递归处理 iframe 内的 Shadow DOM
+      const iframeAllEls = iframeDoc.body.querySelectorAll('*')
+      for (const el of iframeAllEls) {
+        const htmlEl = el as HTMLElement
+        if (htmlEl.shadowRoot) {
+          extractFromShadowDom(htmlEl.shadowRoot, scope, 1, elements, existingIds, domParentIdMap, stats)
+        }
+      }
     }
     // 跨域 iframe 不在此处理，由 getSkeletonWithIframes() 通过 chrome.scripting 注入
     iframeIndex++
@@ -298,7 +331,7 @@ export function extractSkeleton(doc: Document, scope: SkeletonScope = 'viewport'
   const focusedElement = focusedEl?.dataset?.skeletonId || undefined
 
   log.info('骨架提取完成', {
-    scannedCount,
+    scannedCount: stats.scannedCount,
     rawCount: elements.length,
     filteredCount: filtered.length,
     finalCount: final.length,
@@ -307,7 +340,8 @@ export function extractSkeleton(doc: Document, scope: SkeletonScope = 'viewport'
     hasModal,
     loading,
     focusedElement,
-    totalInteractive,
+    totalInteractive: stats.totalInteractive,
+    shadowDomElements: elements.filter(e => e.id.startsWith('sd')).length,
     url: doc.location.href,
     viewport: `${window.innerWidth}x${window.innerHeight}`,
     scrollY: window.scrollY,
@@ -321,10 +355,211 @@ export function extractSkeleton(doc: Document, scope: SkeletonScope = 'viewport'
     hasModal,
     loading,
     focusedElement,
-    totalInteractive,
+    totalInteractive: stats.totalInteractive,
     truncated,
     alerts: alerts.length > 0 ? alerts : undefined,
     elements: final,
+  }
+}
+
+
+// ═══════════════════════════════════════════════
+// Shadow DOM 递归遍历
+// ═══════════════════════════════════════════════
+
+/**
+ * 从 Shadow DOM 内部递归提取可交互元素
+ *
+ * 给 Shadow DOM 内元素分配 sd{depth}_{id} 格式的骨架 ID，
+ * 与普通元素统一编号。closed mode shadowRoot 无法访问，跳过。
+ *
+ * @param shadowRoot ShadowRoot 对象
+ * @param scope 骨架提取范围
+ * @param depth 当前递归深度（从 1 开始，最大 SHADOW_DOM_MAX_DEPTH）
+ * @param elements 元素收集数组
+ * @param existingIds 已有 ID 集合（去重用）
+ * @param domParentIdMap 父子关系映射
+ * @param stats 统计计数器（对象引用传递，避免值传递丢失）
+ */
+function extractFromShadowDom(
+  shadowRoot: ShadowRoot,
+  scope: SkeletonScope,
+  depth: number,
+  elements: SkeletonElement[],
+  existingIds: Map<string, boolean>,
+  domParentIdMap: Map<string, string>,
+  stats: { scannedCount: number; totalInteractive: number },
+): void {
+  if (depth > SHADOW_DOM_MAX_DEPTH) {
+    log.warn('Shadow DOM 递归深度超限，跳过', { depth })
+    return
+  }
+
+  const viewportHeight = window.innerHeight
+  const viewportWidth = window.innerWidth
+  const shadowEls = shadowRoot.querySelectorAll('*')
+
+  for (const el of shadowEls) {
+    const htmlEl = el as HTMLElement
+
+    // 给 Shadow DOM 内元素分配带前缀的骨架 ID
+    const existingId = htmlEl.dataset.skeletonId
+    let id: string
+    if (existingId && existingId.startsWith(`sd${depth}_`)) {
+      id = existingId
+    } else {
+      // 用 sd{depth}_ 前缀避免与主文档元素 ID 冲突
+      const rawId = ensureSkeletonId(htmlEl)
+      id = `sd${depth}_${rawId}`
+      htmlEl.dataset.skeletonId = id
+    }
+
+    if (existingIds.has(id)) continue
+    existingIds.set(id, true)
+
+    if (!isClickable(htmlEl)) continue
+    stats.totalInteractive++
+
+    if (!isElementVisible(htmlEl)) continue
+
+    if (scope === 'viewport') {
+      const rect = htmlEl.getBoundingClientRect()
+      if (rect.top >= viewportHeight || rect.bottom <= 0) continue
+      if (rect.left >= viewportWidth || rect.right <= 0) continue
+      if (rect.width < 1 || rect.height < 1) continue
+    }
+
+    const element = extractElement(htmlEl, id)
+    if (element) {
+      element.parent = findLandmarkParent(htmlEl)
+      // 记录父子关系（用于去重）
+      const parentEl = htmlEl.parentElement as HTMLElement
+      if (parentEl?.dataset?.skeletonId) {
+        domParentIdMap.set(id, parentEl.dataset.skeletonId)
+      }
+      elements.push(element)
+    }
+  }
+
+  // 递归进入嵌套的 shadowRoot
+  for (const el of shadowEls) {
+    const htmlEl = el as HTMLElement
+    if (htmlEl.shadowRoot) {
+      extractFromShadowDom(htmlEl.shadowRoot, scope, depth + 1, elements, existingIds, domParentIdMap, stats)
+    }
+  }
+}
+
+
+// ═══════════════════════════════════════════════
+// 嵌套 iframe 递归提取
+// ═══════════════════════════════════════════════
+
+/**
+ * 递归提取嵌套 iframe 内的可交互元素
+ *
+ * 同域 iframe：递归读取 contentDocument，继续扫描内部 iframe。
+ * 元素 ID 前缀层级化：顶层 e1，第一层 iframe fi1_e1，第二层 fi1_fi1_e1。
+ * 递归深度限制：最大 IFRAME_MAX_DEPTH 层。
+ *
+ * @param parentDoc 父级文档
+ * @param vpOffsetX 视口 X 偏移（iframe 的 getBoundingClientRect().left）
+ * @param vpOffsetY 视口 Y 偏移（iframe 的 getBoundingClientRect().top）
+ * @param parentPrefix 父级 ID 前缀（如 "iframe.main"）
+ * @param depth 当前递归深度（从 1 开始）
+ * @param scope 骨架提取范围
+ * @param elements 元素收集数组
+ * @param existingIds 已有 ID 集合
+ * @param domParentIdMap 父子关系映射
+ * @param stats 统计计数器（对象引用传递，避免值传递丢失）
+ */
+function extractNestedIframes(
+  parentDoc: Document,
+  vpOffsetX: number,
+  vpOffsetY: number,
+  parentPrefix: string,
+  depth: number,
+  scope: SkeletonScope,
+  elements: SkeletonElement[],
+  existingIds: Map<string, boolean>,
+  domParentIdMap: Map<string, string>,
+  stats: { scannedCount: number; totalInteractive: number },
+): void {
+  if (depth > IFRAME_MAX_DEPTH) {
+    log.warn('iframe 递归深度超限，跳过', { depth, parentPrefix })
+    return
+  }
+
+  const nestedIframes = parentDoc.querySelectorAll('iframe')
+  let nestedIndex = 0
+
+  for (const iframe of nestedIframes) {
+    const iframeEl = iframe as HTMLIFrameElement
+
+    let iframeDoc: Document | null = null
+    try { iframeDoc = iframeEl.contentDocument } catch { /* 跨域 */ }
+
+    if (iframeDoc?.body) {
+      // 同源嵌套 iframe：打标 + 提取
+      ensureAllSkeletonIdsForDoc(iframeDoc)
+
+      const iframeLabel = iframeEl.id || iframeEl.getAttribute('name') || `iframe${nestedIndex}`
+      const iframePrefix = `${parentPrefix}.iframe.${iframeLabel}`
+
+      // 计算嵌套 iframe 的视口偏移（相对坐标 + 父级偏移）
+      const rect = iframeEl.getBoundingClientRect()
+      const offsetX = vpOffsetX + rect.left
+      const offsetY = vpOffsetY + rect.top
+
+      // 提取嵌套 iframe 内的元素
+      const viewportHeight = window.innerHeight
+      const viewportWidth = window.innerWidth
+      const allEls = iframeDoc.body.querySelectorAll('*')
+
+      for (const el of allEls) {
+        const htmlEl = el as HTMLElement
+        const id = htmlEl.dataset.skeletonId || ''
+        if (!id) continue
+        existingIds.set(id, true)
+
+        if (!isClickable(htmlEl)) continue
+        stats.totalInteractive++
+
+        if (!isElementVisible(htmlEl)) continue
+
+        if (scope === 'viewport') {
+          const elRect = htmlEl.getBoundingClientRect()
+          const top = elRect.top + offsetY, bottom = elRect.bottom + offsetY
+          const left = elRect.left + offsetX, right = elRect.right + offsetX
+          if (top >= viewportHeight || bottom <= 0) continue
+          if (left >= viewportWidth || right <= 0) continue
+          if (elRect.width < 1 || elRect.height < 1) continue
+        }
+
+        const element = extractElement(htmlEl, id)
+        if (element) {
+          element.parent = iframePrefix
+          const parentEl = htmlEl.parentElement as HTMLElement
+          if (parentEl?.dataset?.skeletonId) {
+            domParentIdMap.set(id, parentEl.dataset.skeletonId)
+          }
+          elements.push(element)
+        }
+      }
+
+      // 递归处理更深层的嵌套 iframe
+      extractNestedIframes(iframeDoc, offsetX, offsetY, iframePrefix, depth + 1, scope, elements, existingIds, domParentIdMap, stats)
+
+      // 递归处理嵌套 iframe 内的 Shadow DOM
+      for (const el of allEls) {
+        const htmlEl = el as HTMLElement
+        if (htmlEl.shadowRoot) {
+          extractFromShadowDom(htmlEl.shadowRoot, scope, 1, elements, existingIds, domParentIdMap, stats)
+        }
+      }
+    }
+    // 跨域嵌套 iframe 由 getSkeletonWithIframes() 通过 chrome.scripting 注入处理
+    nestedIndex++
   }
 }
 
@@ -354,7 +589,7 @@ function isClickable(el: HTMLElement): boolean {
   // 属性标记
   if (el.getAttribute('onclick')) return true
   const role = el.getAttribute('role')
-  if (role && ['button', 'link', 'menuitem', 'tab', 'option', 'switch', 'checkbox', 'radio'].includes(role)) return true
+  if (role && ['button', 'link', 'menuitem', 'tab', 'option', 'switch', 'checkbox', 'radio', 'slider'].includes(role)) return true
   if (el.getAttribute('tabindex')) return true
 
   // CSS cursor:pointer（可能是 addEventListener 绑定的点击事件）
@@ -507,6 +742,20 @@ function extractElement(el: HTMLElement, id: string): SkeletonElement | null {
     if (inputEl.required || el.getAttribute('aria-required') === 'true') {
       base.required = true
     }
+    // file input: accept 属性（文件类型过滤）
+    if (inputType === 'file') {
+      const accept = inputEl.accept
+      if (accept) base.accept = accept
+    }
+    // range input: min/max/step 属性
+    if (inputType === 'range') {
+      const min = parseFloat(inputEl.min)
+      const max = parseFloat(inputEl.max)
+      const step = parseFloat(inputEl.step)
+      if (!isNaN(min)) base.min = min
+      if (!isNaN(max)) base.max = max
+      if (!isNaN(step) && step > 0) base.step = step
+    }
   }
 
   if (tag === 'textarea') {
@@ -532,6 +781,16 @@ function extractElement(el: HTMLElement, id: string): SkeletonElement | null {
     if (selectEl.required || el.getAttribute('aria-required') === 'true') {
       base.required = true
     }
+  }
+
+  // 自定义滑块（role="slider"）：提取 aria-valuemin/max/now
+  if (base.role === 'slider' && tag !== 'input') {
+    const ariaMin = parseFloat(el.getAttribute('aria-valuemin') || '')
+    const ariaMax = parseFloat(el.getAttribute('aria-valuemax') || '')
+    const ariaNow = parseFloat(el.getAttribute('aria-valuenow') || '')
+    if (!isNaN(ariaMin)) base.min = ariaMin
+    if (!isNaN(ariaMax)) base.max = ariaMax
+    if (!isNaN(ariaNow)) base.value = String(ariaNow)
   }
 
   // ── 5. 交互状态：disabled/expanded/selected ──
@@ -731,10 +990,13 @@ function getDirectText(el: HTMLElement): string {
  * 4. 同级 <label> — 同一父容器下的 label（Element UI 等组件库模式）
  */
 function findAssociatedLabelText(el: HTMLElement): string | null {
+  // 使用 ownerDocument 确保在 iframe/Shadow DOM 内也能正确查找
+  const doc = el.ownerDocument || document
+
   // 方式 1：label[for="id"]
   const elId = el.id
   if (elId) {
-    const label = document.querySelector(`label[for="${CSS.escape(elId)}"]`)
+    const label = doc.querySelector(`label[for="${CSS.escape(elId)}"]`)
     if (label) {
       const text = label.textContent?.trim()
       if (text) return text
@@ -757,7 +1019,7 @@ function findAssociatedLabelText(el: HTMLElement): string | null {
   // 方式 3：aria-labelledby
   const labelledBy = el.getAttribute('aria-labelledby')
   if (labelledBy) {
-    const refEl = document.getElementById(labelledBy)
+    const refEl = doc.getElementById(labelledBy)
     if (refEl) {
       const text = refEl.textContent?.trim()
       if (text) return text
@@ -885,12 +1147,14 @@ async function extractIframeSkeletons(
  * 注入到跨域 iframe 的自包含提取函数
  *
  * 不依赖任何外部导入，在 iframe 的隔离上下文中执行。
+ * 支持 Shadow DOM 递归遍历（最大 10 层）。
  */
 function iframeExtractFunc(scope: string, vpWidth: number, vpHeight: number): { url: string; elements: unknown[] } {
   const SKIP = 'script,style,noscript,meta,link,br,hr'
   const TAGS = ['a', 'button', 'input', 'select', 'textarea', 'video', 'audio']
   const MAX_HREF_LENGTH = 200
   const MAX_PLACEHOLDER_LENGTH = 50
+  const SHADOW_MAX_DEPTH = 10
   let idCounter = 0
 
   function isClickable(el: HTMLElement): boolean {
@@ -898,7 +1162,7 @@ function iframeExtractFunc(scope: string, vpWidth: number, vpHeight: number): { 
     if (el.getAttribute('contenteditable') === 'true' || el.getAttribute('contenteditable') === '') return true
     if (el.getAttribute('onclick')) return true
     const role = el.getAttribute('role')
-    if (role && ['button', 'link', 'menuitem', 'tab', 'option', 'switch', 'checkbox', 'radio'].includes(role)) return true
+    if (role && ['button', 'link', 'menuitem', 'tab', 'option', 'switch', 'checkbox', 'radio', 'slider'].includes(role)) return true
     if (el.getAttribute('tabindex')) return true
     try { if (getComputedStyle(el).cursor === 'pointer') return true } catch { /* */ }
     return false
@@ -973,6 +1237,17 @@ function iframeExtractFunc(scope: string, vpWidth: number, vpHeight: number): { 
       if (t !== 'password' && inp.value) base.value = inp.value
       if ((t === 'checkbox' || t === 'radio') && inp.checked) base.checked = true
       if (inp.required) base.required = true
+      // file input: accept 属性
+      if (t === 'file' && inp.accept) base.accept = inp.accept
+      // range input: min/max/step
+      if (t === 'range') {
+        const min = parseFloat(inp.min)
+        const max = parseFloat(inp.max)
+        const step = parseFloat(inp.step)
+        if (!isNaN(min)) base.min = min
+        if (!isNaN(max)) base.max = max
+        if (!isNaN(step) && step > 0) base.step = step
+      }
     }
     if (tag === 'textarea') {
       const ta = el as HTMLTextAreaElement
@@ -983,6 +1258,15 @@ function iframeExtractFunc(scope: string, vpWidth: number, vpHeight: number): { 
       const content = el.innerText?.trim() || ''
       if (content) base.value = content
     }
+    // 自定义滑块（role="slider"）
+    if (base.role === 'slider' && tag !== 'input') {
+      const ariaMin = parseFloat(el.getAttribute('aria-valuemin') || '')
+      const ariaMax = parseFloat(el.getAttribute('aria-valuemax') || '')
+      const ariaNow = parseFloat(el.getAttribute('aria-valuenow') || '')
+      if (!isNaN(ariaMin)) base.min = ariaMin
+      if (!isNaN(ariaMax)) base.max = ariaMax
+      if (!isNaN(ariaNow)) base.value = String(ariaNow)
+    }
     if (isForm || tag === 'button') {
       const d = (el as HTMLInputElement).disabled || el.getAttribute('aria-disabled') === 'true'
       if (d) base.disabled = true
@@ -990,27 +1274,48 @@ function iframeExtractFunc(scope: string, vpWidth: number, vpHeight: number): { 
     return base
   }
 
-  // 确保所有元素有 data-skeleton-id
-  for (const el of document.body.querySelectorAll(`*:not(${SKIP})`)) {
-    if (!(el as HTMLElement).dataset.skeletonId) {
-      (el as HTMLElement).dataset.skeletonId = `fi${++idCounter}`
+  // 确保所有元素有 data-skeleton-id（含 Shadow DOM 内元素）
+  function assignIds(root: Document | ShadowRoot, prefix: string, depth: number): void {
+    if (depth > SHADOW_MAX_DEPTH) return
+    for (const el of root.querySelectorAll(`*:not(${SKIP})`)) {
+      const htmlEl = el as HTMLElement
+      if (!htmlEl.dataset.skeletonId) {
+        htmlEl.dataset.skeletonId = `${prefix}${++idCounter}`
+      }
+      // 递归进入 shadowRoot
+      if (htmlEl.shadowRoot) {
+        assignIds(htmlEl.shadowRoot, `sd${depth}_`, depth + 1)
+      }
     }
   }
 
+  assignIds(document, 'fi', 0)
+
   const elements: Record<string, unknown>[] = []
-  for (const el of document.body.querySelectorAll('*')) {
-    const htmlEl = el as HTMLElement
-    const id = htmlEl.dataset.skeletonId || ''
-    if (!id || !isClickable(htmlEl)) continue
-    if (!isVisible(htmlEl)) continue
-    if (scope === 'viewport') {
-      const r = htmlEl.getBoundingClientRect()
-      if (r.top >= vpHeight || r.bottom <= 0 || r.left >= vpWidth || r.right <= 0) continue
-      if (r.width < 1 || r.height < 1) continue
+
+  // 提取主文档元素（含 Shadow DOM 内元素）
+  function extractFromRoot(root: Document | ShadowRoot, depth: number): void {
+    if (depth > SHADOW_MAX_DEPTH) return
+    for (const el of root.querySelectorAll('*')) {
+      const htmlEl = el as HTMLElement
+      const id = htmlEl.dataset.skeletonId || ''
+      if (!id || !isClickable(htmlEl)) continue
+      if (!isVisible(htmlEl)) continue
+      if (scope === 'viewport') {
+        const r = htmlEl.getBoundingClientRect()
+        if (r.top >= vpHeight || r.bottom <= 0 || r.left >= vpWidth || r.right <= 0) continue
+        if (r.width < 1 || r.height < 1) continue
+      }
+      const ex = extract(htmlEl, id)
+      if (ex) elements.push(ex)
+      // 递归进入 shadowRoot
+      if (htmlEl.shadowRoot) {
+        extractFromRoot(htmlEl.shadowRoot, depth + 1)
+      }
     }
-    const ex = extract(htmlEl, id)
-    if (ex) elements.push(ex)
   }
+
+  extractFromRoot(document, 0)
 
   return { url: location.href, elements }
 }

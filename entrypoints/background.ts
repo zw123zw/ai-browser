@@ -371,10 +371,11 @@ export default defineBackground(() => {
 // iframe 注入函数（通过 chrome.scripting.executeScript 注入到 frame）
 // ═══════════════════════════════════════════════
 
-/** iframe 骨架提取函数 */
+/** iframe 骨架提取函数（支持 Shadow DOM 递归遍历） */
 function iframeExtractFunc(scope: string, vpWidth: number, vpHeight: number): { url: string; elements: unknown[] } {
   const SKIP = 'script,style,noscript,meta,link,br,hr'
   const TAGS = ['a', 'button', 'input', 'select', 'textarea', 'video', 'audio']
+  const SHADOW_MAX_DEPTH = 10
   let idCounter = 0
 
   function isClickable(el: HTMLElement): boolean {
@@ -382,7 +383,7 @@ function iframeExtractFunc(scope: string, vpWidth: number, vpHeight: number): { 
     if (el.getAttribute('contenteditable') === 'true' || el.getAttribute('contenteditable') === '') return true
     if (el.getAttribute('onclick')) return true
     const role = el.getAttribute('role')
-    if (role && ['button', 'link', 'menuitem', 'tab', 'option', 'switch', 'checkbox', 'radio'].includes(role)) return true
+    if (role && ['button', 'link', 'menuitem', 'tab', 'option', 'switch', 'checkbox', 'radio', 'slider'].includes(role)) return true
     if (el.getAttribute('tabindex')) return true
     try { if (getComputedStyle(el).cursor === 'pointer') return true } catch { /* */ }
     return false
@@ -450,11 +451,31 @@ function iframeExtractFunc(scope: string, vpWidth: number, vpHeight: number): { 
       if (t !== 'password' && inp.value) base.value = inp.value.slice(0, 20)
       if ((t === 'checkbox' || t === 'radio') && inp.checked) base.checked = true
       if (inp.required) base.required = true
+      // file input: accept 属性
+      if (t === 'file' && inp.accept) base.accept = inp.accept
+      // range input: min/max/step
+      if (t === 'range') {
+        const min = parseFloat(inp.min)
+        const max = parseFloat(inp.max)
+        const step = parseFloat(inp.step)
+        if (!isNaN(min)) base.min = min
+        if (!isNaN(max)) base.max = max
+        if (!isNaN(step) && step > 0) base.step = step
+      }
     }
     if (tag === 'textarea') {
       const ta = el as HTMLTextAreaElement
       if (ta.value) base.value = ta.value.slice(0, 20)
       if (ta.required) base.required = true
+    }
+    // 自定义滑块（role="slider"）
+    if (base.role === 'slider' && tag !== 'input') {
+      const ariaMin = parseFloat(el.getAttribute('aria-valuemin') || '')
+      const ariaMax = parseFloat(el.getAttribute('aria-valuemax') || '')
+      const ariaNow = parseFloat(el.getAttribute('aria-valuenow') || '')
+      if (!isNaN(ariaMin)) base.min = ariaMin
+      if (!isNaN(ariaMax)) base.max = ariaMax
+      if (!isNaN(ariaNow)) base.value = String(ariaNow)
     }
     if (isForm || tag === 'button') {
       const d = (el as HTMLInputElement).disabled || el.getAttribute('aria-disabled') === 'true'
@@ -463,27 +484,46 @@ function iframeExtractFunc(scope: string, vpWidth: number, vpHeight: number): { 
     return base
   }
 
-  // 确保所有元素有 data-skeleton-id
-  for (const el of document.body.querySelectorAll(`*:not(${SKIP})`)) {
-    if (!(el as HTMLElement).dataset.skeletonId) {
-      (el as HTMLElement).dataset.skeletonId = `fi${++idCounter}`
+  // 确保所有元素有 data-skeleton-id（含 Shadow DOM 内元素）
+  function assignIds(root: Document | ShadowRoot, prefix: string, depth: number): void {
+    if (depth > SHADOW_MAX_DEPTH) return
+    for (const el of root.querySelectorAll(`*:not(${SKIP})`)) {
+      const htmlEl = el as HTMLElement
+      if (!htmlEl.dataset.skeletonId) {
+        htmlEl.dataset.skeletonId = `${prefix}${++idCounter}`
+      }
+      if (htmlEl.shadowRoot) {
+        assignIds(htmlEl.shadowRoot, `sd${depth}_`, depth + 1)
+      }
     }
   }
 
+  assignIds(document, 'fi', 0)
+
   const elements: Record<string, unknown>[] = []
-  for (const el of document.body.querySelectorAll('*')) {
-    const htmlEl = el as HTMLElement
-    const id = htmlEl.dataset.skeletonId || ''
-    if (!id || !isClickable(htmlEl)) continue
-    if (!isVisible(htmlEl)) continue
-    if (scope === 'viewport') {
-      const r = htmlEl.getBoundingClientRect()
-      if (r.top >= vpHeight || r.bottom <= 0 || r.left >= vpWidth || r.right <= 0) continue
-      if (r.width < 1 || r.height < 1) continue
+
+  // 提取元素（含 Shadow DOM 内元素）
+  function extractFromRoot(root: Document | ShadowRoot, depth: number): void {
+    if (depth > SHADOW_MAX_DEPTH) return
+    for (const el of root.querySelectorAll('*')) {
+      const htmlEl = el as HTMLElement
+      const id = htmlEl.dataset.skeletonId || ''
+      if (!id || !isClickable(htmlEl)) continue
+      if (!isVisible(htmlEl)) continue
+      if (scope === 'viewport') {
+        const r = htmlEl.getBoundingClientRect()
+        if (r.top >= vpHeight || r.bottom <= 0 || r.left >= vpWidth || r.right <= 0) continue
+        if (r.width < 1 || r.height < 1) continue
+      }
+      const ex = extract(htmlEl, id)
+      if (ex) elements.push(ex)
+      if (htmlEl.shadowRoot) {
+        extractFromRoot(htmlEl.shadowRoot, depth + 1)
+      }
     }
-    const ex = extract(htmlEl, id)
-    if (ex) elements.push(ex)
   }
+
+  extractFromRoot(document, 0)
 
   return { url: location.href, elements }
 }

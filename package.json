@@ -28,10 +28,10 @@
     "manifest-v3"
   ],
   "scripts": {
-    "dev": "bash -c \"cp docs/site/guide.md public/guide.md && wxt\"",
-    "build": "bash -c \"D=$(date +%Y%m%d-%H%M%S) && cp docs/site/guide.md public/guide.md && bash scripts/build-check.sh && rm -rf .output && wxt build && mv .output/chrome-mv3 .output/ai-browser-prod-$D && cross-env VITE_LOG_ENABLED=true wxt build && mv .output/chrome-mv3 .output/ai-browser-test-$D\"",
-    "build:prod": "bash -c \"D=$(date +%Y%m%d-%H%M%S) && cp docs/site/guide.md public/guide.md && bash scripts/build-check.sh && wxt build && mv .output/chrome-mv3 .output/ai-browser-prod-$D\"",
-    "build:debug": "bash -c \"D=$(date +%Y%m%d-%H%M%S) && cp docs/site/guide.md public/guide.md && bash scripts/build-check.sh && cross-env VITE_LOG_ENABLED=true wxt build && mv .output/chrome-mv3 .output/ai-browser-test-$D\"",
+    "dev": "bash -c \"cp docs/site/guide-zh.md public/guide-zh.md && cp docs/site/guide-en.md public/guide-en.md && wxt\"",
+    "build": "bash -c \"D=$(date +%Y%m%d-%H%M%S) && cp docs/site/guide-zh.md public/guide-zh.md && cp docs/site/guide-en.md public/guide-en.md && bash scripts/build-check.sh && rm -rf .output && wxt build && mv .output/chrome-mv3 .output/ai-browser-prod-$D && cross-env VITE_LOG_ENABLED=true wxt build && mv .output/chrome-mv3 .output/ai-browser-test-$D\"",
+    "build:prod": "bash -c \"D=$(date +%Y%m%d-%H%M%S) && cp docs/site/guide-zh.md public/guide-zh.md && cp docs/site/guide-en.md public/guide-en.md && bash scripts/build-check.sh && wxt build && mv .output/chrome-mv3 .output/ai-browser-prod-$D\"",
+    "build:debug": "bash -c \"D=$(date +%Y%m%d-%H%M%S) && cp docs/site/guide-zh.md public/guide-zh.md && cp docs/site/guide-en.md public/guide-en.md && bash scripts/build-check.sh && cross-env VITE_LOG_ENABLED=true wxt build && mv .output/chrome-mv3 .output/ai-browser-test-$D\"",
     "compile": "vue-tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",

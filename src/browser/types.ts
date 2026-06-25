@@ -18,7 +18,7 @@ export const INTERACTIVE_TAGS = ['a', 'button', 'input', 'select', 'textarea', '
 /** 骨架中的单个元素（精简版：只保留 AI 定位和识别所需的核心字段） */
 export interface SkeletonElement {
   // ═══ 1. 身份标识 ═══
-  id: string                // 唯一标识 e1, e2, ...
+  id: string                // 唯一标识 e1, e2, ...（iframe 内 fi1_e1，Shadow DOM 内 sd1_e1）
   tag: string               // 标签名
   role?: string             // ARIA role: button, link, tab, menuitem, checkbox, switch ...
 
@@ -32,17 +32,23 @@ export interface SkeletonElement {
   href?: string             // <a> 标签目标 URL（截断 80 字符）
 
   // ═══ 4. 表单属性 ═══
-  inputType?: string        // input type: text/password/email/tel/search/number/date/file ...
+  inputType?: string        // input type: text/password/email/tel/search/number/date/file/range ...
   value?: string            // 当前输入值（完整不截断，密码框不提取）
   checked?: boolean         // checkbox/radio 是否选中（仅 true 时输出）
   required?: boolean        // 是否必填（仅 true 时输出）
+  accept?: string           // file input 的 accept 属性（文件类型过滤）
 
   // ═══ 5. 交互状态 ═══
   disabled?: boolean        // 是否禁用（仅 true 时输出）
   expanded?: boolean        // 展开/折叠状态（仅 true 时输出）
   selected?: boolean        // 选中状态（仅 true 时输出）
 
-  // ═══ 6. 上下文位置 ═══
+  // ═══ 6. 滑块属性（range input / role="slider"）═══
+  min?: number              // 滑块最小值
+  max?: number              // 滑块最大值
+  step?: number             // 滑块步长
+
+  // ═══ 7. 上下文位置 ═══
   parent?: string           // 父级地标标签（nav/header/main/aside/footer）
 }
 
@@ -98,7 +104,9 @@ export interface Command {
   tabQuery?: string        // switchTab 的目标标签关键词（如 "B站"、"淘宝"）
   done?: number            // 1=最后一步，0=还有步骤（用于停止判断）
   subAction?: string       // video 操作的子类型（play/pause/volume/mute/seek/jump/speed/fullscreen）
-  value?: number           // video 操作的值（音量 0-1、快进秒数、播放速度等）
+  value?: number           // video 操作的值（音量 0-1、快进秒数、播放速度等）/ slider 目标值
+  fileData?: { base64: string; name: string; mimeType: string } | string // upload 操作的文件数据（string 时自动修正）
+  filename?: string          // upload 操作的文件名（AI 错误格式时的回退来源）
 }
 
 /** 执行结果 */

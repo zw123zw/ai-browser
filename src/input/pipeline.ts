@@ -585,6 +585,12 @@ export class InputPipeline {
             log.info('[Phase 2] ── click 前置保存 queued task ──')
           }
 
+          // ★ upload 补充文件名：AI 可能不传 filename，从用户输入的 [文件: xxx] 标签提取
+          if (cmd.action === 'upload' && !cmd.filename) {
+            const fileTagMatch = text.match(/\[文件:\s*(.+?)\]/)
+            if (fileTagMatch) cmd.filename = fileTagMatch[1].trim()
+          }
+
           const result = await this.executor.execute(cmd, this.options.getSignal?.())
           totalExecutions++
 
