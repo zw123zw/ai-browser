@@ -3,8 +3,11 @@ import { ref, computed, watch, nextTick } from 'vue';
 import { useNotesStore } from '@/src/stores/notes';
 import { useToast } from '@/src/composables/useToast';
 import { renderMarkdown } from '@/src/utils/markdown';
+import { Logger } from '@/src/utils/logger';
 import ConfirmDialog from './ConfirmDialog.vue';
 import type { NoteTitle, NoteEntry } from '@/src/types';
+
+const log = new Logger('NoteViewer');
 
 const emit = defineEmits<{ (e: 'close'): void }>();
 
@@ -121,7 +124,7 @@ function jumpToSource(entry: NoteEntry) {
   const hash = params.toString() ? `#${params.toString()}` : '';
   const targetUrl = entry.url + hash;
 
-  console.log('[笔记跳转] jumpToSource', { scrollY: entry.scrollY, url: entry.url, targetUrl, selectedText: entry.selectedText?.slice(0, 30) });
+  log.info('[笔记跳转] jumpToSource', { scrollY: entry.scrollY, url: entry.url, targetUrl, selectedText: entry.selectedText?.slice(0, 30) });
 
   // 先关闭笔记弹框
   emit('close');
