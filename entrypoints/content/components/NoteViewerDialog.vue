@@ -394,7 +394,7 @@ function onBackdrop(e: MouseEvent) {
                   :title="entry.url"
                   @click="jumpToSource(entry)"
                 >
-                  {{ shortUrl(entry.url) }}
+                  🔗 {{ shortUrl(entry.url) }}
                 </div>
                 <div v-if="entry.scrollY" class="aib-viewer-timeline-scroll">
                   scrollY: {{ entry.scrollY }}
@@ -717,16 +717,17 @@ function onBackdrop(e: MouseEvent) {
 }
 .aib-viewer-timeline-url {
   font-size: 10px;
-  color: var(--aib-primary, #8b5cf6);
+  color: #60a5fa;
   cursor: pointer;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  transition: color 0.1s ease;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  transition: color 0.15s ease;
 }
 .aib-viewer-timeline-url:hover {
-  color: #a78bfa;
-  text-decoration: underline;
+  color: #93c5fd;
 }
 .aib-viewer-timeline-scroll {
   font-size: 10px;

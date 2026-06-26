@@ -43,6 +43,10 @@ export default defineContentScript({
         const highlightText = params.get('aib-highlight') || ''
         log.info('[笔记跳转] 解析参数', { scrollY, highlightText: highlightText.slice(0, 30) })
 
+        // 禁用浏览器自动滚动恢复（防止 replaceState 后浏览器自己滚回原位）
+        const prevScrollRestoration = history.scrollRestoration
+        history.scrollRestoration = 'manual'
+
         // 清除 hash（避免刷新重复触发）
         history.replaceState(null, '', location.pathname + location.search)
 
@@ -84,9 +88,13 @@ export default defineContentScript({
           }
         }
 
-        // 延迟多次尝试
-        const delays = [300, 800, 1500, 2500, 4000]
+        // 延迟尝试（等页面内容加载完成）
+        const delays = [300, 1000, 2000]
         delays.forEach(delay => setTimeout(doScroll, delay))
+        // 最后一次滚动后恢复浏览器默认行为
+        setTimeout(() => {
+          history.scrollRestoration = prevScrollRestoration
+        }, 2500)
 
         // 高亮闪烁
         if (highlightText) {
