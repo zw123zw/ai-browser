@@ -10,10 +10,12 @@ import type { ModelConfig, NoteMode, Provider } from '@/src/types';
 import { eventToShortcut } from '@/src/utils/shortcut';
 import { THEMES } from '@/src/themes';
 import { useI18n, type Locale } from '@/src/i18n';
+import { useVoiceStore } from '@/src/stores/voice';
 import ConfirmDialog from './ConfirmDialog.vue';
 
 const emit = defineEmits<{ (e: 'close'): void }>();
 const store = useSettingsStore();
+const voiceStore = useVoiceStore();
 const toast = useToast();
 const { t, locale, setLocale } = useI18n();
 
@@ -80,7 +82,7 @@ async function handleDownloadLogs() {
   toast.success(t('settings.user.logDownloaded'));
 }
 
-const tab = ref<'ai' | 'general' | 'user'>('ai');
+const tab = ref<'ai' | 'general' | 'user' | 'voice'>('ai');
 
 // ========== 使用文档 ==========
 const showDocs = ref(false);
@@ -646,6 +648,19 @@ function importModels(e: Event) {
             {{ t('settings.tabs.general') }}
           </button>
           <button
+            :class="['aib-settings-tab', { 'aib-tab-active': tab === 'voice' }]"
+            @click="tab = 'voice'"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+              <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+              <line x1="12" y1="19" x2="12" y2="23"/>
+              <line x1="8" y1="23" x2="16" y2="23"/>
+            </svg>
+            {{ t('settings.tabs.voice') }}
+          </button>
+          <button
             :class="['aib-settings-tab', { 'aib-tab-active': tab === 'user' }]"
             @click="tab = 'user'"
           >
@@ -1101,6 +1116,176 @@ function importModels(e: Event) {
             <!-- 版本号 -->
             <div class="aib-version-footer">
               v{{ appVersion }}
+            </div>
+          </div>
+
+          <!-- ========== 语音设置 ========== -->
+          <div v-show="tab === 'voice'" class="aib-modal-body">
+            <div class="aib-section-title">{{ t('settings.voice.title') }}</div>
+
+            <!-- 🎤 语音识别 -->
+            <div class="aib-form-row">
+              <label>{{ t('settings.voice.recognition') }}</label>
+            </div>
+
+            <div class="aib-form-row">
+              <label>{{ t('settings.voice.engineType') }}</label>
+              <div class="aib-select-group">
+                <button
+                  :class="['aib-select-btn', { active: voiceStore.settings.engineType === 'web-speech' }]"
+                  @click="voiceStore.updateSetting('engineType', 'web-speech')"
+                >
+                  {{ t('settings.voice.engineWebSpeech') }}
+                </button>
+                <button
+                  :class="['aib-select-btn', { active: voiceStore.settings.engineType === 'iflytek' }]"
+                  @click="voiceStore.updateSetting('engineType', 'iflytek')"
+                >
+                  {{ t('settings.voice.engineIflytek') }}
+                </button>
+              </div>
+            </div>
+
+            <div v-if="voiceStore.settings.engineType === 'iflytek'" class="aib-form-row">
+              <label>{{ t('settings.voice.iflytekAppId') }}</label>
+              <input
+                :value="voiceStore.settings.iflytekAppId"
+                @input="voiceStore.updateSetting('iflytekAppId', ($event.target as HTMLInputElement).value)"
+                placeholder="xxxxxxxx"
+                class="aib-input"
+              />
+            </div>
+
+            <div v-if="voiceStore.settings.engineType === 'iflytek'" class="aib-form-row">
+              <label>{{ t('settings.voice.iflytekApiKey') }}</label>
+              <input
+                :value="voiceStore.settings.iflytekApiKey"
+                @input="voiceStore.updateSetting('iflytekApiKey', ($event.target as HTMLInputElement).value)"
+                placeholder="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+                class="aib-input"
+              />
+            </div>
+
+            <div class="aib-form-row">
+              <label>{{ t('settings.voice.recognitionLang') }}</label>
+              <div class="aib-select-group">
+                <button
+                  :class="['aib-select-btn', { active: voiceStore.settings.recognitionLang === 'zh-CN' }]"
+                  @click="voiceStore.updateSetting('recognitionLang', 'zh-CN')"
+                >
+                  {{ t('settings.voice.langZhCN') }}
+                </button>
+                <button
+                  :class="['aib-select-btn', { active: voiceStore.settings.recognitionLang === 'en-US' }]"
+                  @click="voiceStore.updateSetting('recognitionLang', 'en-US')"
+                >
+                  {{ t('settings.voice.langEnUS') }}
+                </button>
+              </div>
+            </div>
+
+            <!-- 🔔 唤醒词 -->
+            <div class="aib-form-row" style="margin-top:16px">
+              <label>{{ t('settings.voice.wakeWord') }}</label>
+            </div>
+
+            <div class="aib-form-row">
+              <label>{{ t('settings.voice.enableWakeWord') }}</label>
+              <label class="aib-switch">
+                <input
+                  type="checkbox"
+                  :checked="voiceStore.settings.enableWakeWord"
+                  @change="voiceStore.updateSetting('enableWakeWord', ($event.target as HTMLInputElement).checked)"
+                />
+                <span class="aib-switch-slider" />
+              </label>
+            </div>
+
+            <div v-if="voiceStore.settings.enableWakeWord" class="aib-form-row">
+              <label>{{ t('settings.voice.wakeWordLabel') }}</label>
+              <input
+                :value="voiceStore.settings.wakeWord"
+                @input="voiceStore.updateSetting('wakeWord', ($event.target as HTMLInputElement).value)"
+                :placeholder="t('settings.voice.wakeWordPlaceholder')"
+                class="aib-input"
+              />
+            </div>
+
+            <div v-if="voiceStore.settings.enableWakeWord" class="aib-form-row">
+              <label>{{ t('settings.voice.enableWakeSound') }}</label>
+              <label class="aib-switch">
+                <input
+                  type="checkbox"
+                  :checked="voiceStore.settings.enableWakeSound"
+                  @change="voiceStore.updateSetting('enableWakeSound', ($event.target as HTMLInputElement).checked)"
+                />
+                <span class="aib-switch-slider" />
+              </label>
+            </div>
+
+            <!-- 🔊 语音播报 -->
+            <div class="aib-form-row" style="margin-top:16px">
+              <label>{{ t('settings.voice.tts') }}</label>
+            </div>
+
+            <div class="aib-form-row">
+              <label>{{ t('settings.voice.enableTts') }}</label>
+              <label class="aib-switch">
+                <input
+                  type="checkbox"
+                  :checked="voiceStore.settings.enableTts"
+                  @change="voiceStore.updateSetting('enableTts', ($event.target as HTMLInputElement).checked)"
+                />
+                <span class="aib-switch-slider" />
+              </label>
+            </div>
+
+            <div v-if="voiceStore.settings.enableTts" class="aib-form-row">
+              <label>{{ t('settings.voice.ttsRate') }}: {{ voiceStore.settings.ttsRate.toFixed(1) }}x</label>
+              <input
+                type="range"
+                min="0.5"
+                max="2"
+                step="0.1"
+                :value="voiceStore.settings.ttsRate"
+                @input="voiceStore.updateSetting('ttsRate', parseFloat(($event.target as HTMLInputElement).value))"
+                class="aib-range"
+              />
+            </div>
+
+            <div v-if="voiceStore.settings.enableTts" class="aib-form-row">
+              <label>{{ t('settings.voice.ttsVolume') }}: {{ Math.round(voiceStore.settings.ttsVolume * 100) }}%</label>
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.05"
+                :value="voiceStore.settings.ttsVolume"
+                @input="voiceStore.updateSetting('ttsVolume', parseFloat(($event.target as HTMLInputElement).value))"
+                class="aib-range"
+              />
+            </div>
+
+            <!-- ⚡ 行为 -->
+            <div class="aib-form-row" style="margin-top:16px">
+              <label>{{ t('settings.voice.behavior') }}</label>
+            </div>
+
+            <div class="aib-form-row">
+              <label>{{ t('settings.voice.autoStart') }}</label>
+              <label class="aib-switch">
+                <input
+                  type="checkbox"
+                  :checked="voiceStore.settings.autoStart"
+                  @change="voiceStore.updateSetting('autoStart', ($event.target as HTMLInputElement).checked)"
+                />
+                <span class="aib-switch-slider" />
+              </label>
+            </div>
+
+            <div class="aib-tab-footer">
+              <div style="flex:1" />
+              <button class="aib-btn" @click="emit('close')">{{ t('settings.general.cancel') }}</button>
             </div>
           </div>
         </div>
@@ -1852,5 +2037,122 @@ function importModels(e: Event) {
   color: var(--aib-text-soft);
   text-align: center;
   opacity: 0.7;
+}
+
+/* ========== 语音设置 ========== */
+
+.aib-select-group {
+  display: flex;
+  gap: 8px;
+}
+
+.aib-select-btn {
+  padding: 6px 16px;
+  border: 1px solid var(--aib-border);
+  border-radius: 8px;
+  background: var(--aib-bg-card);
+  color: var(--aib-text-soft);
+  cursor: pointer;
+  font-size: 13px;
+  font-family: inherit;
+  transition: all 0.2s;
+}
+
+.aib-select-btn:hover {
+  border-color: var(--aib-primary);
+}
+
+.aib-select-btn.active {
+  border-color: var(--aib-primary);
+  background: var(--aib-primary-soft);
+  color: var(--aib-primary);
+}
+
+.aib-input {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--aib-border);
+  border-radius: 8px;
+  background: var(--aib-bg-card);
+  color: var(--aib-text);
+  font-size: 13px;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.aib-input:focus {
+  border-color: var(--aib-primary);
+}
+
+.aib-input::placeholder {
+  color: var(--aib-text-faint);
+}
+
+/* Toggle switch for voice settings */
+label.aib-switch {
+  position: relative;
+  display: inline-block;
+  width: 40px;
+  height: 22px;
+  flex-shrink: 0;
+}
+
+label.aib-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.aib-switch-slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: var(--aib-border-strong, #3a3a4a);
+  border-radius: 11px;
+  transition: background 0.25s;
+}
+
+.aib-switch-slider::before {
+  content: '';
+  position: absolute;
+  height: 18px;
+  width: 18px;
+  left: 2px;
+  bottom: 2px;
+  background: white;
+  border-radius: 50%;
+  transition: transform 0.25s;
+}
+
+label.aib-switch input:checked + .aib-switch-slider {
+  background: var(--aib-primary);
+}
+
+label.aib-switch input:checked + .aib-switch-slider::before {
+  transform: translateX(18px);
+}
+
+.aib-range {
+  width: 100%;
+  height: 4px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: var(--aib-border);
+  border-radius: 2px;
+  outline: none;
+}
+
+.aib-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--aib-primary);
+  cursor: pointer;
 }
 </style>

@@ -54,7 +54,31 @@
     "tabs": {
       "ai": "模型配置",
       "general": "通用配置",
-      "user": "用户配置"
+      "user": "用户配置",
+      "voice": "语音配置"
+    },
+    "voice": {
+      "title": "语音配置",
+      "recognition": "语音识别",
+      "engineType": "识别引擎",
+      "engineWebSpeech": "Web Speech API",
+      "engineIflytek": "讯飞语音",
+      "iflytekApiKey": "讯飞 API Key",
+      "iflytekAppId": "讯飞 App ID",
+      "recognitionLang": "识别语言",
+      "langZhCN": "中文",
+      "langEnUS": "英文",
+      "wakeWord": "唤醒词",
+      "enableWakeWord": "启用唤醒词",
+      "wakeWordLabel": "唤醒词",
+      "wakeWordPlaceholder": "你好，小灵",
+      "enableWakeSound": "唤醒提示音",
+      "tts": "语音播报",
+      "enableTts": "启用播报",
+      "ttsRate": "播报语速",
+      "ttsVolume": "播报音量",
+      "behavior": "行为",
+      "autoStart": "自动启动监听"
     },
     "ai": {
       "title": "模型配置",

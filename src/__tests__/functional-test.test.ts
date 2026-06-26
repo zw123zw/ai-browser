@@ -30,7 +30,6 @@ import {
   MODE_RETRY,
 } from '../input/prompts'
 import { createAdapter } from '../adapters'
-import { parseBatchCommand } from '../voice/commandParser'
 import { getExtension, detectFileType, getCodeLang, getFileTypeIcon, formatFileSize } from '../utils/file-type'
 import type { InputContext } from '../input/types'
 import type { Command } from '../browser/types'
@@ -1157,80 +1156,7 @@ describe('功能 7: AI 适配器功能', () => {
 })
 
 // ═══════════════════════════════════════════════════════════════
-// 功能 8: 语音指令解析功能
-// ═══════════════════════════════════════════════════════════════
-
-describe('功能 8: 语音指令解析功能', () => {
-  describe('场景 8.1: 解析单条指令', () => {
-    it('步骤 1: 解析 open_site 指令', () => {
-      const text = '【code】open_site:https://www.baidu.com【/code】'
-      const result = parseBatchCommand(text)
-
-      expect(result.total).toBe(1)
-      expect(result.commandList[0].type).toBe('open_site')
-      expect(result.commandList[0].params).toBe('https://www.baidu.com')
-    })
-
-    it('步骤 2: 解析 search 指令', () => {
-      const text = '【code】search:天气预报【/code】'
-      const result = parseBatchCommand(text)
-
-      expect(result.total).toBe(1)
-      expect(result.commandList[0].type).toBe('search')
-      expect(result.commandList[0].params).toBe('天气预报')
-    })
-
-    it('步骤 3: 解析无参指令 page_next', () => {
-      const text = '【code】page_next【/code】'
-      const result = parseBatchCommand(text)
-
-      expect(result.total).toBe(1)
-      expect(result.commandList[0].type).toBe('page_next')
-    })
-  })
-
-  describe('场景 8.2: 解析多条指令', () => {
-    it('步骤 1: 批量解析', () => {
-      const text = '好的，我来帮你操作。\n\n【code】open_site:https://www.baidu.com【/code】\n\n【code】search:天气【/code】'
-      const result = parseBatchCommand(text)
-
-      expect(result.total).toBe(2)
-      expect(result.commandList[0].type).toBe('open_site')
-      expect(result.commandList[1].type).toBe('search')
-    })
-  })
-
-  describe('场景 8.3: 纯对话文本', () => {
-    it('步骤 1: 无指令标记', () => {
-      const text = '你好，有什么可以帮助你的吗？'
-      const result = parseBatchCommand(text)
-
-      expect(result.total).toBe(0)
-      expect(result.plainText).toBe('你好，有什么可以帮助你的吗？')
-    })
-  })
-
-  describe('场景 8.4: 指令验证', () => {
-    it('步骤 1: 非法指令类型', () => {
-      const text = '【code】invalid_type:param【/code】'
-      const result = parseBatchCommand(text)
-
-      expect(result.hasError).toBe(true)
-      expect(result.errorMsg).toContain('非法指令类型')
-    })
-
-    it('步骤 2: 缺少必填参数', () => {
-      const text = '【code】open_site【/code】'
-      const result = parseBatchCommand(text)
-
-      expect(result.hasError).toBe(true)
-      expect(result.errorMsg).toContain('缺少必填参数')
-    })
-  })
-})
-
-// ═══════════════════════════════════════════════════════════════
-// 功能 9: 文件类型检测功能
+// 功能 8: 文件类型检测功能
 // ═══════════════════════════════════════════════════════════════
 
 describe('功能 9: 文件类型检测功能', () => {

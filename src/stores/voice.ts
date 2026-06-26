@@ -1,71 +1,116 @@
 /**
  * 语音状态管理
  *
- * 管理语音识别的启停状态、识别结果、对话历史、播报状态
- * 常驻等待模式：每轮会话结束后自动回到 IDLE
+ * 管理语音识别状态、设置项。
+ * 对话历史统一使用 conversationsStore。
  */
 
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
-import type { VoiceStatus } from '@/src/voice/recognition'
+import { ref } from 'vue'
+import { Logger } from '@/src/utils/logger'
 
-/** 语音会话状态（4 状态，无 evaluating） */
+const log = new Logger('Store:Voice')
+
+/** 语音识别状态 */
+export type VoiceStatus = 'idle' | 'listening' | 'processing' | 'error'
+
+/** 语音会话状态 */
 export type SessionState =
-  | 'idle'        // 空闲 / 常驻等待
-  | 'listening'   // 聆听中
-  | 'processing'  // AI 分析 + 解析 + 执行
-  | 'speaking'    // 语音播报中
+  | 'idle'        // 空闲
+  | 'wake'        // 监听唤醒词
+  | 'command'     // 监听命令
+  | 'processing'  // AI 处理中
+  | 'speaking'    // TTS 播报中
 
-/** 语音对话消息 */
-export interface VoiceMessage {
-  id: string
-  role: 'user' | 'assistant' | 'system'
-  content: string
-  /** 自动化指令结果 */
-  actionResult?: {
-    action: string
-    success: boolean
-    message: string
-  }
-  timestamp: number
+/** 识别引擎类型 */
+export type EngineType = 'web-speech' | 'iflytek'
+
+/** 语音设置 */
+export interface VoiceSettings {
+  // 🎤 语音识别
+  engineType: EngineType
+  iflytekApiKey: string
+  iflytekAppId: string
+  recognitionLang: string
+
+  // 🔔 唤醒词
+  enableWakeWord: boolean
+  wakeWord: string
+  enableWakeSound: boolean
+
+  // 🔊 TTS
+  enableTts: boolean
+  ttsRate: number
+  ttsVolume: number
+
+  // ⚡ 行为
+  autoStart: boolean
+}
+
+const DEFAULT_SETTINGS: VoiceSettings = {
+  engineType: 'web-speech',
+  iflytekApiKey: '',
+  iflytekAppId: '',
+  recognitionLang: 'zh-CN',
+  enableWakeWord: true,
+  wakeWord: '你好，小灵',
+  enableWakeSound: true,
+  enableTts: true,
+  ttsRate: 1.0,
+  ttsVolume: 0.8,
+  autoStart: false,
 }
 
 export const useVoiceStore = defineStore('voice', () => {
-  /** 语音识别状态 */
+  // ========== 状态 ==========
   const status = ref<VoiceStatus>('idle')
-
-  /** 会话状态机状态 */
   const sessionState = ref<SessionState>('idle')
-
-  /** 当前识别的文本（中间结果） */
   const interimText = ref('')
-
-  /** 最终识别的文本 */
   const finalText = ref('')
 
-  /** 语音对话历史 */
-  const messages = ref<VoiceMessage[]>([])
+  // ========== 设置（持久化） ==========
+  const settings = ref<VoiceSettings>({ ...DEFAULT_SETTINGS })
+  const ready = ref(false)
 
-  /** 是否正在处理 AI 请求 */
-  const isProcessing = ref(false)
+  /** 初始化设置 */
+  async function initSettings() {
+    try {
+      const stored = await chrome.storage.local.get('voice-settings')
+      if (stored['voice-settings']) {
+        settings.value = { ...DEFAULT_SETTINGS, ...stored['voice-settings'] }
+      }
+      ready.value = true
+    } catch (error) {
+      log.error('加载语音设置失败:', error)
+      ready.value = true
+    }
+  }
 
-  /** 是否正在语音播报 */
-  const isSpeaking = ref(false)
+  /** 更新单个设置项 */
+  function updateSetting<K extends keyof VoiceSettings>(key: K, value: VoiceSettings[K]) {
+    settings.value[key] = value
+    // 自动保存（defineStorageSync 会处理防抖写入）
+  }
 
-  /** 对话消息数量 */
-  const messageCount = computed(() => messages.value.length)
+  /** 批量更新设置 */
+  function updateSettings(partial: Partial<VoiceSettings>) {
+    Object.assign(settings.value, partial)
+  }
 
-  /** 更新状态 */
+  /** 重置为默认设置 */
+  function resetSettings() {
+    Object.assign(settings.value, DEFAULT_SETTINGS)
+  }
+
+  // ========== 状态更新 ==========
   function setStatus(newStatus: VoiceStatus) {
     status.value = newStatus
   }
 
-  /** 更新会话状态 */
   function setSessionState(state: SessionState) {
     sessionState.value = state
   }
 
-  /** 更新识别文本 */
   function updateText(text: string, isFinal: boolean) {
     if (isFinal) {
       finalText.value = text
@@ -75,77 +120,30 @@ export const useVoiceStore = defineStore('voice', () => {
     }
   }
 
-  /** 添加用户消息 */
-  function addUserMessage(text: string) {
-    const msg: VoiceMessage = {
-      id: Date.now().toString(),
-      role: 'user',
-      content: text,
-      timestamp: Date.now(),
-    }
-    messages.value.push(msg)
-    return msg
-  }
-
-  /** 添加 AI 回复 */
-  function addAssistantMessage(content: string, actionResult?: VoiceMessage['actionResult']) {
-    const msg: VoiceMessage = {
-      id: Date.now().toString(),
-      role: 'assistant',
-      content,
-      actionResult,
-      timestamp: Date.now(),
-    }
-    messages.value.push(msg)
-    return msg
-  }
-
-  /** 添加系统消息 */
-  function addSystemMessage(content: string) {
-    const msg: VoiceMessage = {
-      id: Date.now().toString(),
-      role: 'system',
-      content,
-      timestamp: Date.now(),
-    }
-    messages.value.push(msg)
-    return msg
-  }
-
-  /** 清空对话历史 */
-  function clearMessages() {
-    messages.value = []
+  function reset() {
+    status.value = 'idle'
+    sessionState.value = 'idle'
     interimText.value = ''
     finalText.value = ''
   }
 
-  /** 设置处理状态 */
-  function setProcessing(value: boolean) {
-    isProcessing.value = value
-  }
-
-  /** 设置播报状态 */
-  function setSpeaking(value: boolean) {
-    isSpeaking.value = value
-  }
-
   return {
+    // 状态
     status,
     sessionState,
     interimText,
     finalText,
-    messages,
-    isProcessing,
-    isSpeaking,
-    messageCount,
     setStatus,
     setSessionState,
     updateText,
-    addUserMessage,
-    addAssistantMessage,
-    addSystemMessage,
-    clearMessages,
-    setProcessing,
-    setSpeaking,
+    reset,
+
+    // 设置
+    settings,
+    ready,
+    initSettings,
+    updateSetting,
+    updateSettings,
+    resetSettings,
   }
 })

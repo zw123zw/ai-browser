@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 import { useVoiceStore } from '../voice'
 
@@ -11,8 +11,8 @@ describe('useVoiceStore', () => {
     const store = useVoiceStore()
     expect(store.status).toBe('idle')
     expect(store.sessionState).toBe('idle')
-    expect(store.isProcessing).toBe(false)
-    expect(store.isSpeaking).toBe(false)
+    expect(store.interimText).toBe('')
+    expect(store.finalText).toBe('')
   })
 
   describe('setStatus', () => {
@@ -59,68 +59,19 @@ describe('useVoiceStore', () => {
     })
   })
 
-  describe('消息管理', () => {
-    it('addUserMessage 应添加用户消息', () => {
+  describe('reset', () => {
+    it('应重置所有状态', () => {
       const store = useVoiceStore()
-      const msg = store.addUserMessage('你好')
-      expect(msg.role).toBe('user')
-      expect(msg.content).toBe('你好')
-      expect(store.messages).toHaveLength(1)
-    })
+      store.setStatus('listening')
+      store.setSessionState('processing')
+      store.updateText('测试文本', false)
 
-    it('addAssistantMessage 应添加助手消息', () => {
-      const store = useVoiceStore()
-      const msg = store.addAssistantMessage('你好')
-      expect(msg.role).toBe('assistant')
-      expect(msg.content).toBe('你好')
-    })
+      store.reset()
 
-    it('addSystemMessage 应添加系统消息', () => {
-      const store = useVoiceStore()
-      const msg = store.addSystemMessage('系统提示')
-      expect(msg.role).toBe('system')
-    })
-
-    it('clearMessages 应清空消息', () => {
-      const store = useVoiceStore()
-      store.addUserMessage('msg1')
-      store.addUserMessage('msg2')
-      store.clearMessages()
-
-      expect(store.messages).toHaveLength(0)
-    })
-  })
-
-  describe('状态管理', () => {
-    it('setProcessing 应设置处理状态', () => {
-      const store = useVoiceStore()
-      store.setProcessing(true)
-      expect(store.isProcessing).toBe(true)
-
-      store.setProcessing(false)
-      expect(store.isProcessing).toBe(false)
-    })
-
-    it('setSpeaking 应设置播报状态', () => {
-      const store = useVoiceStore()
-      store.setSpeaking(true)
-      expect(store.isSpeaking).toBe(true)
-
-      store.setSpeaking(false)
-      expect(store.isSpeaking).toBe(false)
-    })
-  })
-
-  describe('messageCount', () => {
-    it('应返回消息数量', () => {
-      const store = useVoiceStore()
-      expect(store.messageCount).toBe(0)
-
-      store.addUserMessage('msg1')
-      expect(store.messageCount).toBe(1)
-
-      store.addAssistantMessage('msg2')
-      expect(store.messageCount).toBe(2)
+      expect(store.status).toBe('idle')
+      expect(store.sessionState).toBe('idle')
+      expect(store.interimText).toBe('')
+      expect(store.finalText).toBe('')
     })
   })
 })

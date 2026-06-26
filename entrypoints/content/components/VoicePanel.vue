@@ -1,25 +1,25 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue'
-import { useVoiceStore } from '@/src/stores/voice'
-import { useSettingsStore } from '@/src/stores/settings'
-import { useToast } from '@/src/composables/useToast'
 import { useI18n } from '@/src/i18n'
-import { VoiceSession } from '@/src/voice/session'
-import { ActionExecutor } from '@/src/browser/action-executor'
+import { useVoiceStore } from '@/src/stores/voice'
+import { useConversationsStore } from '@/src/stores/conversations'
+import { useSettingsStore } from '@/src/stores/settings'
+import { usePipeline } from '@/src/composables/usePipeline'
+import { VoiceManager } from '@/src/voice/voice-manager'
 import { Logger } from '@/src/utils/logger'
 import type { SessionState } from '@/src/stores/voice'
+import type { VoiceManagerState } from '@/src/voice/voice-manager'
 
 const { t } = useI18n()
-
 const emit = defineEmits<{ (e: 'switch-chat'): void }>()
 const log = new Logger('VoicePanel')
 const voiceStore = useVoiceStore()
+const convStore = useConversationsStore()
 const settingsStore = useSettingsStore()
-const toast = useToast()
+const pipeline = usePipeline()
 
 const messagesRef = ref<HTMLElement | null>(null)
-let session: VoiceSession | null = null
-const actionExecutor = new ActionExecutor()
+let manager: VoiceManager | null = null
 
 /** 自动滚动到底部 */
 function scrollToBottom() {
@@ -30,151 +30,152 @@ function scrollToBottom() {
   })
 }
 
-/** 获取当前页面上下文（URL + 清洗后 HTML） */
-async function getPageContext(): Promise<{ url: string; html: string }> {
-  try {
-    const url = window.location.href
+/** 初始化语音管理器 */
+function initManager() {
+  const s = voiceStore.settings
 
-    // 跳过特殊页面
-    if (
-      url.startsWith('chrome://') ||
-      url.startsWith('chrome-extension://') ||
-      url.startsWith('edge://')
-    ) {
-      log.warn('特殊页面，跳过 HTML 获取', { url })
-      return { url, html: '' }
-    }
-
-    // 清洗当前页面 HTML
-    const clone = document.documentElement.cloneNode(true) as HTMLElement
-    clone
-      .querySelectorAll('script, style, noscript, link[rel="stylesheet"], meta')
-      .forEach((el) => el.remove())
-    clone.querySelectorAll('[hidden]').forEach((el) => el.remove())
-    clone.querySelectorAll('[style]').forEach((el) => el.removeAttribute('style'))
-
-    log.debug('获取页面上下文', { url, htmlLength: clone.innerHTML.length })
-    return { url, html: clone.innerHTML }
-  } catch (error) {
-    log.error('获取页面上下文失败', error)
-    return { url: window.location.href, html: '' }
-  }
-}
-
-/** 初始化语音会话 */
-function initSession() {
-  log.info('初始化语音会话')
-  session = new VoiceSession({
-    getSettings: () => settingsStore.settings,
-    getRecentMessages: () => voiceStore.messages,
-    onStateChange: (state: SessionState) => {
-      voiceStore.setSessionState(state)
-      voiceStore.setProcessing(state === 'processing')
-      voiceStore.setSpeaking(state === 'speaking')
+  manager = new VoiceManager({
+    engineType: s.engineType,
+    iflytekConfig: s.engineType === 'iflytek' ? {
+      appId: s.iflytekAppId,
+      apiKey: s.iflytekApiKey,
+    } : undefined,
+    lang: s.recognitionLang,
+    wakeWord: s.wakeWord,
+    enableWakeWord: s.enableWakeWord,
+    enableTts: s.enableTts,
+    ttsRate: s.ttsRate,
+    ttsVolume: s.ttsVolume,
+    autoStart: false, // VoicePanel 自己控制启动
+    onStateChange: (state: VoiceManagerState) => {
+      const stateMap: Record<VoiceManagerState, SessionState> = {
+        idle: 'idle',
+        wake: 'wake',
+        command: 'command',
+        processing: 'processing',
+        speaking: 'speaking',
+      }
+      voiceStore.setSessionState(stateMap[state])
     },
-    onTextUpdate: (text, isFinal) => {
-      voiceStore.updateText(text, isFinal)
+    onInterimText: (text) => {
+      voiceStore.updateText(text, false)
     },
     onUserMessage: (text) => {
-      voiceStore.addUserMessage(text)
-      scrollToBottom()
+      voiceStore.updateText(text, true)
     },
-    onAssistantMessage: (content, actionResult) => {
-      voiceStore.addAssistantMessage(content, actionResult)
-      scrollToBottom()
+    onError: (error) => {
+      log.error('语音错误', error)
     },
-    onSystemMessage: (content) => {
-      voiceStore.addSystemMessage(content)
-      scrollToBottom()
-    },
-    executeAutomation: async (action, params) => {
-      // 优先使用本地 ActionExecutor（content script 上下文）
-      try {
-        const result = await actionExecutor.execute({
-          action,
-          url: params.url as string,
-          text: params.keyword as string,
-          direction: params.direction as string,
-          key: params.key as string,
-          ms: params.ms as number,
-          description: params.description as string,
-        })
-        return result
-      } catch (error) {
-        log.error('本地执行失败，回退到跨标签页执行', error)
-        // 回退：通过 chrome.tabs.sendMessage 执行
-        try {
-          const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
-          if (!tab?.id) {
-            return { success: false, message: '无法获取当前标签页' }
-          }
-          await chrome.scripting.executeScript({
-            target: { tabId: tab.id },
-            files: ['content-scripts/content.js'],
-          })
-          const response = await chrome.tabs.sendMessage(tab.id, {
-            type: 'automation',
-            action,
-            params,
-          })
-          return {
-            success: response?.success ?? true,
-            message: response?.message || '操作已执行',
-          }
-        } catch (fallbackError) {
-          log.error('回退执行也失败', fallbackError)
-          return { success: false, message: String(fallbackError) }
-        }
-      }
-    },
-    getPageContext,
   })
-}
 
-/** 切换语音识别 */
-async function toggleRecognition() {
-  if (!session) {
-    initSession()
-  }
-
-  if (voiceStore.sessionState === 'idle') {
-    await session?.start()
-  } else {
-    session?.stop()
+  // 接入统一管线
+  manager.onProcessText = async (text: string) => {
+    try {
+      await pipeline.processInput(text)
+    } catch (error) {
+      log.error('管线处理失败', error)
+    }
   }
 }
 
-/** 清空对话 */
-function clearVoiceChat() {
-  voiceStore.clearMessages()
-  log.info('清空语音对话')
+/** 启动监听 */
+function startListening() {
+  if (!convStore.conversation) {
+    log.warn('无活跃会话')
+    return
+  }
+  manager?.start()
 }
 
-/** 获取状态文字 */
+/** 停止监听 */
+function stopListening() {
+  manager?.stop()
+}
+
+/** 清理 markdown 格式，提取纯文本用于 TTS */
+function stripMarkdown(text: string): string {
+  return text
+    .replace(/\*\*(.+?)\*\*/g, '$1')
+    .replace(/\*(.+?)\*/g, '$1')
+    .replace(/`(.+?)`/g, '$1')
+    .replace(/```[\s\S]*?```/g, '')
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    .replace(/[#*_~>|]/g, '')
+    .replace(/\n{2,}/g, '。')
+    .trim()
+}
+
+// TTS：watch 新 assistant 消息
+watch(
+  () => convStore.conversation?.messages.length,
+  (newLen, oldLen) => {
+    if (!manager?.isActive || !newLen || newLen <= (oldLen || 0)) return
+    const lastMsg = convStore.conversation!.messages[newLen - 1]
+    if (lastMsg.role === 'assistant' && lastMsg.status === 'done') {
+      const speakText = stripMarkdown(lastMsg.content)
+      if (speakText) {
+        manager.speak(speakText)
+      }
+    }
+  },
+)
+
+// 设置变更 → 实时更新管理器
+watch(
+  () => [voiceStore.settings.wakeWord, voiceStore.settings.enableWakeWord, voiceStore.settings.enableTts, voiceStore.settings.ttsRate, voiceStore.settings.ttsVolume],
+  () => {
+    if (manager) {
+      manager.updateConfig({
+        wakeWord: voiceStore.settings.wakeWord,
+        enableWakeWord: voiceStore.settings.enableWakeWord,
+        enableTts: voiceStore.settings.enableTts,
+        ttsRate: voiceStore.settings.ttsRate,
+        ttsVolume: voiceStore.settings.ttsVolume,
+      })
+    }
+  },
+  { deep: true },
+)
+
+// 自动滚动
+watch(
+  () => convStore.conversation?.messages.length,
+  () => scrollToBottom(),
+)
+
+// 消息列表
+const messages = () => convStore.conversation?.messages ?? []
+
+// 获取状态文字
 function getStatusText(state: SessionState): string {
   switch (state) {
-    case 'listening':
-      return t('voice.listening')
+    case 'wake':
+      return '等待唤醒词...'
+    case 'command':
+      return '请说出命令'
     case 'processing':
       return t('voice.processing')
     case 'speaking':
-      return t('voice.processing')
+      return '播报中...'
     default:
       return t('voice.listening')
   }
 }
 
-// 自动滚动
-watch(() => voiceStore.messages.length, () => scrollToBottom())
-
-onMounted(() => {
+// 打开面板 → 初始化并启动
+onMounted(async () => {
   log.info('VoicePanel 已挂载')
+  await voiceStore.initSettings()
+  initManager()
+  startListening()
 })
 
+// 关闭面板 → 停止
 onUnmounted(() => {
   log.info('VoicePanel 已卸载')
-  session?.destroy()
-  session = null
+  stopListening()
+  manager?.destroy()
+  manager = null
 })
 </script>
 
@@ -192,17 +193,19 @@ onUnmounted(() => {
     <!-- 消息记录区 -->
     <div ref="messagesRef" class="aib-voice-messages">
       <!-- 空状态 -->
-      <div v-if="voiceStore.messages.length === 0" class="aib-voice-empty">
+      <div v-if="messages().length === 0" class="aib-voice-empty">
         <div class="aib-empty-icon">🎤</div>
         <p>{{ t('voice.title') }}</p>
         <p class="aib-empty-hint">
-          例如：「打开B站」「搜索美食教程」「今天天气怎么样」
+          {{ voiceStore.settings.enableWakeWord
+            ? `说「${voiceStore.settings.wakeWord}」唤醒我`
+            : '直接说出命令' }}
         </p>
       </div>
 
       <!-- 消息列表 -->
       <div
-        v-for="msg in voiceStore.messages"
+        v-for="msg in messages()"
         :key="msg.id"
         :class="['aib-voice-msg', `aib-${msg.role}`]"
       >
@@ -210,15 +213,10 @@ onUnmounted(() => {
           {{ msg.role === 'user' ? '🗣️ 你' : msg.role === 'assistant' ? '🤖 AI' : 'ℹ️ 系统' }}
         </div>
         <div class="aib-msg-content">{{ msg.content }}</div>
-        <div v-if="msg.actionResult" class="aib-action-result">
-          <span :class="msg.actionResult.success ? 'aib-success' : 'aib-error'">
-            {{ msg.actionResult.success ? '✅' : '❌' }} {{ msg.actionResult.message }}
-          </span>
-        </div>
       </div>
 
       <!-- 处理中指示器 -->
-      <div v-if="voiceStore.isProcessing" class="aib-voice-msg aib-assistant">
+      <div v-if="pipeline.isProcessing.value" class="aib-voice-msg aib-assistant">
         <div class="aib-msg-role">🤖 AI</div>
         <div class="aib-msg-content aib-typing">
           <span class="aib-dot" />
@@ -228,27 +226,22 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <!-- 底部麦克风控制 -->
+    <!-- 底部状态指示 -->
     <div class="aib-voice-controls">
       <div class="aib-mic-wrapper">
-        <!-- 波纹动画层 -->
-        <div v-if="voiceStore.sessionState === 'listening'" class="aib-ripple-container">
+        <div v-if="voiceStore.sessionState === 'wake' || voiceStore.sessionState === 'command'" class="aib-ripple-container">
           <div class="aib-ripple aib-ripple-1" />
           <div class="aib-ripple aib-ripple-2" />
           <div class="aib-ripple aib-ripple-3" />
         </div>
-        <button
-          :class="['aib-mic-btn', { active: voiceStore.sessionState !== 'idle' }]"
-          title="点击开始/停止语音"
-          @click="toggleRecognition"
-        >
+        <div :class="['aib-mic-indicator', { active: voiceStore.sessionState !== 'idle' }]">
           <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
             <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
             <line x1="12" y1="19" x2="12" y2="23" />
             <line x1="8" y1="23" x2="16" y2="23" />
           </svg>
-        </button>
+        </div>
       </div>
     </div>
   </div>
@@ -260,31 +253,6 @@ onUnmounted(() => {
   flex-direction: column;
   height: 100%;
   background: var(--aib-bg);
-}
-
-/* ========== 顶部栏 ========== */
-.aib-voice-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 10px 16px;
-  border-bottom: 1px solid var(--aib-border);
-  background: var(--aib-bg-soft);
-}
-
-.aib-voice-title {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--aib-primary);
-}
-
-.aib-voice-actions {
-  display: flex;
-  align-items: center;
-  gap: 10px;
 }
 
 /* ========== 状态栏 ========== */
@@ -306,7 +274,13 @@ onUnmounted(() => {
   flex-shrink: 0;
 }
 
-.aib-status-dot.listening {
+.aib-status-dot.wake {
+  background: #34d399;
+  box-shadow: 0 0 8px rgba(52,211,153,0.5);
+  animation: pulse 2s infinite;
+}
+
+.aib-status-dot.command {
   background: #34d399;
   box-shadow: 0 0 8px rgba(52,211,153,0.5);
   animation: pulse 1.5s infinite;
@@ -325,13 +299,8 @@ onUnmounted(() => {
 }
 
 @keyframes pulse {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.4;
-  }
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
 }
 
 .aib-status-text {
@@ -424,21 +393,6 @@ onUnmounted(() => {
   padding: 4px 8px;
 }
 
-.aib-action-result {
-  margin-top: 4px;
-  font-size: 12px;
-  padding-top: 4px;
-  border-top: 1px solid var(--aib-border);
-}
-
-.aib-success {
-  color: #34d399;
-}
-
-.aib-error {
-  color: #f87171;
-}
-
 .aib-typing {
   display: flex;
   gap: 4px;
@@ -453,34 +407,21 @@ onUnmounted(() => {
   animation: typing 1.4s infinite;
 }
 
-.aib-dot:nth-child(2) {
-  animation-delay: 0.2s;
-}
-
-.aib-dot:nth-child(3) {
-  animation-delay: 0.4s;
-}
+.aib-dot:nth-child(2) { animation-delay: 0.2s; }
+.aib-dot:nth-child(3) { animation-delay: 0.4s; }
 
 @keyframes typing {
-  0%,
-  60%,
-  100% {
-    opacity: 0.3;
-    transform: translateY(0);
-  }
-  30% {
-    opacity: 1;
-    transform: translateY(-4px);
-  }
+  0%, 60%, 100% { opacity: 0.3; transform: translateY(0); }
+  30% { opacity: 1; transform: translateY(-4px); }
 }
 
-/* ========== 底部麦克风 ========== */
+/* ========== 底部指示器 ========== */
 .aib-voice-controls {
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 24px 20px;
-  border-top: 1px solid var(--aib-border, #e8e8e8);
+  border-top: 1px solid var(--aib-border);
 }
 
 .aib-mic-wrapper {
@@ -492,7 +433,7 @@ onUnmounted(() => {
   height: 88px;
 }
 
-.aib-mic-btn {
+.aib-mic-indicator {
   position: relative;
   z-index: 2;
   width: 72px;
@@ -501,21 +442,13 @@ onUnmounted(() => {
   border: 2px solid var(--aib-border);
   background: var(--aib-bg-card);
   color: var(--aib-text-soft);
-  cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   transition: all 0.3s ease;
 }
 
-.aib-mic-btn:hover {
-  border-color: var(--aib-primary);
-  color: var(--aib-primary);
-  transform: scale(1.05);
-  box-shadow: 0 0 16px var(--aib-primary-glow);
-}
-
-.aib-mic-btn.active {
+.aib-mic-indicator.active {
   background: var(--aib-primary);
   border-color: var(--aib-primary);
   color: #000;
@@ -545,142 +478,37 @@ onUnmounted(() => {
   animation: voice-ripple 2s infinite;
 }
 
-.aib-ripple-1 {
-  animation-delay: 0s;
-}
-
-.aib-ripple-2 {
-  animation-delay: 0.6s;
-}
-
-.aib-ripple-3 {
-  animation-delay: 1.2s;
-}
+.aib-ripple-1 { animation-delay: 0s; }
+.aib-ripple-2 { animation-delay: 0.6s; }
+.aib-ripple-3 { animation-delay: 1.2s; }
 
 @keyframes voice-ripple {
-  0% {
-    transform: scale(1);
-    opacity: 0.6;
-  }
-  100% {
-    transform: scale(2.5);
-    opacity: 0;
-  }
+  0% { transform: scale(1); opacity: 0.6; }
+  100% { transform: scale(2.5); opacity: 0; }
 }
 
-/* ========== 控件 ========== */
-.aib-clear-btn {
-  width: 32px;
-  height: 32px;
-  border-radius: 6px;
-  border: none;
-  background: transparent;
-  color: var(--aib-text-soft);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.2s;
-}
-
-.aib-clear-btn:hover {
-  background: rgba(248,113,113,0.1);
-  color: #f87171;
-}
-
-.aib-switch-text-btn {
-  border: none;
-  background: transparent;
-  color: var(--aib-text-faint);
-  font-size: 13px;
-  cursor: pointer;
-  font-family: inherit;
-  padding: 4px 8px;
-  border-radius: 6px;
-  transition: all 0.15s ease;
-}
-
-.aib-switch-text-btn:hover {
-  color: var(--aib-primary);
-  background: var(--aib-primary-soft);
-}
-
-/* ========== 小屏宽度适配 ========== */
+/* ========== 响应式 ========== */
 @media (max-width: 640px) {
-  .aib-voice-status {
-    padding: 8px 14px;
-    min-height: 38px;
-  }
-  .aib-voice-messages {
-    padding: 14px;
-    gap: 12px;
-  }
-  .aib-empty-icon {
-    font-size: 36px;
-    margin-bottom: 10px;
-  }
-  .aib-voice-msg {
-    max-width: 94%;
-    padding: 10px 12px;
-    font-size: 13px;
-    border-radius: 12px;
-  }
-  .aib-voice-controls {
-    padding: 16px 14px;
-  }
-  .aib-mic-wrapper {
-    width: 72px;
-    height: 72px;
-  }
-  .aib-mic-btn {
-    width: 58px;
-    height: 58px;
-  }
-  .aib-mic-btn svg {
-    width: 22px;
-    height: 22px;
-  }
+  .aib-voice-status { padding: 8px 14px; min-height: 38px; }
+  .aib-voice-messages { padding: 14px; gap: 12px; }
+  .aib-empty-icon { font-size: 36px; margin-bottom: 10px; }
+  .aib-voice-msg { max-width: 94%; padding: 10px 12px; font-size: 13px; border-radius: 12px; }
+  .aib-voice-controls { padding: 16px 14px; }
+  .aib-mic-wrapper { width: 72px; height: 72px; }
+  .aib-mic-indicator { width: 58px; height: 58px; }
+  .aib-mic-indicator svg { width: 22px; height: 22px; }
 }
 
-/* ========== 短视口高度适配 ========== */
 @media (max-height: 680px) {
-  .aib-voice-status {
-    padding: 6px 14px;
-    min-height: 34px;
-  }
-  .aib-voice-messages {
-    padding: 10px 14px;
-    gap: 10px;
-  }
-  .aib-empty-icon {
-    font-size: 32px;
-    margin-bottom: 8px;
-  }
-  .aib-empty-hint {
-    margin-top: 4px;
-  }
-  .aib-voice-msg {
-    padding: 8px 12px;
-    font-size: 13px;
-  }
-  .aib-voice-controls {
-    padding: 12px 14px;
-  }
-  .aib-mic-wrapper {
-    width: 64px;
-    height: 64px;
-  }
-  .aib-mic-btn {
-    width: 52px;
-    height: 52px;
-  }
-  .aib-mic-btn svg {
-    width: 20px;
-    height: 20px;
-  }
-  .aib-ripple-container {
-    width: 52px;
-    height: 52px;
-  }
+  .aib-voice-status { padding: 6px 14px; min-height: 34px; }
+  .aib-voice-messages { padding: 10px 14px; gap: 10px; }
+  .aib-empty-icon { font-size: 32px; margin-bottom: 8px; }
+  .aib-empty-hint { margin-top: 4px; }
+  .aib-voice-msg { padding: 8px 12px; font-size: 13px; }
+  .aib-voice-controls { padding: 12px 14px; }
+  .aib-mic-wrapper { width: 64px; height: 64px; }
+  .aib-mic-indicator { width: 52px; height: 52px; }
+  .aib-mic-indicator svg { width: 20px; height: 20px; }
+  .aib-ripple-container { width: 52px; height: 52px; }
 }
 </style>

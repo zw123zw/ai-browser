@@ -4,7 +4,6 @@
  * 通过 content script 注入到目标页面执行
  */
 
-import type { AutomationAction } from '@/src/voice/commandParser';
 import {
   SEARCH_INPUT_SELECTORS,
   SEARCH_RESULT_SELECTORS,
@@ -16,6 +15,17 @@ import {
 import { Logger } from '@/src/utils/logger';
 
 const log = new Logger('Automation');
+
+/** 自动化动作类型 */
+type AutomationAction =
+  | 'open_site'
+  | 'search'
+  | 'site_search'
+  | 'open_item'
+  | 'page_next'
+  | 'page_prev'
+  | 'video_play'
+  | 'video_pause'
 
 /** 动作执行结果 */
 export interface ActionResult {

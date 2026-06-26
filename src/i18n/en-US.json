@@ -54,7 +54,31 @@
     "tabs": {
       "ai": "Model Config",
       "general": "General",
-      "user": "User"
+      "user": "User",
+      "voice": "Voice"
+    },
+    "voice": {
+      "title": "Voice Settings",
+      "recognition": "Speech Recognition",
+      "engineType": "Engine",
+      "engineWebSpeech": "Web Speech API",
+      "engineIflytek": "iFlytek",
+      "iflytekApiKey": "iFlytek API Key",
+      "iflytekAppId": "iFlytek App ID",
+      "recognitionLang": "Language",
+      "langZhCN": "Chinese",
+      "langEnUS": "English",
+      "wakeWord": "Wake Word",
+      "enableWakeWord": "Enable Wake Word",
+      "wakeWordLabel": "Wake Word",
+      "wakeWordPlaceholder": "Hello, Ling",
+      "enableWakeSound": "Wake Sound",
+      "tts": "Text-to-Speech",
+      "enableTts": "Enable TTS",
+      "ttsRate": "Speed",
+      "ttsVolume": "Volume",
+      "behavior": "Behavior",
+      "autoStart": "Auto-start Listening"
     },
     "ai": {
       "title": "Model Configuration",

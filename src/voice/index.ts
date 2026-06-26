@@ -1,16 +1,16 @@
-export { VoiceRecognition } from './recognition'
-export type { VoiceStatus, VoiceRecognitionOptions } from './recognition'
-export { SherpaRecognition } from './sherpa-recognition'
-export type { SherpaRecognitionOptions } from './sherpa-recognition'
-export { parseBatchCommand } from './commandParser'
-export type {
-  CommandType,
-  AutomationAction,
-  CommandInfo,
-  SingleParseResult,
-  BatchParseResult,
-} from './commandParser'
+// 引擎
+export type { VoiceEngine, VoiceEngineConfig, VoiceEngineStatus } from './engines/types'
+export { WebSpeechEngine } from './engines/web-speech-engine'
+export { IflytekEngine } from './engines/iflytek-engine'
+export type { IflytekConfig } from './engines/iflytek-engine'
+
+// 唤醒词
+export { WakeWordDetector } from './wake-word'
+
+// TTS
 export { VoiceBroadcast } from './broadcast'
 export type { BroadcastPriority, BroadcastOptions } from './broadcast'
-export { VoiceSession } from './session'
-export type { VoiceSessionOptions } from './session'
+
+// 管理器
+export { VoiceManager } from './voice-manager'
+export type { VoiceManagerState, VoiceManagerConfig } from './voice-manager'
