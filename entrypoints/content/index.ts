@@ -459,9 +459,11 @@ export default defineContentScript({
 
     // --- 自动笔记：页面加载时 AI 提炼笔记 ---
     let autoNoteRunning = false
+    let autoNoteAbort: AbortController | null = null
     async function runAutoNote() {
       if (autoNoteRunning) return
       autoNoteRunning = true
+      autoNoteAbort = new AbortController()
       const settings = await getTranslateSettings()
       if (settings?.noteMode !== 'auto') {
         log.debug('[自动笔记] 未开启，跳过')
@@ -493,6 +495,9 @@ export default defineContentScript({
         const modelId = await getCurrentModelId()
         log.info('[自动笔记] 触发', { url: location.href.slice(0, 80) })
         const result = await optimizeAsNote(pageText, settings, modelId)
+
+        // 如果已被取消（URL 变了），丢弃结果
+        if (autoNoteAbort?.signal.aborted) return
 
         if (!result) {
           log.warn('[自动笔记] AI 返回空结果')
@@ -541,6 +546,13 @@ export default defineContentScript({
       if (newUrl === currentUrl) return
       currentUrl = newUrl
       log.info(`[自动翻译/笔记] URL 变化 (${source})`, { url: newUrl })
+
+      // 取消正在执行的自动笔记
+      if (autoNoteAbort) {
+        autoNoteAbort.abort()
+        autoNoteAbort = null
+      }
+      autoNoteRunning = false
 
       if (urlChangeTimer) clearTimeout(urlChangeTimer)
       urlChangeTimer = setTimeout(async () => {
