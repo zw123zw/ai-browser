@@ -491,17 +491,21 @@ export default defineContentScript({
           detail: { id: placeholderId, content: '📝 正在为你分析页面内容，生成笔记...' },
         }))
 
-        // 复用 optimizeAsNote（与划词/点击笔记同一套提示词）
+        // 流式调用 AI 分析笔记
         const modelId = await getCurrentModelId()
         log.info('[自动笔记] 触发', { url: location.href.slice(0, 80) })
-        const result = await optimizeAsNote(pageText, settings, modelId)
+        const result = await optimizeAsNoteStream(pageText, settings, (delta, full) => {
+          // 每个 chunk 实时更新聊天消息
+          window.dispatchEvent(new CustomEvent('aib-auto-note-delta', {
+            detail: { id: placeholderId, content: full },
+          }))
+        }, modelId)
 
         // 如果已被取消（URL 变了），丢弃结果
         if (autoNoteAbort?.signal.aborted) return
 
         if (!result) {
           log.warn('[自动笔记] AI 返回空结果')
-          // 更新占位消息为失败提示
           window.dispatchEvent(new CustomEvent('aib-auto-note-result', {
             detail: { id: placeholderId, content: '⚠️ 笔记生成失败，AI 返回空结果' },
           }))
@@ -513,7 +517,7 @@ export default defineContentScript({
         // 在笔记末尾附上来源 URL（收藏时保留）
         const noteWithUrl = result + `\n\n> 📎 来源: [${document.title}](${location.href})`
 
-        // 更新占位消息为实际笔记内容
+        // 最终更新（带来源 URL）
         window.dispatchEvent(new CustomEvent('aib-auto-note-result', {
           detail: { id: placeholderId, content: noteWithUrl },
         }))

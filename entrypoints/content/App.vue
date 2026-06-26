@@ -166,6 +166,17 @@ function onAutoNoteStart(e: Event) {
   convStore.conversation.updatedAt = Date.now();
 }
 
+// 处理自动笔记流式增量：实时更新占位消息
+function onAutoNoteDelta(e: Event) {
+  const detail = (e as CustomEvent).detail;
+  if (!detail?.content || !convStore.conversation) return;
+
+  const existing = convStore.conversation.messages.find((m) => m.id === detail.id);
+  if (existing) {
+    existing.content = detail.content;
+  }
+}
+
 // 处理自动笔记结果：更新占位消息内容
 function onAutoNoteResult(e: Event) {
   const detail = (e as CustomEvent).detail;
@@ -225,6 +236,7 @@ onMounted(async () => {
   document.addEventListener('keydown', onKeydown, true);
   document.addEventListener('mouseup', onMouseup, true);
   window.addEventListener('aib-auto-note-start', onAutoNoteStart);
+  window.addEventListener('aib-auto-note-delta', onAutoNoteDelta);
   window.addEventListener('aib-auto-note-result', onAutoNoteResult);
   window.addEventListener('aib-bookmark-note', onBookmarkNote);
   window.addEventListener('aib-toggle-note-viewer', toggleNoteViewer);
@@ -236,6 +248,7 @@ onUnmounted(() => {
   document.removeEventListener('keydown', onKeydown, true);
   document.removeEventListener('mouseup', onMouseup, true);
   window.removeEventListener('aib-auto-note-start', onAutoNoteStart);
+  window.removeEventListener('aib-auto-note-delta', onAutoNoteDelta);
   window.removeEventListener('aib-auto-note-result', onAutoNoteResult);
   window.removeEventListener('aib-bookmark-note', onBookmarkNote);
   window.removeEventListener('aib-toggle-note-viewer', toggleNoteViewer);

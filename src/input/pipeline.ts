@@ -588,7 +588,7 @@ export class InputPipeline {
             continue
           }
 
-          // ★ summarize → 提取页面全文，调 AI 分析总结，输出聊天消息
+          // ★ summarize → 提取页面全文，流式调 AI 分析总结，输出聊天消息
           if (cmd.action === 'summarize') {
             log.info('[Phase 2] ── summarize：提取页面全文 ──')
             const pageText = extractPageText()
@@ -599,12 +599,12 @@ export class InputPipeline {
               try {
                 log.info('[Phase 2] summarize 提取到文本', { length: pageText.length })
                 const summarizePrompt = buildSummarizePrompt(text, pageText)
-                const aiResult = await this.callAIForSummarize(summarizePrompt)
-                log.info('[Phase 2] summarize AI 返回', { length: aiResult.length, preview: aiResult.slice(0, 100) })
-                // 创建新消息并输出总结
+                // 流式输出：先 onChatStart，每个 chunk 调 onChatDelta
                 callbacks.onChatStart()
-                callbacks.onChatDelta(aiResult)
-                log.info('[Phase 2] summarize onChatDelta 已调用', { contentLength: aiResult.length })
+                const aiResult = await this.callAIForSummarize(summarizePrompt, (delta) => {
+                  callbacks.onChatDelta(delta)
+                })
+                log.info('[Phase 2] summarize AI 返回', { length: aiResult.length, preview: aiResult.slice(0, 100) })
                 callbacks.onChatEnd()
                 completed.push({ action: cmd.action, description: cmd.description })
                 completedKeys.add(cmdKey)
@@ -817,7 +817,7 @@ export class InputPipeline {
   // 页面分析 AI 调用（summarize 专用）
   // ═══════════════════════════════════════════════
 
-  private async callAIForSummarize(prompt: string): Promise<string> {
+  private async callAIForSummarize(prompt: string, onChunk?: (delta: string) => void): Promise<string> {
     const settings = this.options.getSettings()
     const modelId = this.options.getModelId?.() || settings.defaultModelId
     const model = settings.models.find(m => m.id === modelId) || settings.models[0]
@@ -835,7 +835,12 @@ export class InputPipeline {
         messages,
         signal: this.options.getSignal?.(),
       },
-      (chunk) => { if (chunk.delta) fullResponse += chunk.delta }
+      (chunk) => {
+        if (chunk.delta) {
+          fullResponse += chunk.delta
+          onChunk?.(chunk.delta)
+        }
+      }
     )
 
     return fullResponse
