@@ -432,7 +432,10 @@ export default defineContentScript({
     })
 
     // --- 自动笔记：页面加载时 AI 提炼笔记 ---
+    let autoNoteRunning = false
     async function runAutoNote() {
+      if (autoNoteRunning) return
+      autoNoteRunning = true
       const settings = await getTranslateSettings()
       if (settings?.noteMode !== 'auto') {
         log.debug('[自动笔记] 未开启，跳过')
@@ -485,6 +488,8 @@ export default defineContentScript({
         }))
       } catch (err) {
         log.error('[自动笔记] 失败', err)
+      } finally {
+        autoNoteRunning = false
       }
     }
 
@@ -500,11 +505,6 @@ export default defineContentScript({
     } else {
       window.addEventListener('load', () => initAutoNote(), { once: true })
     }
-
-    // pageshow：处理 bfcache 恢复 + 普通页面加载
-    window.addEventListener('pageshow', () => {
-      initAutoNote()
-    })
 
     // --- 自动翻译：URL 变化时重新翻译 ---
     let currentUrl = location.href
