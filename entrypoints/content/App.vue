@@ -166,7 +166,7 @@ function onAutoNoteStart(e: Event) {
   convStore.conversation.updatedAt = Date.now();
 }
 
-// 处理自动笔记流式增量：实时更新占位消息
+// 处理自动笔记流式增量：更新消息内容
 function onAutoNoteDelta(e: Event) {
   const detail = (e as CustomEvent).detail;
   if (!detail?.content || !convStore.conversation) return;
@@ -177,7 +177,7 @@ function onAutoNoteDelta(e: Event) {
   }
 }
 
-// 处理自动笔记结果：更新占位消息内容
+// 处理自动笔记结果：更新消息为最终内容
 function onAutoNoteResult(e: Event) {
   const detail = (e as CustomEvent).detail;
   if (!detail?.content || !convStore.conversation) return;

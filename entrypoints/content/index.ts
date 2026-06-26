@@ -483,21 +483,21 @@ export default defineContentScript({
           return
         }
 
-        // 生成占位消息 ID
-        const placeholderId = 'auto-note-' + Date.now()
+        // 一条消息：占位 → 流式替换 → 最终更新
+        const msgId = 'auto-note-' + Date.now()
 
-        // 先在聊天区显示占位消息
+        // 插入占位消息
         window.dispatchEvent(new CustomEvent('aib-auto-note-start', {
-          detail: { id: placeholderId, content: '📝 正在为你分析页面内容，生成笔记...' },
+          detail: { id: msgId, content: '📝 正在为你分析页面内容，生成笔记...' },
         }))
 
         // 流式调用 AI 分析笔记
         const modelId = await getCurrentModelId()
         log.info('[自动笔记] 触发', { url: location.href.slice(0, 80) })
         const result = await optimizeAsNoteStream(pageText, settings, (delta, full) => {
-          // 每个 chunk 实时更新聊天消息
+          // 每个 chunk 更新同一条消息
           window.dispatchEvent(new CustomEvent('aib-auto-note-delta', {
-            detail: { id: placeholderId, content: full },
+            detail: { id: msgId, content: full },
           }))
         }, modelId)
 
@@ -507,19 +507,17 @@ export default defineContentScript({
         if (!result) {
           log.warn('[自动笔记] AI 返回空结果')
           window.dispatchEvent(new CustomEvent('aib-auto-note-result', {
-            detail: { id: placeholderId, content: '⚠️ 笔记生成失败，AI 返回空结果' },
+            detail: { id: msgId, content: '⚠️ 笔记生成失败，AI 返回空结果' },
           }))
           return
         }
 
         log.info('[自动笔记] 完成', { length: result.length, preview: result.slice(0, 80) })
 
-        // 在笔记末尾附上来源 URL（收藏时保留）
+        // 最终更新：附上来源 URL
         const noteWithUrl = result + `\n\n> 📎 来源: [${document.title}](${location.href})`
-
-        // 最终更新（带来源 URL）
         window.dispatchEvent(new CustomEvent('aib-auto-note-result', {
-          detail: { id: placeholderId, content: noteWithUrl },
+          detail: { id: msgId, content: noteWithUrl },
         }))
       } catch (err) {
         log.error('[自动笔记] 失败', err)
