@@ -103,9 +103,9 @@ export async function optimizeAsNote(
   }
 
   const adapter = createAdapter(model.provider);
+  // 提示词拼接到用户消息前面（兼容不支持 system 角色的模型/代理）
   const messages = [
-    { id: 'sys', role: 'system' as const, content: NOTE_SYSTEM_PROMPT, timestamp: Date.now() },
-    { id: 'user', role: 'user' as const, content: trimmed, timestamp: Date.now() },
+    { id: 'user', role: 'user' as const, content: `${NOTE_SYSTEM_PROMPT}\n\n[页面内容]\n${trimmed}`, timestamp: Date.now() },
   ];
 
   log.info('调用 AI 分析笔记', { model: model.modelName, textLength: trimmed.length });
@@ -158,9 +158,9 @@ export async function optimizeAsNoteStream(
   }
 
   const adapter = createAdapter(model.provider);
+  // 提示词拼接到用户消息前面（兼容不支持 system 角色的模型/代理）
   const messages = [
-    { id: 'sys', role: 'system' as const, content: NOTE_SYSTEM_PROMPT, timestamp: Date.now() },
-    { id: 'user', role: 'user' as const, content: trimmed, timestamp: Date.now() },
+    { id: 'user', role: 'user' as const, content: `${NOTE_SYSTEM_PROMPT}\n\n[页面内容]\n${trimmed}`, timestamp: Date.now() },
   ];
 
   log.info('流式调用 AI 分析笔记', { model: model.modelName, textLength: trimmed.length });
