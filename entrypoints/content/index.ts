@@ -40,18 +40,52 @@ export default defineContentScript({
         // 清除 hash（避免刷新重复触发）
         history.replaceState(null, '', location.pathname + location.search)
 
-        // 等页面稳定后执行
-        setTimeout(() => {
-          // 滚动到指定位置
-          if (scrollY > 0) {
+        // 滚动到指定位置（查找正确的滚动容器 + 重试）
+        function doScroll(retries: number) {
+          // 查找页面内最大的可滚动容器
+          let container: HTMLElement | null = null
+          if (document.documentElement.scrollHeight > document.documentElement.clientHeight) {
+            // 页面本身可滚动
             window.scrollTo(0, scrollY)
+          } else {
+            // 查找子容器
+            const allDivs = document.querySelectorAll('div')
+            let bestScore = 0
+            for (const div of allDivs) {
+              if (div.scrollHeight > div.clientHeight + 50) {
+                const style = window.getComputedStyle(div)
+                if (style.overflowY === 'auto' || style.overflowY === 'scroll') {
+                  const score = div.scrollHeight - div.clientHeight
+                  if (score > bestScore) {
+                    bestScore = score
+                    container = div
+                  }
+                }
+              }
+            }
+            if (container) {
+              container.scrollTop = scrollY
+            } else {
+              window.scrollTo(0, scrollY)
+            }
           }
 
-          // 高亮闪烁
-          if (highlightText) {
-            highlightTextOnPage(highlightText)
+          // 验证是否滚动到位
+          const currentScroll = container ? container.scrollTop : window.scrollY
+          if (retries > 0 && Math.abs(currentScroll - scrollY) > 50) {
+            setTimeout(() => doScroll(retries - 1), 500)
           }
-        }, 1000)
+        }
+
+        // 多次尝试滚动（页面可能延迟加载内容）
+        setTimeout(() => doScroll(4), 500)
+        setTimeout(() => doScroll(3), 1500)
+        setTimeout(() => doScroll(2), 3000)
+
+        // 高亮闪烁
+        if (highlightText) {
+          setTimeout(() => highlightTextOnPage(highlightText), 1500)
+        }
       } catch {}
     }
 
@@ -200,8 +234,9 @@ export default defineContentScript({
         }))
       }
 
-      // 显示浮层
-      showTranslateLoading(mouseX, mouseY, text)
+      // 显示浮层（传入选区元素用于查找正确的滚动容器）
+      const selectionEl = selection.anchorNode?.parentElement || target
+      showTranslateLoading(mouseX, mouseY, text, selectionEl)
 
       // 并行调用翻译和笔记 AI
       const tasks: Promise<void>[] = []

@@ -39,9 +39,54 @@ let noteContentEl: HTMLElement | null = null
 let currentTranslated = ''
 /** 当前笔记内容（用于收藏） */
 let currentNoteContent = ''
-/** 原始触发坐标（用于重新定位） */
+/** 原始触发坐标（视口坐标） */
 let originX = 0
 let originY = 0
+/** 滚动容器及其初始滚动位置 */
+let scrollContainer: HTMLElement | Window | null = null
+let originScrollTop = 0
+/** 滚动时更新位置的处理器 */
+let scrollUpdateHandler: (() => void) | null = null
+
+/**
+ * 查找元素最近的可滚动父容器（复用 action-executor 的逻辑）
+ */
+function findScrollContainer(el?: Element | null): HTMLElement | Window {
+  let current: Element | null = el || document.body
+  while (current && current !== document.body) {
+    const style = window.getComputedStyle(current)
+    const overflow = style.overflowY
+    if ((overflow === 'auto' || overflow === 'scroll') && current.scrollHeight > current.clientHeight) {
+      return current as HTMLElement
+    }
+    current = current.parentElement
+  }
+  if (document.documentElement.scrollHeight > document.documentElement.clientHeight) {
+    return window
+  }
+  // 兜底：找页面内最大的可滚动容器
+  const allDivs = document.querySelectorAll('div')
+  let best: HTMLElement | null = null
+  let bestScore = 0
+  for (const div of allDivs) {
+    if (div.scrollHeight > div.clientHeight + 50) {
+      const style = window.getComputedStyle(div)
+      if (style.overflowY === 'auto' || style.overflowY === 'scroll') {
+        const score = div.scrollHeight - div.clientHeight
+        if (score > bestScore) {
+          bestScore = score
+          best = div
+        }
+      }
+    }
+  }
+  return best || window
+}
+
+/** 获取容器当前滚动位置 */
+function getScrollTop(container: HTMLElement | Window): number {
+  return container === window ? window.scrollY : (container as HTMLElement).scrollTop
+}
 
 /** 弹窗最大宽度 */
 const MAX_WIDTH = 450
@@ -58,7 +103,7 @@ const OFFSET = 8
  * @param y - 触发点 Y 坐标（clientY）
  * @param original - 原始文本
  */
-export function showTranslateLoading(x: number, y: number, original: string): void {
+export function showTranslateLoading(x: number, y: number, original: string, targetEl?: Element | null): void {
   hideTranslatePopup()
 
   const popup = document.createElement('div')
@@ -66,7 +111,7 @@ export function showTranslateLoading(x: number, y: number, original: string): vo
   popup.setAttribute('translate', 'no')
 
   Object.assign(popup.style, {
-    position: 'absolute',
+    position: 'fixed',
     zIndex: '2147483647',
     maxWidth: `${MAX_WIDTH}px`,
     minWidth: '120px',
@@ -277,11 +322,24 @@ export function showTranslateLoading(x: number, y: number, original: string): vo
 
   originX = x
   originY = y
+
+  // 查找正确的滚动容器
+  scrollContainer = findScrollContainer(targetEl)
+  originScrollTop = getScrollTop(scrollContainer)
   positionPopup(popup, x, y)
 
   requestAnimationFrame(() => {
     popup.style.opacity = '1'
   })
+
+  // 在正确的滚动容器上监听滚动
+  scrollUpdateHandler = () => {
+    if (currentPopup) {
+      const scrollDelta = getScrollTop(scrollContainer!) - originScrollTop
+      positionPopup(currentPopup, originX, originY - scrollDelta)
+    }
+  }
+  scrollContainer.addEventListener('scroll', scrollUpdateHandler, { passive: true })
 
   log.debug('浮层 loading 已显示', { x, y, original: original.slice(0, 30) })
 }
@@ -450,6 +508,12 @@ export function hideTranslatePopup(): void {
   currentNoteContent = ''
   originX = 0
   originY = 0
+  originScrollTop = 0
+  if (scrollUpdateHandler && scrollContainer) {
+    scrollContainer.removeEventListener('scroll', scrollUpdateHandler)
+    scrollUpdateHandler = null
+    scrollContainer = null
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -493,26 +557,25 @@ function showToolbar(onBookmark?: (content: string) => void): void {
   }
 }
 
-/** 定位弹窗（文档坐标，跟随页面滚动） */
+/** 定位弹窗（视口坐标，跟随滚动更新） */
 function positionPopup(popup: HTMLElement, x: number, y: number): void {
-  // 转换为文档坐标
-  const docX = x + window.scrollX
-  const docY = y + window.scrollY
-
-  // 先用临时定位测量尺寸
   popup.style.left = '0px'
   popup.style.top = '0px'
   const rect = popup.getBoundingClientRect()
   const vpWidth = window.innerWidth
+  const vpHeight = window.innerHeight
 
-  let left = docX
-  let top = docY + OFFSET
+  let left = x
+  let top = y + OFFSET
 
-  // 水平方向：确保不超出视口右边界
-  if (left + rect.width > window.scrollX + vpWidth - 12) {
-    left = window.scrollX + vpWidth - rect.width - 12
+  if (left + rect.width > vpWidth - 12) {
+    left = vpWidth - rect.width - 12
   }
-  if (left < window.scrollX + 12) left = window.scrollX + 12
+  if (left < 12) left = 12
+  if (top + rect.height > vpHeight - 12) {
+    top = y - rect.height - OFFSET
+  }
+  if (top < 12) top = 12
 
   popup.style.left = `${left}px`
   popup.style.top = `${top}px`
