@@ -106,3 +106,61 @@ export async function optimizeAsNote(
   log.info('笔记分析完成', { length: result.length, preview: result.slice(0, 80) });
   return result;
 }
+
+/**
+ * 流式调用 AI 分析笔记（每个 chunk 回调）
+ *
+ * @param text - 原始文本
+ * @param settings - 全局设置
+ * @param onChunk - 每个增量回调
+ * @param modelId - 可选模型 id
+ * @returns 完整的笔记内容
+ */
+export async function optimizeAsNoteStream(
+  text: string,
+  settings: AppSettings,
+  onChunk: (delta: string, full: string) => void,
+  modelId?: string,
+): Promise<string> {
+  const trimmed = text.trim();
+  if (!trimmed) {
+    throw new Error('文本内容为空');
+  }
+
+  const models = settings.models || [];
+  const model = modelId
+    ? models.find((m) => m.id === modelId) || models[0]
+    : models.find((m) => m.id === settings.defaultModelId) || models[0];
+
+  if (!model) {
+    throw new Error('没有可用的模型');
+  }
+
+  const adapter = createAdapter(model.provider);
+  const messages = [
+    { id: 'sys', role: 'system' as const, content: NOTE_SYSTEM_PROMPT, timestamp: Date.now() },
+    { id: 'user', role: 'user' as const, content: trimmed, timestamp: Date.now() },
+  ];
+
+  log.info('流式调用 AI 分析笔记', { model: model.modelName, textLength: trimmed.length });
+
+  let result = '';
+  await adapter.chat(
+    {
+      baseUrl: model.baseUrl || settings.baseUrl || '',
+      apiKey: model.apiKey || settings.apiKey || '',
+      modelName: model.modelName,
+      provider: model.provider,
+      messages,
+    },
+    (chunk: StreamChunk) => {
+      if (chunk.delta) {
+        result += chunk.delta;
+        onChunk(chunk.delta, result);
+      }
+    },
+  );
+
+  log.info('笔记流式分析完成', { length: result.length, preview: result.slice(0, 80) });
+  return result;
+}

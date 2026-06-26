@@ -5,9 +5,13 @@ import globalCss from '@/src/styles/global.css?inline';
 import { initAllSkeletonIds } from '@/src/browser/skeleton-id';
 import { settingsStorage, conversationStorage, queuedTaskStorage } from '@/src/storage';
 import { TranslateService } from '@/src/browser/translate-service';
-import { showTranslateLoading, updateTranslateResult, updateNoteResult, updateTranslateError, hideTranslatePopup } from '@/src/browser/translate-popup';
+import { showTranslateLoading, updateTranslateResult, updateTranslateStreaming, updateNoteResult, updateNoteStreaming, updateTranslateError, hideTranslatePopup } from '@/src/browser/translate-popup';
 import { initClickTranslate } from '@/src/browser/translate-click';
-import { optimizeAsNote } from '@/src/browser/note-service';
+import { optimizeAsNoteStream, optimizeAsNote } from '@/src/browser/note-service';
+import { createAdapter } from '@/src/adapters';
+import { buildSelectionTranslateMessage, TRANSLATE_SYSTEM_PROMPT } from '@/src/input/prompts/translate';
+import { parseSingleTranslation } from '@/src/browser/translate-parser';
+import type { StreamChunk } from '@/src/types';
 import { Logger } from '@/src/utils/logger';
 
 const log = new Logger('ContentScript');
@@ -229,10 +233,42 @@ export default defineContentScript({
       const mouseY = e.clientY
       const targetLang = settings?.translateTargetLang || '中文'
 
+      // 查找选区所在滚动容器的 scrollTop
+      function getSelectionScrollY(): number {
+        // 优先：页面本身滚动
+        if (document.documentElement.scrollHeight > document.documentElement.clientHeight) {
+          return window.scrollY
+        }
+        // 查找子容器（从选区元素向上找）
+        const anchor = selection?.anchorNode?.parentElement || target
+        let el: HTMLElement | null = anchor
+        while (el && el !== document.body) {
+          const style = window.getComputedStyle(el)
+          if ((style.overflowY === 'auto' || style.overflowY === 'scroll') && el.scrollHeight > el.clientHeight) {
+            return el.scrollTop
+          }
+          el = el.parentElement
+        }
+        // 兜底：找最大容器
+        const allDivs = document.querySelectorAll('div')
+        let best: HTMLElement | null = null
+        let bestScore = 0
+        for (const div of allDivs) {
+          if (div.scrollHeight > div.clientHeight + 50) {
+            const style = window.getComputedStyle(div)
+            if (style.overflowY === 'auto' || style.overflowY === 'scroll') {
+              const score = div.scrollHeight - div.clientHeight
+              if (score > bestScore) { bestScore = score; best = div }
+            }
+          }
+        }
+        return best ? best.scrollTop : window.scrollY
+      }
+
       // 收藏笔记回调
       function onBookmark(noteContent: string) {
-        const savedScrollY = window.scrollY
-        log.info('[收藏笔记] 保存 scrollY', { scrollY: savedScrollY, url: location.href })
+        const savedScrollY = getSelectionScrollY()
+        log.info('[收藏笔记] 保存 scrollY', { scrollY: savedScrollY, url: location.href, windowScrollY: window.scrollY })
         window.dispatchEvent(new CustomEvent('aib-bookmark-note', {
           detail: { content: noteContent, url: location.href, scrollY: savedScrollY, selectedText: text, source: 'selection' },
         }))
@@ -250,12 +286,32 @@ export default defineContentScript({
             try {
               log.info('[划词翻译] 触发', { text: text.slice(0, 50), targetLang })
               const modelId = await getCurrentModelId()
-              const translated = await translateService.translateSelection(text, targetLang, settings!, modelId)
+              const models = settings!.models || []
+              const model = modelId
+                ? models.find((m) => m.id === modelId) || models[0]
+                : models.find((m) => m.id === settings!.defaultModelId) || models[0]
+              if (!model) { updateTranslateError('没有可用模型'); return }
+
+              const adapter = createAdapter(model.provider)
+              const messages = [
+                { id: 'sys', role: 'system' as const, content: TRANSLATE_SYSTEM_PROMPT, timestamp: Date.now() },
+                { id: 'user', role: 'user' as const, content: buildSelectionTranslateMessage(text, targetLang), timestamp: Date.now() },
+              ]
+              let raw = ''
+              await adapter.chat(
+                { baseUrl: model.baseUrl || settings!.baseUrl || '', apiKey: model.apiKey || settings!.apiKey || '', modelName: model.modelName, provider: model.provider, messages },
+                (chunk: StreamChunk) => {
+                  if (chunk.delta) {
+                    raw += chunk.delta
+                    updateTranslateStreaming(chunk.delta, raw)
+                  }
+                },
+              )
+              const translated = parseSingleTranslation(raw)
               if (translated) {
                 log.info('[划词翻译] 完成', { translated: translated.slice(0, 50) })
                 updateTranslateResult(translated)
               } else {
-                log.warn('[划词翻译] AI 返回空结果')
                 updateTranslateError('翻译失败：AI 返回空结果')
               }
             } catch (err) {
@@ -273,7 +329,9 @@ export default defineContentScript({
             try {
               log.info('[划词笔记] 触发', { text: text.slice(0, 50) })
               const modelId = await getCurrentModelId()
-              const noteContent = await optimizeAsNote(text, settings!, modelId)
+              const noteContent = await optimizeAsNoteStream(text, settings!, (delta, full) => {
+                updateNoteStreaming(delta, full)
+              }, modelId)
               if (noteContent) {
                 log.info('[划词笔记] 完成', { noteContent: noteContent.slice(0, 50) })
                 updateNoteResult(noteContent, onBookmark)

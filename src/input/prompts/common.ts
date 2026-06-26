@@ -36,6 +36,7 @@ export const CAPABILITY_DOMAIN_LIST: CapabilityItem[] = [
   { id: 'slider',     title: '拖动滑块',   desc: '拖动滑块到指定值（需elementId+value）',  needSkeleton: true },
   { id: 'closeModal', title: '关闭弹窗',   desc: '关闭页面弹窗/对话框',                    needSkeleton: false },
   { id: 'download',   title: '提取数据',   desc: '提取页面数据并导出文件',                  needSkeleton: true },
+  { id: 'download-all', title: '批量导出', desc: '批量导出多个页面/章节并合并为一个文件',    needSkeleton: true },
   { id: 'summarize',  title: '分析总结',   desc: '提取页面全文并AI分析总结',                needSkeleton: true },
 ]
 

@@ -358,7 +358,31 @@ export function updateTranslateResult(translated: string): void {
 }
 
 /**
- * 更新笔记结果
+ * 流式更新笔记内容（追加增量文本）
+ */
+export function updateNoteStreaming(delta: string, full: string): void {
+  if (!currentPopup || !noteContentEl) return
+  noteContentEl.style.display = 'block'
+  const contentDiv = noteContentEl.querySelector('.aib-msg-text') as HTMLElement
+  if (contentDiv) {
+    // 流式阶段用纯文本追加，避免频繁 re-render markdown
+    contentDiv.textContent = full
+  }
+  if (loadingEl) loadingEl.style.display = 'none'
+}
+
+/**
+ * 流式更新翻译内容（追加增量文本）
+ */
+export function updateTranslateStreaming(delta: string, full: string): void {
+  if (!currentPopup || !contentEl) return
+  contentEl.style.display = ''
+  contentEl.textContent = full
+  if (loadingEl) loadingEl.style.display = 'none'
+}
+
+/**
+ * 更新笔记结果（最终 markdown 渲染）
  */
 export function updateNoteResult(note: string, onBookmark: (content: string) => void): void {
   if (!currentPopup) return
