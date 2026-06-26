@@ -4,23 +4,18 @@
  * 选中文本后在选区附近显示翻译结果和/或笔记结果。
  * 纯 DOM 实现（不依赖 Vue），轻量且独立于 Shadow DOM。
  *
- * 流程：
- * 1. 选中文本 → showTranslateLoading() 显示浮层 + loading
- * 2. AI 返回 → updateTranslateResult() 替换为译文
- * 3. AI 返回 → updateNoteResult() 替换为笔记（可选，与翻译合并显示）
- *
  * 功能：
+ * - 拖拽移动、拉伸宽度
  * - loading 状态动画
- * - 显示译文 + 原文对照
- * - 显示笔记 AI 优化内容（可选）
+ * - 译文 + 原文对照
+ * - 笔记 markdown 渲染（与聊天区域一致）
  * - 复制按钮（翻译模式）
- * - 收藏笔记按钮（笔记模式）
+ * - 收藏笔记按钮（笔记模式，不关闭浮层）
  * - 关闭按钮
- * - 点击外部自动关闭
- * - 页面滚动时关闭
+ * - 跟随滚动容器
  */
 
-import { renderMarkdownPlain } from '@/src/utils/markdown'
+import { renderMarkdown } from '@/src/utils/markdown'
 import { Logger } from '@/src/utils/logger'
 
 const log = new Logger('TranslatePopup')
@@ -47,9 +42,17 @@ let scrollContainer: HTMLElement | Window | null = null
 let originScrollTop = 0
 /** 滚动时更新位置的处理器 */
 let scrollUpdateHandler: (() => void) | null = null
+/** 拖拽状态 */
+let isDragging = false
+let dragOffsetX = 0
+let dragOffsetY = 0
+/** 拉伸状态 */
+let isResizing = false
+let resizeStartX = 0
+let resizeStartWidth = 0
 
 /**
- * 查找元素最近的可滚动父容器（复用 action-executor 的逻辑）
+ * 查找元素最近的可滚动父容器
  */
 function findScrollContainer(el?: Element | null): HTMLElement | Window {
   let current: Element | null = el || document.body
@@ -64,7 +67,6 @@ function findScrollContainer(el?: Element | null): HTMLElement | Window {
   if (document.documentElement.scrollHeight > document.documentElement.clientHeight) {
     return window
   }
-  // 兜底：找页面内最大的可滚动容器
   const allDivs = document.querySelectorAll('div')
   let best: HTMLElement | null = null
   let bestScore = 0
@@ -83,7 +85,6 @@ function findScrollContainer(el?: Element | null): HTMLElement | Window {
   return best || window
 }
 
-/** 获取容器当前滚动位置 */
 function getScrollTop(container: HTMLElement | Window): number {
   return container === window ? window.scrollY : (container as HTMLElement).scrollTop
 }
@@ -95,13 +96,6 @@ const OFFSET = 8
 
 /**
  * 显示浮层（loading 状态）
- *
- * 选中文本后立即调用，底部显示 loading 动画。
- * 翻译/笔记完成后调用 updateTranslateResult() / updateNoteResult() 更新内容。
- *
- * @param x - 触发点 X 坐标（clientX）
- * @param y - 触发点 Y 坐标（clientY）
- * @param original - 原始文本
  */
 export function showTranslateLoading(x: number, y: number, original: string, targetEl?: Element | null): void {
   hideTranslatePopup()
@@ -113,12 +107,13 @@ export function showTranslateLoading(x: number, y: number, original: string, tar
   Object.assign(popup.style, {
     position: 'fixed',
     zIndex: '2147483647',
-    maxWidth: `${MAX_WIDTH}px`,
-    minWidth: '120px',
+    width: `${MAX_WIDTH}px`,
+    minWidth: '200px',
+    maxWidth: '90vw',
     maxHeight: '70vh',
     overflowY: 'auto',
-    padding: '10px 14px',
-    paddingTop: '28px', // 为关闭按钮留空间
+    overflowX: 'hidden',
+    padding: '0',
     background: '#1a1a2e',
     color: '#e0e0e0',
     borderRadius: '10px',
@@ -126,196 +121,180 @@ export function showTranslateLoading(x: number, y: number, original: string, tar
     fontSize: '14px',
     lineHeight: '1.6',
     wordBreak: 'break-word',
-    whiteSpace: 'pre-wrap',
     fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
     transition: 'opacity 0.15s ease',
     opacity: '0',
     pointerEvents: 'auto',
   })
 
-  // 关闭按钮（右上角）
-  const closeBtn = document.createElement('button')
-  closeBtn.textContent = '✕'
-  Object.assign(closeBtn.style, {
-    position: 'absolute',
-    top: '6px',
-    right: '8px',
-    width: '20px',
-    height: '20px',
-    border: 'none',
-    borderRadius: '4px',
-    background: 'transparent',
-    color: '#888',
-    fontSize: '13px',
-    cursor: 'pointer',
+  // ─── 顶部拖拽条 ───
+  const dragHandle = document.createElement('div')
+  Object.assign(dragHandle.style, {
+    height: '28px',
+    cursor: 'move',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: '0',
-    lineHeight: '1',
+    padding: '0 36px 0 10px',
+    userSelect: 'none',
+    borderBottom: '1px solid rgba(255,255,255,0.06)',
+    flexShrink: '0',
+  })
+  // 拖拽指示器（三个小点）
+  const gripDots = document.createElement('div')
+  Object.assign(gripDots.style, {
+    width: '24px', height: '3px', borderRadius: '2px',
+    background: 'rgba(255,255,255,0.15)', margin: '0 auto',
+  })
+  dragHandle.appendChild(gripDots)
+
+  dragHandle.addEventListener('mousedown', (e) => {
+    if ((e.target as HTMLElement).closest('button')) return
+    isDragging = true
+    const rect = popup.getBoundingClientRect()
+    dragOffsetX = e.clientX - rect.left
+    dragOffsetY = e.clientY - rect.top
+    e.preventDefault()
+  })
+  popup.appendChild(dragHandle)
+
+  // ─── 关闭按钮 ───
+  const closeBtn = document.createElement('button')
+  closeBtn.textContent = '✕'
+  Object.assign(closeBtn.style, {
+    position: 'absolute', top: '4px', right: '6px',
+    width: '22px', height: '22px', border: 'none', borderRadius: '4px',
+    background: 'transparent', color: '#888', fontSize: '13px',
+    cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+    padding: '0', lineHeight: '1', zIndex: '1',
   })
   closeBtn.addEventListener('mouseenter', () => { closeBtn.style.color = '#fff'; closeBtn.style.background = 'rgba(255,255,255,0.1)' })
   closeBtn.addEventListener('mouseleave', () => { closeBtn.style.color = '#888'; closeBtn.style.background = 'transparent' })
   closeBtn.addEventListener('click', (e) => { e.stopPropagation(); hideTranslatePopup() })
   popup.appendChild(closeBtn)
 
-  // 内容区（初始为空，等翻译结果）
+  // ─── 内容包装区 ───
+  const body = document.createElement('div')
+  Object.assign(body.style, { padding: '10px 14px' })
+
+  // 翻译内容区
   const content = document.createElement('div')
   content.style.marginBottom = '6px'
   content.style.minHeight = '20px'
   contentEl = content
-  popup.appendChild(content)
+  body.appendChild(content)
 
   // 原文
   const origEl = document.createElement('div')
   Object.assign(origEl.style, {
-    fontSize: '12px',
-    color: '#888',
+    fontSize: '12px', color: '#888',
     borderTop: '1px solid rgba(255,255,255,0.1)',
-    paddingTop: '6px',
-    marginTop: '4px',
+    paddingTop: '6px', marginTop: '4px',
   })
   origEl.textContent = original
-  popup.appendChild(origEl)
+  body.appendChild(origEl)
 
-  // 笔记内容区（初始隐藏，笔记完成后显示）
+  // 笔记内容区（初始隐藏）
   const noteSection = document.createElement('div')
   Object.assign(noteSection.style, {
-    display: 'none',
-    marginTop: '8px',
-    paddingTop: '8px',
+    display: 'none', marginTop: '8px', paddingTop: '8px',
     borderTop: '1px solid rgba(255,255,255,0.15)',
   })
   const noteLabel = document.createElement('div')
   noteLabel.textContent = '📝 AI 笔记'
   Object.assign(noteLabel.style, {
-    fontSize: '11px',
-    color: '#8b5cf6',
-    marginBottom: '4px',
-    fontWeight: '600',
+    fontSize: '11px', color: '#8b5cf6', marginBottom: '4px', fontWeight: '600',
   })
   noteSection.appendChild(noteLabel)
   const noteContent = document.createElement('div')
-  Object.assign(noteContent.style, {
-    fontSize: '13px',
-    lineHeight: '1.6',
-    color: '#d0d0d0',
-    whiteSpace: 'normal', // markdown 渲染用 HTML 控制空白
-  })
-  // markdown 渲染样式（暗色主题优化）
-  const noteStyle = document.createElement('style')
-  noteStyle.textContent = `
-    .aib-note-md { color: #d4d4d8; font-size: 13px; line-height: 1.7; }
-    .aib-note-md h1,.aib-note-md h2,.aib-note-md h3,.aib-note-md h4 {
-      margin: 8px 0 4px; font-weight: 600; color: #f4f4f5;
-    }
-    .aib-note-md h1 { font-size: 15px; color: #a78bfa; border-bottom: 1px solid rgba(167,139,250,0.2); padding-bottom: 4px; }
-    .aib-note-md h2 { font-size: 14px; color: #c4b5fd; }
-    .aib-note-md h3 { font-size: 13px; color: #ddd6fe; }
-    .aib-note-md h4 { font-size: 12px; color: #ede9fe; }
-    .aib-note-md p { margin: 4px 0; }
-    .aib-note-md ul,.aib-note-md ol { margin: 4px 0; padding-left: 18px; }
-    .aib-note-md li { margin: 2px 0; }
-    .aib-note-md li::marker { color: #a78bfa; }
-    .aib-note-md strong { color: #fbbf24; font-weight: 600; }
-    .aib-note-md em { color: #93c5fd; font-style: italic; }
-    .aib-note-md a { color: #60a5fa; text-decoration: none; }
-    .aib-note-md a:hover { text-decoration: underline; }
-    .aib-note-md code {
-      background: rgba(139,92,246,0.15); color: #c4b5fd; padding: 1px 5px; border-radius: 4px; font-size: 12px;
-    }
-    .aib-note-md pre {
-      background: rgba(0,0,0,0.4); padding: 10px 12px; border-radius: 8px; overflow-x: auto; margin: 6px 0;
-      border: 1px solid rgba(255,255,255,0.06);
-    }
-    .aib-note-md pre code { background: none; color: #d4d4d8; padding: 0; }
-    .aib-note-md blockquote {
-      border-left: 3px solid #a78bfa; margin: 6px 0; padding: 4px 12px;
-      color: #a1a1aa; background: rgba(139,92,246,0.06); border-radius: 0 6px 6px 0;
-    }
-    .aib-note-md table { border-collapse: collapse; width: 100%; margin: 6px 0; }
-    .aib-note-md th {
-      background: rgba(139,92,246,0.12); color: #c4b5fd; font-weight: 600;
-      border: 1px solid rgba(139,92,246,0.2); padding: 6px 10px; font-size: 12px; text-align: left;
-    }
-    .aib-note-md td {
-      border: 1px solid rgba(255,255,255,0.08); padding: 5px 10px; font-size: 12px;
-    }
-    .aib-note-md tr:nth-child(even) { background: rgba(255,255,255,0.02); }
-    .aib-note-md hr { border: none; border-top: 1px solid rgba(139,92,246,0.2); margin: 10px 0; }
-    .aib-note-md img { max-width: 100%; border-radius: 6px; }
-  `
-  noteContent.appendChild(noteStyle)
-  noteContent.className = 'aib-note-md'
+  noteContent.className = 'aib-msg-text'
+  Object.assign(noteContent.style, { whiteSpace: 'normal' })
   noteSection.appendChild(noteContent)
   noteContentEl = noteSection
-  popup.appendChild(noteSection)
+  body.appendChild(noteSection)
 
   // loading 区
   const loading = document.createElement('div')
   Object.assign(loading.style, {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '6px',
-    marginTop: '8px',
-    paddingTop: '6px',
+    display: 'flex', alignItems: 'center', gap: '6px',
+    marginTop: '8px', paddingTop: '6px',
     borderTop: '1px solid rgba(255,255,255,0.1)',
-    fontSize: '12px',
-    color: '#888',
+    fontSize: '12px', color: '#888',
   })
-
-  // loading 动画点
   const dots = document.createElement('span')
   dots.textContent = '处理中'
   Object.assign(dots.style, { letterSpacing: '1px' })
-
   const animDots = document.createElement('span')
   animDots.className = 'aib-translate-dots'
-  Object.assign(animDots.style, {
-    display: 'inline-block',
-    width: '20px',
-    textAlign: 'left',
-  })
+  Object.assign(animDots.style, { display: 'inline-block', width: '20px', textAlign: 'left' })
   animDots.textContent = '...'
-
-  // CSS 动画 + 滚动条样式
-  const style = document.createElement('style')
-  style.textContent = `
-    @keyframes aib-dot-blink {
-      0%, 20% { content: '.'; }
-      40% { content: '..'; }
-      60%, 100% { content: '...'; }
-    }
-    .aib-translate-dots::after {
-      content: '...';
-      animation: aib-dot-blink 1.2s infinite steps(3, end);
-    }
-    .aib-translate-dots { font-size: 0; }
-    .aib-translate-dots::after { font-size: 12px; }
-    .aib-translate-popup::-webkit-scrollbar { width: 4px; }
-    .aib-translate-popup::-webkit-scrollbar-track { background: transparent; }
-    .aib-translate-popup::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 2px; }
-    .aib-translate-popup::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.25); }
-  `
-  popup.appendChild(style)
-
   loading.appendChild(dots)
   loading.appendChild(animDots)
   loadingEl = loading
-  popup.appendChild(loading)
+  body.appendChild(loading)
 
-  // 工具栏（初始隐藏，翻译/笔记完成后显示）
+  // 工具栏（初始隐藏）
   const toolbar = document.createElement('div')
   Object.assign(toolbar.style, {
-    display: 'none',
-    justifyContent: 'flex-end',
-    gap: '8px',
-    marginTop: '8px',
-    paddingTop: '6px',
+    display: 'none', justifyContent: 'flex-end', gap: '8px',
+    marginTop: '8px', paddingTop: '6px',
     borderTop: '1px solid rgba(255,255,255,0.1)',
   })
   toolbarEl = toolbar
-  popup.appendChild(toolbar)
+  body.appendChild(toolbar)
+
+  popup.appendChild(body)
+
+  // ─── 左侧拉伸条 ───
+  const resizeHandle = document.createElement('div')
+  Object.assign(resizeHandle.style, {
+    position: 'absolute', left: '0', top: '0', bottom: '0',
+    width: '6px', cursor: 'col-resize', zIndex: '1',
+  })
+  resizeHandle.addEventListener('mousedown', (e) => {
+    isResizing = true
+    resizeStartX = e.clientX
+    resizeStartWidth = popup.offsetWidth
+    e.preventDefault()
+    e.stopPropagation()
+  })
+  popup.appendChild(resizeHandle)
+
+  // ─── CSS ───
+  const styleEl = document.createElement('style')
+  styleEl.textContent = `
+    @keyframes aib-dot-blink { 0%,20%{content:'.'} 40%{content:'..'} 60%,100%{content:'...'} }
+    .aib-translate-dots::after { content:'...'; animation:aib-dot-blink 1.2s infinite steps(3,end); }
+    .aib-translate-dots { font-size:0; }
+    .aib-translate-dots::after { font-size:12px; }
+    .aib-translate-popup::-webkit-scrollbar { width:4px; }
+    .aib-translate-popup::-webkit-scrollbar-track { background:transparent; }
+    .aib-translate-popup::-webkit-scrollbar-thumb { background:rgba(255,255,255,0.15); border-radius:2px; }
+    .aib-translate-popup::-webkit-scrollbar-thumb:hover { background:rgba(255,255,255,0.25); }
+    .aib-msg-text p { margin:4px 0; }
+    .aib-msg-text p:only-child,.aib-msg-text p:last-child { margin-bottom:0; }
+    .aib-msg-text h1,.aib-msg-text h2,.aib-msg-text h3,.aib-msg-text h4 { margin:8px 0 4px; font-weight:600; color:#f4f4f5; }
+    .aib-msg-text h1 { font-size:15px; color:#a78bfa; border-bottom:1px solid rgba(167,139,250,0.2); padding-bottom:4px; }
+    .aib-msg-text h2 { font-size:14px; color:#c4b5fd; }
+    .aib-msg-text h3 { font-size:13px; color:#ddd6fe; }
+    .aib-msg-text ul,.aib-msg-text ol { margin:4px 0; padding-left:18px; }
+    .aib-msg-text li { margin:2px 0; }
+    .aib-msg-text li::marker { color:#a78bfa; }
+    .aib-msg-text strong { color:#fbbf24; font-weight:600; }
+    .aib-msg-text em { color:#93c5fd; }
+    .aib-msg-text a { color:#60a5fa; text-decoration:none; }
+    .aib-msg-text code:not(.hljs) { background:rgba(139,92,246,0.15); color:#c4b5fd; padding:1px 5px; border-radius:4px; font-size:12px; }
+    .aib-msg-text pre { background:rgba(0,0,0,0.4); padding:10px 12px; border-radius:8px; overflow-x:auto; margin:6px 0; border:1px solid rgba(255,255,255,0.06); }
+    .aib-msg-text pre code { background:none; color:#d4d4d8; padding:0; }
+    .aib-msg-text blockquote { border-left:3px solid #a78bfa; margin:6px 0; padding:4px 12px; color:#a1a1aa; background:rgba(139,92,246,0.06); border-radius:0 6px 6px 0; }
+    .aib-msg-text table { border-collapse:collapse; width:100%; margin:6px 0; }
+    .aib-msg-text th { background:rgba(139,92,246,0.12); color:#c4b5fd; font-weight:600; border:1px solid rgba(139,92,246,0.2); padding:6px 10px; font-size:12px; text-align:left; }
+    .aib-msg-text td { border:1px solid rgba(255,255,255,0.08); padding:5px 10px; font-size:12px; }
+    .aib-msg-text tr:nth-child(even) { background:rgba(255,255,255,0.02); }
+    .aib-msg-text hr { border:none; border-top:1px solid rgba(139,92,246,0.2); margin:10px 0; }
+    .aib-msg-text img { max-width:100%; border-radius:6px; }
+  `
+  popup.appendChild(styleEl)
 
   document.body.appendChild(popup)
   currentPopup = popup
@@ -328,134 +307,111 @@ export function showTranslateLoading(x: number, y: number, original: string, tar
   originScrollTop = getScrollTop(scrollContainer)
   positionPopup(popup, x, y)
 
-  requestAnimationFrame(() => {
-    popup.style.opacity = '1'
-  })
+  requestAnimationFrame(() => { popup.style.opacity = '1' })
 
-  // 在正确的滚动容器上监听滚动
+  // 滚动跟随
   scrollUpdateHandler = () => {
-    if (currentPopup) {
+    if (currentPopup && !isDragging) {
       const scrollDelta = getScrollTop(scrollContainer!) - originScrollTop
       positionPopup(currentPopup, originX, originY - scrollDelta)
     }
   }
   scrollContainer.addEventListener('scroll', scrollUpdateHandler, { passive: true })
 
+  // 全局拖拽 + 拉伸
+  const onMouseMove = (e: MouseEvent) => {
+    if (isDragging && currentPopup) {
+      const newLeft = e.clientX - dragOffsetX
+      const newTop = e.clientY - dragOffsetY
+      currentPopup.style.left = `${Math.max(0, newLeft)}px`
+      currentPopup.style.top = `${Math.max(0, newTop)}px`
+    }
+    if (isResizing && currentPopup) {
+      const delta = resizeStartX - e.clientX
+      const newWidth = Math.max(200, Math.min(window.innerWidth * 0.9, resizeStartWidth + delta))
+      currentPopup.style.width = `${newWidth}px`
+    }
+  }
+  const onMouseUp = () => {
+    isDragging = false
+    isResizing = false
+  }
+  document.addEventListener('mousemove', onMouseMove)
+  document.addEventListener('mouseup', onMouseUp)
+  // 存储清理引用
+  ;(popup as any).__cleanupDrag = () => {
+    document.removeEventListener('mousemove', onMouseMove)
+    document.removeEventListener('mouseup', onMouseUp)
+  }
+
   log.debug('浮层 loading 已显示', { x, y, original: original.slice(0, 30) })
 }
 
 /**
- * 更新翻译结果（AI 返回后调用）
- *
- * 替换 loading 为译文，显示工具栏。
- *
- * @param translated - 翻译后的文本
- * @param onCopy - 可选，自定义复制回调（默认复制 translated）
+ * 更新翻译结果
  */
-export function updateTranslateResult(translated: string, onCopy?: () => void): void {
+export function updateTranslateResult(translated: string): void {
   if (!currentPopup) return
-
   currentTranslated = translated
 
-  // 更新内容区（恢复 display，可能被重试按钮隐藏）
   if (contentEl) {
     contentEl.style.display = ''
     contentEl.style.color = ''
     contentEl.style.fontSize = ''
     contentEl.textContent = translated
   }
-
-  // 隐藏 loading
-  if (loadingEl) {
-    loadingEl.style.display = 'none'
-  }
-
-  // 始终重建工具栏（确保翻译和笔记按钮状态正确）
+  if (loadingEl) loadingEl.style.display = 'none'
   showToolbar()
-
-  // 重新定位（内容高度变化后可能溢出）
-  if (currentPopup) {
-    positionPopup(currentPopup, originX, originY)
-  }
+  if (currentPopup) positionPopup(currentPopup, originX, originY)
 
   log.debug('翻译结果已更新', { translated: translated.slice(0, 30) })
 }
 
 /**
- * 更新笔记结果（笔记 AI 返回后调用）
- *
- * @param noteContent - 笔记 markdown 内容
- * @param onBookmark - 收藏回调
+ * 更新笔记结果
  */
-export function updateNoteResult(noteContent: string, onBookmark: (content: string) => void): void {
+export function updateNoteResult(note: string, onBookmark: (content: string) => void): void {
   if (!currentPopup) return
+  currentNoteContent = note
 
-  currentNoteContent = noteContent
-
-  // 显示笔记内容区
   if (noteContentEl) {
     noteContentEl.style.display = 'block'
-    // 用 markdown 渲染笔记内容（纯预览，无复制/下载按钮）
-    const contentDiv = noteContentEl.querySelector('div:last-child') as HTMLElement
+    const contentDiv = noteContentEl.querySelector('.aib-msg-text') as HTMLElement
     if (contentDiv) {
-      contentDiv.innerHTML = renderMarkdownPlain(noteContent)
+      contentDiv.innerHTML = renderMarkdown(note)
     }
   }
+  if (loadingEl) loadingEl.style.display = 'none'
+  if (toolbarEl) showToolbar(onBookmark)
+  if (currentPopup) positionPopup(currentPopup, originX, originY)
 
-  // 隐藏 loading
-  if (loadingEl) {
-    loadingEl.style.display = 'none'
-  }
-
-  // 显示工具栏
-  if (toolbarEl) {
-    showToolbar(onBookmark)
-  }
-
-  // 重新定位
-  if (currentPopup) {
-    positionPopup(currentPopup, originX, originY)
-  }
-
-  log.debug('笔记结果已更新', { noteContent: noteContent.slice(0, 30) })
+  log.debug('笔记结果已更新', { noteContent: note.slice(0, 30) })
 }
 
 /**
- * 显示翻译错误（AI 调用失败时调用）
- *
- * 替换 loading 为错误提示，显示刷新 + 关闭按钮。
- *
- * @param message - 错误提示
- * @param onRetry - 点击刷新按钮的回调
+ * 显示翻译错误
  */
 export function updateTranslateError(message: string, onRetry?: () => void): void {
   if (!currentPopup) return
 
-  // 更新内容区为错误提示
   if (contentEl) {
     contentEl.textContent = message
-    contentEl.style.color = 'var(--aib-text-soft, #888)'
+    contentEl.style.color = '#888'
     contentEl.style.fontSize = '13px'
   }
+  if (loadingEl) loadingEl.style.display = 'none'
 
-  // 隐藏 loading
-  if (loadingEl) {
-    loadingEl.style.display = 'none'
-  }
-
-  // 显示工具栏：刷新 + 关闭
   if (toolbarEl) {
     toolbarEl.style.display = 'flex'
     toolbarEl.innerHTML = ''
 
     if (onRetry) {
       const retryBtn = createToolButton('刷新', () => {
-        // 恢复 loading 状态
         if (contentEl) {
           contentEl.textContent = ''
           contentEl.style.color = ''
           contentEl.style.fontSize = ''
-          contentEl.style.display = ''  // 确保内容区可见
+          contentEl.style.display = ''
         }
         if (noteContentEl) noteContentEl.style.display = 'none'
         if (loadingEl) loadingEl.style.display = ''
@@ -471,23 +427,14 @@ export function updateTranslateError(message: string, onRetry?: () => void): voi
     toolbarEl.appendChild(closeBtn)
   }
 
-  // 重新定位
-  if (currentPopup) {
-    positionPopup(currentPopup, originX, originY)
-  }
-
+  if (currentPopup) positionPopup(currentPopup, originX, originY)
   log.debug('翻译错误已显示', { message })
 }
 
 /**
- * 显示浮层（直接显示译文，无 loading 阶段）
+ * 显示浮层（直接显示译文）
  */
-export function showTranslatePopup(
-  x: number,
-  y: number,
-  translated: string,
-  original?: string,
-): void {
+export function showTranslatePopup(x: number, y: number, translated: string, original?: string): void {
   showTranslateLoading(x, y, original || '')
   updateTranslateResult(translated)
 }
@@ -497,6 +444,9 @@ export function showTranslatePopup(
  */
 export function hideTranslatePopup(): void {
   if (currentPopup) {
+    // 清理拖拽事件
+    const cleanup = (currentPopup as any).__cleanupDrag
+    if (cleanup) cleanup()
     currentPopup.remove()
     currentPopup = null
   }
@@ -509,6 +459,8 @@ export function hideTranslatePopup(): void {
   originX = 0
   originY = 0
   originScrollTop = 0
+  isDragging = false
+  isResizing = false
   if (scrollUpdateHandler && scrollContainer) {
     scrollContainer.removeEventListener('scroll', scrollUpdateHandler)
     scrollUpdateHandler = null
@@ -520,7 +472,7 @@ export function hideTranslatePopup(): void {
 // 内部工具
 // ═══════════════════════════════════════════════════════════════
 
-/** 显示工具栏（根据有无翻译/笔记决定按钮） */
+/** 显示工具栏 */
 function showToolbar(onBookmark?: (content: string) => void): void {
   if (!toolbarEl) return
 
@@ -533,31 +485,27 @@ function showToolbar(onBookmark?: (content: string) => void): void {
   toolbarEl.style.display = 'flex'
   toolbarEl.innerHTML = ''
 
-  // 复制按钮（有翻译内容时显示）
   if (currentTranslated) {
     const copyBtn = createToolButton('复制', () => {
       navigator.clipboard.writeText(currentTranslated).then(() => {
         copyBtn.textContent = '已复制'
         setTimeout(() => { copyBtn.textContent = '复制' }, 1500)
-      }).catch(() => {
-        log.warn('复制失败')
-      })
+      }).catch(() => { log.warn('复制失败') })
     })
     toolbarEl.appendChild(copyBtn)
   }
 
-  // 收藏笔记按钮（有笔记内容时显示）
   if (currentNoteContent && onBookmark) {
     const bookmarkBtn = createToolButton('⭐ 收藏笔记', () => {
       onBookmark(currentNoteContent)
       bookmarkBtn.textContent = '已收藏'
-      setTimeout(() => hideTranslatePopup(), 500)
+      setTimeout(() => { bookmarkBtn.textContent = '⭐ 收藏笔记' }, 1500)
     }, '#8b5cf6')
     toolbarEl.appendChild(bookmarkBtn)
   }
 }
 
-/** 定位弹窗（视口坐标，跟随滚动更新） */
+/** 定位弹窗 */
 function positionPopup(popup: HTMLElement, x: number, y: number): void {
   popup.style.left = '0px'
   popup.style.top = '0px'
@@ -568,13 +516,9 @@ function positionPopup(popup: HTMLElement, x: number, y: number): void {
   let left = x
   let top = y + OFFSET
 
-  if (left + rect.width > vpWidth - 12) {
-    left = vpWidth - rect.width - 12
-  }
+  if (left + rect.width > vpWidth - 12) left = vpWidth - rect.width - 12
   if (left < 12) left = 12
-  if (top + rect.height > vpHeight - 12) {
-    top = y - rect.height - OFFSET
-  }
+  if (top + rect.height > vpHeight - 12) top = y - rect.height - OFFSET
   if (top < 12) top = 12
 
   popup.style.left = `${left}px`
@@ -586,15 +530,10 @@ function createToolButton(text: string, onClick: () => void, color?: string): HT
   const btn = document.createElement('button')
   btn.textContent = text
   Object.assign(btn.style, {
-    padding: '2px 10px',
-    border: '1px solid rgba(255,255,255,0.2)',
-    borderRadius: '6px',
-    background: color ? `${color}22` : 'rgba(255,255,255,0.08)',
-    color: color || '#ccc',
-    fontSize: '12px',
-    cursor: 'pointer',
-    fontFamily: 'inherit',
-    transition: 'all 0.15s ease',
+    padding: '2px 10px', border: '1px solid rgba(255,255,255,0.2)',
+    borderRadius: '6px', background: color ? `${color}22` : 'rgba(255,255,255,0.08)',
+    color: color || '#ccc', fontSize: '12px', cursor: 'pointer',
+    fontFamily: 'inherit', transition: 'all 0.15s ease',
   })
   btn.addEventListener('mouseenter', () => {
     btn.style.background = color ? `${color}44` : 'rgba(255,255,255,0.15)'

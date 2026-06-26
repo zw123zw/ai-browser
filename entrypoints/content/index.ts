@@ -40,14 +40,14 @@ export default defineContentScript({
         // 清除 hash（避免刷新重复触发）
         history.replaceState(null, '', location.pathname + location.search)
 
-        // 滚动到指定位置（事件驱动）
+        // 滚动到指定位置
         function doScroll() {
-          const pageScrollable = document.documentElement.scrollHeight > document.documentElement.clientHeight
-          if (pageScrollable) {
+          // 优先：页面本身可滚动
+          if (document.documentElement.scrollHeight > document.documentElement.clientHeight) {
             window.scrollTo(0, scrollY)
             return
           }
-          // 查找子容器
+          // 查找最大的子容器
           const allDivs = document.querySelectorAll('div')
           let best: HTMLElement | null = null
           let bestScore = 0
@@ -67,35 +67,9 @@ export default defineContentScript({
           else window.scrollTo(0, scrollY)
         }
 
-        // 等页面可滚动后再执行
-        function waitAndScroll() {
-          // 已经有足够内容可以滚动了
-          const hasContent = document.documentElement.scrollHeight > window.innerHeight + 100
-          if (hasContent) {
-            doScroll()
-            return
-          }
-          // 监听 DOM 变化，内容加载后自动滚动
-          const observer = new MutationObserver(() => {
-            const ready = document.documentElement.scrollHeight > window.innerHeight + 100
-            if (ready) {
-              observer.disconnect()
-              doScroll()
-            }
-          })
-          observer.observe(document.body, { childList: true, subtree: true })
-          // 兜底：5 秒后无论如何尝试一次
-          setTimeout(() => {
-            observer.disconnect()
-            doScroll()
-          }, 5000)
-        }
-
-        if (document.readyState === 'complete') {
-          waitAndScroll()
-        } else {
-          window.addEventListener('load', () => waitAndScroll(), { once: true })
-        }
+        // 延迟多次尝试（覆盖页面加载快/慢的各种情况）
+        const delays = [300, 800, 1500, 2500, 4000]
+        delays.forEach(delay => setTimeout(doScroll, delay))
 
         // 高亮闪烁
         if (highlightText) {
