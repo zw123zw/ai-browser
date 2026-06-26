@@ -48,8 +48,13 @@ let dragOffsetX = 0
 let dragOffsetY = 0
 /** 拉伸状态 */
 let isResizing = false
+let resizeDir: 'left' | 'right' | 'top' | 'bottom' = 'right'
 let resizeStartX = 0
+let resizeStartY = 0
 let resizeStartWidth = 0
+let resizeStartHeight = 0
+let resizeStartLeft = 0
+let resizeStartTop = 0
 
 /**
  * 查找元素最近的可滚动父容器
@@ -89,8 +94,8 @@ function getScrollTop(container: HTMLElement | Window): number {
   return container === window ? window.scrollY : (container as HTMLElement).scrollTop
 }
 
-/** 弹窗最大宽度 */
-const MAX_WIDTH = 450
+/** 弹窗默认宽度 */
+const DEFAULT_WIDTH = 560
 /** 弹窗与选区的间距 */
 const OFFSET = 8
 
@@ -106,13 +111,14 @@ export function showTranslateLoading(x: number, y: number, original: string, tar
 
   Object.assign(popup.style, {
     position: 'fixed',
-    zIndex: '2147483647',
-    width: `${MAX_WIDTH}px`,
+    zIndex: '2147483646',
+    width: `${DEFAULT_WIDTH}px`,
     minWidth: '200px',
     maxWidth: '90vw',
     maxHeight: '70vh',
-    overflowY: 'auto',
-    overflowX: 'hidden',
+    display: 'flex',
+    flexDirection: 'column',
+    overflow: 'hidden',
     padding: '0',
     background: '#1a1a2e',
     color: '#e0e0e0',
@@ -173,9 +179,16 @@ export function showTranslateLoading(x: number, y: number, original: string, tar
   closeBtn.addEventListener('click', (e) => { e.stopPropagation(); hideTranslatePopup() })
   popup.appendChild(closeBtn)
 
-  // ─── 内容包装区 ───
+  // ─── 内容包装区（可滚动） ───
   const body = document.createElement('div')
-  Object.assign(body.style, { padding: '10px 14px' })
+  body.className = 'aib-popup-body'
+  Object.assign(body.style, {
+    padding: '12px 16px',
+    flex: '1',
+    overflowY: 'auto',
+    overflowX: 'hidden',
+    minHeight: '0',
+  })
 
   // 翻译内容区
   const content = document.createElement('div')
@@ -233,32 +246,49 @@ export function showTranslateLoading(x: number, y: number, original: string, tar
   loadingEl = loading
   body.appendChild(loading)
 
-  // 工具栏（初始隐藏）
+  popup.appendChild(body)
+
+  // ─── 工具栏（固定在底部，不随内容滚动） ───
   const toolbar = document.createElement('div')
   Object.assign(toolbar.style, {
     display: 'none', justifyContent: 'flex-end', gap: '8px',
-    marginTop: '8px', paddingTop: '6px',
+    padding: '8px 16px',
     borderTop: '1px solid rgba(255,255,255,0.1)',
+    flexShrink: '0',
+    background: '#1a1a2e',
+    borderRadius: '0 0 10px 10px',
   })
   toolbarEl = toolbar
-  body.appendChild(toolbar)
+  popup.appendChild(toolbar)
 
-  popup.appendChild(body)
-
-  // ─── 左侧拉伸条 ───
-  const resizeHandle = document.createElement('div')
-  Object.assign(resizeHandle.style, {
-    position: 'absolute', left: '0', top: '0', bottom: '0',
-    width: '6px', cursor: 'col-resize', zIndex: '1',
-  })
-  resizeHandle.addEventListener('mousedown', (e) => {
-    isResizing = true
-    resizeStartX = e.clientX
-    resizeStartWidth = popup.offsetWidth
-    e.preventDefault()
-    e.stopPropagation()
-  })
-  popup.appendChild(resizeHandle)
+  // ─── 四方向拉伸条 ───
+  const resizeHandles: Array<{ el: HTMLElement; dir: string; cursor: string }> = []
+  const dirs = [
+    { dir: 'left',   cursor: 'col-resize',    style: { left:'-3px', top:'0', bottom:'0', width:'6px' } },
+    { dir: 'right',  cursor: 'col-resize',    style: { right:'-3px', top:'0', bottom:'0', width:'6px' } },
+    { dir: 'top',    cursor: 'row-resize',    style: { top:'-3px', left:'0', right:'0', height:'6px' } },
+    { dir: 'bottom', cursor: 'row-resize',    style: { bottom:'-3px', left:'0', right:'0', height:'6px' } },
+  ]
+  for (const d of dirs) {
+    const handle = document.createElement('div')
+    Object.assign(handle.style, {
+      position: 'absolute', zIndex: '2', ...d.style,
+      cursor: d.cursor,
+    })
+    handle.addEventListener('mousedown', (e) => {
+      isResizing = true
+      resizeDir = d.dir as any
+      resizeStartX = e.clientX
+      resizeStartY = e.clientY
+      resizeStartWidth = popup.offsetWidth
+      resizeStartHeight = popup.offsetHeight
+      resizeStartLeft = popup.offsetLeft
+      resizeStartTop = popup.offsetTop
+      e.preventDefault()
+      e.stopPropagation()
+    })
+    popup.appendChild(handle)
+  }
 
   // ─── CSS ───
   const styleEl = document.createElement('style')
@@ -267,32 +297,38 @@ export function showTranslateLoading(x: number, y: number, original: string, tar
     .aib-translate-dots::after { content:'...'; animation:aib-dot-blink 1.2s infinite steps(3,end); }
     .aib-translate-dots { font-size:0; }
     .aib-translate-dots::after { font-size:12px; }
-    .aib-translate-popup::-webkit-scrollbar { width:4px; }
-    .aib-translate-popup::-webkit-scrollbar-track { background:transparent; }
-    .aib-translate-popup::-webkit-scrollbar-thumb { background:rgba(255,255,255,0.15); border-radius:2px; }
-    .aib-translate-popup::-webkit-scrollbar-thumb:hover { background:rgba(255,255,255,0.25); }
-    .aib-msg-text p { margin:4px 0; }
+    .aib-translate-popup::-webkit-scrollbar { width:0; }
+    .aib-popup-body::-webkit-scrollbar { width:4px; }
+    .aib-popup-body::-webkit-scrollbar-track { background:transparent; }
+    .aib-popup-body::-webkit-scrollbar-thumb { background:rgba(255,255,255,0.15); border-radius:2px; }
+    .aib-popup-body::-webkit-scrollbar-thumb:hover { background:rgba(255,255,255,0.25); }
+    .aib-msg-text p { margin:6px 0; }
     .aib-msg-text p:only-child,.aib-msg-text p:last-child { margin-bottom:0; }
-    .aib-msg-text h1,.aib-msg-text h2,.aib-msg-text h3,.aib-msg-text h4 { margin:8px 0 4px; font-weight:600; color:#f4f4f5; }
-    .aib-msg-text h1 { font-size:15px; color:#a78bfa; border-bottom:1px solid rgba(167,139,250,0.2); padding-bottom:4px; }
-    .aib-msg-text h2 { font-size:14px; color:#c4b5fd; }
-    .aib-msg-text h3 { font-size:13px; color:#ddd6fe; }
-    .aib-msg-text ul,.aib-msg-text ol { margin:4px 0; padding-left:18px; }
-    .aib-msg-text li { margin:2px 0; }
+    .aib-msg-text h1,.aib-msg-text h2,.aib-msg-text h3,.aib-msg-text h4 { margin:12px 0 6px; font-weight:600; color:#f4f4f5; }
+    .aib-msg-text h1 { font-size:16px; color:#a78bfa; border-bottom:1px solid rgba(167,139,250,0.2); padding-bottom:6px; }
+    .aib-msg-text h2 { font-size:15px; color:#c4b5fd; }
+    .aib-msg-text h3 { font-size:14px; color:#ddd6fe; }
+    .aib-msg-text ul,.aib-msg-text ol { margin:6px 0; padding-left:20px; }
+    .aib-msg-text li { margin:3px 0; }
     .aib-msg-text li::marker { color:#a78bfa; }
+    .aib-msg-text li > ul,.aib-msg-text li > ol { margin:2px 0; }
     .aib-msg-text strong { color:#fbbf24; font-weight:600; }
     .aib-msg-text em { color:#93c5fd; }
     .aib-msg-text a { color:#60a5fa; text-decoration:none; }
-    .aib-msg-text code:not(.hljs) { background:rgba(139,92,246,0.15); color:#c4b5fd; padding:1px 5px; border-radius:4px; font-size:12px; }
-    .aib-msg-text pre { background:rgba(0,0,0,0.4); padding:10px 12px; border-radius:8px; overflow-x:auto; margin:6px 0; border:1px solid rgba(255,255,255,0.06); }
+    .aib-msg-text a:hover { text-decoration:underline; }
+    .aib-msg-text code:not(.hljs) { background:rgba(139,92,246,0.15); color:#c4b5fd; padding:2px 6px; border-radius:4px; font-size:12px; }
+    .aib-msg-text pre { background:rgba(0,0,0,0.4); padding:10px 12px; border-radius:8px; overflow-x:auto; margin:8px 0; border:1px solid rgba(255,255,255,0.06); }
     .aib-msg-text pre code { background:none; color:#d4d4d8; padding:0; }
-    .aib-msg-text blockquote { border-left:3px solid #a78bfa; margin:6px 0; padding:4px 12px; color:#a1a1aa; background:rgba(139,92,246,0.06); border-radius:0 6px 6px 0; }
-    .aib-msg-text table { border-collapse:collapse; width:100%; margin:6px 0; }
-    .aib-msg-text th { background:rgba(139,92,246,0.12); color:#c4b5fd; font-weight:600; border:1px solid rgba(139,92,246,0.2); padding:6px 10px; font-size:12px; text-align:left; }
-    .aib-msg-text td { border:1px solid rgba(255,255,255,0.08); padding:5px 10px; font-size:12px; }
+    .aib-msg-text blockquote { border-left:3px solid #a78bfa; margin:8px 0; padding:6px 12px; color:#a1a1aa; background:rgba(139,92,246,0.06); border-radius:0 6px 6px 0; }
+    .aib-msg-text table { border-collapse:collapse; width:100%; margin:8px 0; }
+    .aib-msg-text th { background:rgba(139,92,246,0.12); color:#c4b5fd; font-weight:600; border:1px solid rgba(139,92,246,0.2); padding:8px 12px; font-size:13px; text-align:left; }
+    .aib-msg-text td { border:1px solid rgba(255,255,255,0.08); padding:6px 12px; font-size:13px; }
     .aib-msg-text tr:nth-child(even) { background:rgba(255,255,255,0.02); }
-    .aib-msg-text hr { border:none; border-top:1px solid rgba(139,92,246,0.2); margin:10px 0; }
+    .aib-msg-text hr { border:none; border-top:1px solid rgba(139,92,246,0.2); margin:12px 0; }
     .aib-msg-text img { max-width:100%; border-radius:6px; }
+    .aib-msg-text del,.aib-msg-text s { color:#888; }
+    .aib-msg-text mark { background:rgba(251,191,36,0.2); color:#fbbf24; border-radius:2px; padding:0 2px; }
+    .aib-msg-text kbd { background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.15); border-radius:4px; padding:1px 5px; font-size:12px; }
   `
   popup.appendChild(styleEl)
 
@@ -321,15 +357,25 @@ export function showTranslateLoading(x: number, y: number, original: string, tar
   // 全局拖拽 + 拉伸
   const onMouseMove = (e: MouseEvent) => {
     if (isDragging && currentPopup) {
-      const newLeft = e.clientX - dragOffsetX
-      const newTop = e.clientY - dragOffsetY
-      currentPopup.style.left = `${Math.max(0, newLeft)}px`
-      currentPopup.style.top = `${Math.max(0, newTop)}px`
+      currentPopup.style.left = `${Math.max(0, e.clientX - dragOffsetX)}px`
+      currentPopup.style.top = `${Math.max(0, e.clientY - dragOffsetY)}px`
     }
     if (isResizing && currentPopup) {
-      const delta = resizeStartX - e.clientX
-      const newWidth = Math.max(200, Math.min(window.innerWidth * 0.9, resizeStartWidth + delta))
-      currentPopup.style.width = `${newWidth}px`
+      const dx = e.clientX - resizeStartX
+      const dy = e.clientY - resizeStartY
+      if (resizeDir === 'right') {
+        currentPopup.style.width = `${Math.max(200, resizeStartWidth + dx)}px`
+      } else if (resizeDir === 'left') {
+        const newW = Math.max(200, resizeStartWidth - dx)
+        currentPopup.style.width = `${newW}px`
+        currentPopup.style.left = `${resizeStartLeft + (resizeStartWidth - newW)}px`
+      } else if (resizeDir === 'bottom') {
+        currentPopup.style.height = `${Math.max(100, resizeStartHeight + dy)}px`
+      } else if (resizeDir === 'top') {
+        const newH = Math.max(100, resizeStartHeight - dy)
+        currentPopup.style.height = `${newH}px`
+        currentPopup.style.top = `${resizeStartTop + (resizeStartHeight - newH)}px`
+      }
     }
   }
   const onMouseUp = () => {
