@@ -37,11 +37,6 @@ let currentNoteContent = ''
 /** 原始触发坐标（视口坐标） */
 let originX = 0
 let originY = 0
-/** 滚动容器及其初始滚动位置 */
-let scrollContainer: HTMLElement | Window | null = null
-let originScrollTop = 0
-/** 滚动时更新位置的处理器 */
-let scrollUpdateHandler: (() => void) | null = null
 /** 拖拽状态 */
 let isDragging = false
 let dragOffsetX = 0
@@ -56,44 +51,6 @@ let resizeStartHeight = 0
 let resizeStartLeft = 0
 let resizeStartTop = 0
 
-/**
- * 查找元素最近的可滚动父容器
- */
-function findScrollContainer(el?: Element | null): HTMLElement | Window {
-  let current: Element | null = el || document.body
-  while (current && current !== document.body) {
-    const style = window.getComputedStyle(current)
-    const overflow = style.overflowY
-    if ((overflow === 'auto' || overflow === 'scroll') && current.scrollHeight > current.clientHeight) {
-      return current as HTMLElement
-    }
-    current = current.parentElement
-  }
-  if (document.documentElement.scrollHeight > document.documentElement.clientHeight) {
-    return window
-  }
-  const allDivs = document.querySelectorAll('div')
-  let best: HTMLElement | null = null
-  let bestScore = 0
-  for (const div of allDivs) {
-    if (div.scrollHeight > div.clientHeight + 50) {
-      const style = window.getComputedStyle(div)
-      if (style.overflowY === 'auto' || style.overflowY === 'scroll') {
-        const score = div.scrollHeight - div.clientHeight
-        if (score > bestScore) {
-          bestScore = score
-          best = div
-        }
-      }
-    }
-  }
-  return best || window
-}
-
-function getScrollTop(container: HTMLElement | Window): number {
-  return container === window ? window.scrollY : (container as HTMLElement).scrollTop
-}
-
 /** 弹窗默认宽度 */
 const DEFAULT_WIDTH = 560
 /** 弹窗与选区的间距 */
@@ -102,7 +59,7 @@ const OFFSET = 8
 /**
  * 显示浮层（loading 状态）
  */
-export function showTranslateLoading(x: number, y: number, original: string, targetEl?: Element | null): void {
+export function showTranslateLoading(x: number, y: number, original: string): void {
   hideTranslatePopup()
 
   const popup = document.createElement('div')
@@ -337,22 +294,9 @@ export function showTranslateLoading(x: number, y: number, original: string, tar
 
   originX = x
   originY = y
-
-  // 查找正确的滚动容器
-  scrollContainer = findScrollContainer(targetEl)
-  originScrollTop = getScrollTop(scrollContainer)
   positionPopup(popup, x, y)
 
   requestAnimationFrame(() => { popup.style.opacity = '1' })
-
-  // 滚动跟随
-  scrollUpdateHandler = () => {
-    if (currentPopup && !isDragging) {
-      const scrollDelta = getScrollTop(scrollContainer!) - originScrollTop
-      positionPopup(currentPopup, originX, originY - scrollDelta)
-    }
-  }
-  scrollContainer.addEventListener('scroll', scrollUpdateHandler, { passive: true })
 
   // 全局拖拽 + 拉伸
   const onMouseMove = (e: MouseEvent) => {
@@ -504,14 +448,8 @@ export function hideTranslatePopup(): void {
   currentNoteContent = ''
   originX = 0
   originY = 0
-  originScrollTop = 0
   isDragging = false
   isResizing = false
-  if (scrollUpdateHandler && scrollContainer) {
-    scrollContainer.removeEventListener('scroll', scrollUpdateHandler)
-    scrollUpdateHandler = null
-    scrollContainer = null
-  }
 }
 
 // ═══════════════════════════════════════════════════════════════

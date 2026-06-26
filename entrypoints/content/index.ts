@@ -223,9 +223,8 @@ export default defineContentScript({
         }))
       }
 
-      // 显示浮层（传入选区元素用于查找正确的滚动容器）
-      const selectionEl = selection.anchorNode?.parentElement || target
-      showTranslateLoading(mouseX, mouseY, text, selectionEl)
+      // 显示浮层
+      showTranslateLoading(mouseX, mouseY, text)
 
       // 并行调用翻译和笔记 AI
       const tasks: Promise<void>[] = []
