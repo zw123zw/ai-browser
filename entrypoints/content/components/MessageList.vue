@@ -82,11 +82,16 @@ function deleteMessage() {
 async function bookmarkMessage() {
   if (!ctxMenu.value) return;
   const msg = ctxMenu.value.message;
+
+  // 尝试从消息内容中提取来源 URL（自动笔记会附带）
+  const urlMatch = msg.content.match(/>\s*📎\s*来源:.*\((https?:\/\/[^\)]+)\)/);
+  const sourceUrl = urlMatch?.[1] || '';
+
   // 打开笔记收藏弹框
   window.dispatchEvent(new CustomEvent('aib-bookmark-note', {
     detail: {
       content: msg.content,
-      url: '',
+      url: sourceUrl,
       scrollY: 0,
       source: 'chat' as const,
     },

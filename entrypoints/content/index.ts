@@ -352,16 +352,19 @@ export default defineContentScript({
 
         log.info('[自动笔记] 完成', { length: result.length, preview: result.slice(0, 80) })
 
+        // 在笔记末尾附上来源 URL（收藏时保留）
+        const noteWithUrl = result + `\n\n> 📎 来源: [${document.title}](${location.href})`
+
         // 更新占位消息为实际笔记内容
         window.dispatchEvent(new CustomEvent('aib-auto-note-result', {
-          detail: { id: placeholderId, content: result },
+          detail: { id: placeholderId, content: noteWithUrl },
         }))
       } catch (err) {
         log.error('[自动笔记] 失败', err)
       }
     }
 
-    // --- 自动笔记：页面加载后触发 ---
+    // --- 自动笔记：页面加载/跳转后触发 ---
     async function initAutoNote() {
       log.info('[自动笔记] 页面加载，检查是否开启')
       await new Promise(resolve => setTimeout(resolve, 1000)) // 等页面稳定
@@ -373,6 +376,11 @@ export default defineContentScript({
     } else {
       window.addEventListener('load', () => initAutoNote(), { once: true })
     }
+
+    // pageshow：处理 bfcache 恢复 + 普通页面加载
+    window.addEventListener('pageshow', () => {
+      initAutoNote()
+    })
 
     // --- 自动翻译：URL 变化时重新翻译 ---
     let currentUrl = location.href
