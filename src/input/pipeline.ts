@@ -208,6 +208,50 @@ function cleanDataForExtraction(elements: ReturnType<typeof extractDataElements>
 }
 
 /**
+ * 查找下一章/下一页链接
+ *
+ * 优先级：
+ * 1. 文本匹配（下一章、下一页、Next、>）
+ * 2. rel="next" 属性
+ * 3. 常见类名（next-chapter、next-page、pagination next）
+ */
+function findNextChapterLink(): HTMLElement | null {
+  const candidates = [
+    // 文本匹配
+    { selector: 'a', textPattern: /下一[章页节]|下[一]?[章页节]|Next|next|>>|›/ },
+    // rel 属性
+    { selector: 'a[rel="next"]' },
+    // 常见类名
+    { selector: '.next-chapter a, .next-page a, .pagination .next a, a.next' },
+  ]
+
+  for (const candidate of candidates) {
+    const elements = document.querySelectorAll(candidate.selector)
+    for (const el of elements) {
+      const htmlEl = el as HTMLElement
+
+      // 检查是否可见
+      const style = window.getComputedStyle(htmlEl)
+      if (style.display === 'none' || style.visibility === 'hidden') continue
+
+      // 如果有文本模式，检查文本内容
+      if (candidate.textPattern) {
+        const text = htmlEl.textContent?.trim() || ''
+        if (!candidate.textPattern.test(text)) continue
+      }
+
+      // 检查是否有 href（排除空链接和 javascript:void(0)）
+      const href = htmlEl.getAttribute('href')
+      if (!href || href === '#' || href.startsWith('javascript:')) continue
+
+      return htmlEl
+    }
+  }
+
+  return null
+}
+
+/**
  * 提取页面全文（用于 summarize）
  *
  * 与 extractDataElements 的区别：
@@ -494,9 +538,11 @@ export class InputPipeline {
             continue
           }
 
-          // ★ download → 提取页面数据，调 AI 生成文件
+          // ★ download → 提取页面数据，生成文件
+          // done:0 = 生成文件后继续请求 AI（批量导出场景）
+          // done:1 = 生成文件后结束
           if (cmd.action === 'download') {
-            log.info('[Phase 2] ── download：提取页面数据 ──')
+            log.info('[Phase 2] ── download：提取页面数据 ──', { done: cmd.done })
             const dataElements = extractDataElements()
             if (dataElements.length === 0) {
               callbacks.onCommandResult('download', false, '页面无可提取数据')
@@ -508,11 +554,22 @@ export class InputPipeline {
                 const automationEnabled = this.options.getSettings().automationEnabled !== false
                 const extractPrompt = buildExtractPrompt(text, cleaned, automationEnabled)
                 const aiResult = await this.callAIForExtraction(extractPrompt)
-                callbacks.onFileOutput(aiResult)
+                callbacks.onFileOutput?.(aiResult)
                 completed.push({ action: cmd.action, description: cmd.description })
                 completedKeys.add(cmdKey)
                 callbacks.onCommandResult('download', true, '数据提取完成')
                 log.info('[Phase 2] ═══ download 完成 ═══')
+
+                // done:0 → 自动点击下一章，继续请求 AI
+                if (cmd.done !== 1) {
+                  const nextLink = findNextChapterLink()
+                  if (nextLink) {
+                    log.info('[Phase 2] download 自动点击下一章', { href: (nextLink as HTMLAnchorElement).href, text: nextLink.textContent?.trim() })
+                    nextLink.click()
+                    await sleep(2000, this.options.getSignal?.())
+                    this.skeletonManager.invalidate()
+                  }
+                }
               } catch (err) {
                 // 中止请求直接抛出，不当作执行失败
                 if (err instanceof DOMException && err.name === 'AbortError') throw err
