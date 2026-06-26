@@ -115,10 +115,13 @@ function jumpToSource(entry: NoteEntry) {
   if (!entry.url) return;
   // 通过 URL hash 传递 scrollY 和 selectedText
   const params = new URLSearchParams();
-  if (entry.scrollY) params.set('aib-scroll', String(entry.scrollY));
+  // scrollY >= 0 即保存（0 也是有效值）
+  params.set('aib-scroll', String(entry.scrollY ?? 0));
   if (entry.selectedText) params.set('aib-highlight', entry.selectedText.slice(0, 100));
   const hash = params.toString() ? `#${params.toString()}` : '';
   const targetUrl = entry.url + hash;
+
+  console.log('[笔记跳转] jumpToSource', { scrollY: entry.scrollY, url: entry.url, targetUrl, selectedText: entry.selectedText?.slice(0, 30) });
 
   // 先关闭笔记弹框
   emit('close');

@@ -30,21 +30,29 @@ export default defineContentScript({
     // ═══════════════════════════════════════════════════════════════
     function handleNoteJump() {
       const hash = location.hash
+      log.info('[笔记跳转] 检测 hash', { hash })
       if (!hash || !hash.includes('aib-scroll')) return
 
       try {
         const params = new URLSearchParams(hash.slice(1))
         const scrollY = parseInt(params.get('aib-scroll') || '0', 10)
         const highlightText = params.get('aib-highlight') || ''
+        log.info('[笔记跳转] 解析参数', { scrollY, highlightText: highlightText.slice(0, 30) })
 
         // 清除 hash（避免刷新重复触发）
         history.replaceState(null, '', location.pathname + location.search)
 
         // 滚动到指定位置
         function doScroll() {
-          // 优先：页面本身可滚动
-          if (document.documentElement.scrollHeight > document.documentElement.clientHeight) {
+          const pageScrollable = document.documentElement.scrollHeight > document.documentElement.clientHeight
+          const docScrollH = document.documentElement.scrollHeight
+          const docClientH = document.documentElement.clientHeight
+          const currentScroll = window.scrollY
+          log.info('[笔记跳转] doScroll', { scrollY, pageScrollable, docScrollH, docClientH, currentScroll })
+
+          if (pageScrollable) {
             window.scrollTo(0, scrollY)
+            log.info('[笔记跳转] window.scrollTo 执行', { result: window.scrollY })
             return
           }
           // 查找最大的子容器
@@ -63,11 +71,16 @@ export default defineContentScript({
               }
             }
           }
-          if (best) best.scrollTop = scrollY
-          else window.scrollTo(0, scrollY)
+          if (best) {
+            log.info('[笔记跳转] 子容器滚动', { scrollH: best.scrollHeight, clientH: best.clientHeight, scrollY })
+            best.scrollTop = scrollY
+          } else {
+            window.scrollTo(0, scrollY)
+            log.info('[笔记跳转] 兜底 window.scrollTo', { result: window.scrollY })
+          }
         }
 
-        // 延迟多次尝试（覆盖页面加载快/慢的各种情况）
+        // 延迟多次尝试
         const delays = [300, 800, 1500, 2500, 4000]
         delays.forEach(delay => setTimeout(doScroll, delay))
 
@@ -218,8 +231,10 @@ export default defineContentScript({
 
       // 收藏笔记回调
       function onBookmark(noteContent: string) {
+        const savedScrollY = window.scrollY
+        log.info('[收藏笔记] 保存 scrollY', { scrollY: savedScrollY, url: location.href })
         window.dispatchEvent(new CustomEvent('aib-bookmark-note', {
-          detail: { content: noteContent, url: location.href, scrollY: window.scrollY, selectedText: text, source: 'selection' },
+          detail: { content: noteContent, url: location.href, scrollY: savedScrollY, selectedText: text, source: 'selection' },
         }))
       }
 
