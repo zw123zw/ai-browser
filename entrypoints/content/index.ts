@@ -609,6 +609,36 @@ export default defineContentScript({
       characterData: true,
     })
 
+    // --- 自动笔记：MutationObserver 检测页面内容变化 ---
+    // 不依赖 URL 变化，适用于 Livewire/Turbo 等非标准 SPA 框架
+    let lastContentLength = document.body.innerText.length
+    let contentChangeTimer: ReturnType<typeof setTimeout> | null = null
+
+    const contentObserver = new MutationObserver(() => {
+      const newLength = document.body.innerText.length
+      const delta = Math.abs(newLength - lastContentLength)
+
+      // 内容变化超过阈值 → 触发自动笔记
+      if (delta > 200) {
+        lastContentLength = newLength
+        if (contentChangeTimer) clearTimeout(contentChangeTimer)
+        contentChangeTimer = setTimeout(async () => {
+          // 取消正在执行的自动笔记
+          if (autoNoteAbort) {
+            autoNoteAbort.abort()
+            autoNoteAbort = null
+          }
+          autoNoteRunning = false
+          await runAutoNote()
+        }, 2000)
+      }
+    })
+
+    contentObserver.observe(document.body, {
+      childList: true,
+      subtree: true,
+    })
+
     // ═══════════════════════════════════════════════════════════════
     // Vue 应用挂载
     // ═══════════════════════════════════════════════════════════════
