@@ -41,46 +41,47 @@ export default defineContentScript({
         history.replaceState(null, '', location.pathname + location.search)
 
         // 滚动到指定位置（查找正确的滚动容器 + 重试）
-        function doScroll(retries: number) {
-          // 查找页面内最大的可滚动容器
-          let container: HTMLElement | null = null
+        let scrollTarget: HTMLElement | null = null
+        function doScroll() {
           if (document.documentElement.scrollHeight > document.documentElement.clientHeight) {
-            // 页面本身可滚动
             window.scrollTo(0, scrollY)
           } else {
             // 查找子容器
-            const allDivs = document.querySelectorAll('div')
-            let bestScore = 0
-            for (const div of allDivs) {
-              if (div.scrollHeight > div.clientHeight + 50) {
-                const style = window.getComputedStyle(div)
-                if (style.overflowY === 'auto' || style.overflowY === 'scroll') {
-                  const score = div.scrollHeight - div.clientHeight
-                  if (score > bestScore) {
-                    bestScore = score
-                    container = div
+            if (!scrollTarget) {
+              const allDivs = document.querySelectorAll('div')
+              let bestScore = 0
+              for (const div of allDivs) {
+                if (div.scrollHeight > div.clientHeight + 50) {
+                  const style = window.getComputedStyle(div)
+                  if (style.overflowY === 'auto' || style.overflowY === 'scroll') {
+                    const score = div.scrollHeight - div.clientHeight
+                    if (score > bestScore) {
+                      bestScore = score
+                      scrollTarget = div
+                    }
                   }
                 }
               }
             }
-            if (container) {
-              container.scrollTop = scrollY
+            if (scrollTarget) {
+              scrollTarget.scrollTop = scrollY
             } else {
               window.scrollTo(0, scrollY)
             }
           }
-
-          // 验证是否滚动到位
-          const currentScroll = container ? container.scrollTop : window.scrollY
-          if (retries > 0 && Math.abs(currentScroll - scrollY) > 50) {
-            setTimeout(() => doScroll(retries - 1), 500)
-          }
         }
 
-        // 多次尝试滚动（页面可能延迟加载内容）
-        setTimeout(() => doScroll(4), 500)
-        setTimeout(() => doScroll(3), 1500)
-        setTimeout(() => doScroll(2), 3000)
+        // 延迟滚动 + 重试（页面可能延迟加载内容）
+        let scrollRetries = 0
+        function tryScroll() {
+          doScroll()
+          scrollRetries++
+          const current = scrollTarget ? scrollTarget.scrollTop : window.scrollY
+          if (scrollRetries < 5 && Math.abs(current - scrollY) > 50) {
+            setTimeout(tryScroll, 500)
+          }
+        }
+        setTimeout(tryScroll, 500)
 
         // 高亮闪烁
         if (highlightText) {
