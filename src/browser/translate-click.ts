@@ -13,9 +13,12 @@
  */
 
 import { renderMarkdown } from '@/src/utils/markdown'
-import { optimizeAsNote } from '@/src/browser/note-service'
+import { optimizeAsNoteStream } from '@/src/browser/note-service'
+import { createAdapter } from '@/src/adapters'
+import { buildSelectionTranslateMessage, TRANSLATE_SYSTEM_PROMPT } from '@/src/input/prompts/translate'
+import { parseSingleTranslation } from '@/src/browser/translate-parser'
 import { Logger } from '@/src/utils/logger'
-import type { AppSettings } from '@/src/types'
+import type { AppSettings, StreamChunk } from '@/src/types'
 
 const log = new Logger('TranslateClick')
 
@@ -402,6 +405,29 @@ function fillResult(
 }
 
 /**
+ * 流式更新翻译内容（追加增量）
+ */
+function fillTranslateStreaming(container: HTMLElement, full: string): void {
+  const loading = (container as any).__loading as HTMLElement
+  const content = (container as any).__content as HTMLElement
+  loading.style.display = 'none'
+  content.textContent = full
+  content.style.display = ''
+}
+
+/**
+ * 流式更新笔记内容（追加增量）
+ */
+function fillNoteStreaming(container: HTMLElement, full: string): void {
+  const loading = (container as any).__loading as HTMLElement
+  const noteSection = (container as any).__noteSection as HTMLElement
+  const noteContentDiv = (container as any).__noteContent as HTMLElement
+  loading.style.display = 'none'
+  noteSection.style.display = ''
+  noteContentDiv.textContent = full
+}
+
+/**
  * 显示错误
  */
 function fillError(container: HTMLElement, message: string, onRetry?: () => void): void {
@@ -534,7 +560,28 @@ export function initClickTranslate(
             const targetLang = settings!.translateTargetLang || '中文'
             log.info('[点击翻译] 触发', { tag: blockEl.tagName, text: text.slice(0, 50), targetLang })
             const modelId = await getCurrentModelId?.()
-            const translated = await translateService.translateSelection(text, targetLang, settings!, modelId)
+            const models = settings!.models || []
+            const model = modelId
+              ? models.find((m) => m.id === modelId) || models[0]
+              : models.find((m) => m.id === settings!.defaultModelId) || models[0]
+            if (!model) { translateFailed = true; return }
+
+            const adapter = createAdapter(model.provider)
+            const messages = [
+              { id: 'sys', role: 'system' as const, content: TRANSLATE_SYSTEM_PROMPT, timestamp: Date.now() },
+              { id: 'user', role: 'user' as const, content: buildSelectionTranslateMessage(text, targetLang), timestamp: Date.now() },
+            ]
+            let raw = ''
+            await adapter.chat(
+              { baseUrl: model.baseUrl || settings!.baseUrl || '', apiKey: model.apiKey || settings!.apiKey || '', modelName: model.modelName, provider: model.provider, messages },
+              (chunk: StreamChunk) => {
+                if (chunk.delta) {
+                  raw += chunk.delta
+                  fillTranslateStreaming(resultEl, raw)
+                }
+              },
+            )
+            const translated = parseSingleTranslation(raw)
             if (translated) {
               log.info('[点击翻译] 完成', { translated: translated.slice(0, 50) })
               const cached = translationCache.get(blockEl)
@@ -543,7 +590,6 @@ export function initClickTranslate(
                 fillResult(resultEl, cached.translated, cached.noteContent, onBookmark)
               }
             } else {
-              log.warn('[点击翻译] AI 返回空结果')
               translateFailed = true
             }
           } catch (err) {
@@ -560,7 +606,9 @@ export function initClickTranslate(
           try {
             log.info('[点击笔记] 触发', { tag: blockEl.tagName, text: text.slice(0, 50) })
             const modelId = await getCurrentModelId?.()
-            const noteContent = await optimizeAsNote(text, settings!, modelId)
+            const noteContent = await optimizeAsNoteStream(text, settings!, (delta, full) => {
+              fillNoteStreaming(resultEl, full)
+            }, modelId)
             if (noteContent) {
               log.info('[点击笔记] 完成', { noteContent: noteContent.slice(0, 50) })
               const cached = translationCache.get(blockEl)
@@ -569,7 +617,6 @@ export function initClickTranslate(
                 fillResult(resultEl, cached.translated, cached.noteContent, onBookmark)
               }
             } else {
-              log.warn('[点击笔记] AI 返回空结果')
               noteFailed = true
             }
           } catch (err) {
