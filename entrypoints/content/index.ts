@@ -40,48 +40,62 @@ export default defineContentScript({
         // 清除 hash（避免刷新重复触发）
         history.replaceState(null, '', location.pathname + location.search)
 
-        // 滚动到指定位置（查找正确的滚动容器 + 重试）
-        let scrollTarget: HTMLElement | null = null
+        // 滚动到指定位置（事件驱动）
         function doScroll() {
-          if (document.documentElement.scrollHeight > document.documentElement.clientHeight) {
+          const pageScrollable = document.documentElement.scrollHeight > document.documentElement.clientHeight
+          if (pageScrollable) {
             window.scrollTo(0, scrollY)
-          } else {
-            // 查找子容器
-            if (!scrollTarget) {
-              const allDivs = document.querySelectorAll('div')
-              let bestScore = 0
-              for (const div of allDivs) {
-                if (div.scrollHeight > div.clientHeight + 50) {
-                  const style = window.getComputedStyle(div)
-                  if (style.overflowY === 'auto' || style.overflowY === 'scroll') {
-                    const score = div.scrollHeight - div.clientHeight
-                    if (score > bestScore) {
-                      bestScore = score
-                      scrollTarget = div
-                    }
-                  }
+            return
+          }
+          // 查找子容器
+          const allDivs = document.querySelectorAll('div')
+          let best: HTMLElement | null = null
+          let bestScore = 0
+          for (const div of allDivs) {
+            if (div.scrollHeight > div.clientHeight + 50) {
+              const style = window.getComputedStyle(div)
+              if (style.overflowY === 'auto' || style.overflowY === 'scroll') {
+                const score = div.scrollHeight - div.clientHeight
+                if (score > bestScore) {
+                  bestScore = score
+                  best = div
                 }
               }
             }
-            if (scrollTarget) {
-              scrollTarget.scrollTop = scrollY
-            } else {
-              window.scrollTo(0, scrollY)
-            }
           }
+          if (best) best.scrollTop = scrollY
+          else window.scrollTo(0, scrollY)
         }
 
-        // 延迟滚动 + 重试（页面可能延迟加载内容）
-        let scrollRetries = 0
-        function tryScroll() {
-          doScroll()
-          scrollRetries++
-          const current = scrollTarget ? scrollTarget.scrollTop : window.scrollY
-          if (scrollRetries < 5 && Math.abs(current - scrollY) > 50) {
-            setTimeout(tryScroll, 500)
+        // 等页面可滚动后再执行
+        function waitAndScroll() {
+          // 已经有足够内容可以滚动了
+          const hasContent = document.documentElement.scrollHeight > window.innerHeight + 100
+          if (hasContent) {
+            doScroll()
+            return
           }
+          // 监听 DOM 变化，内容加载后自动滚动
+          const observer = new MutationObserver(() => {
+            const ready = document.documentElement.scrollHeight > window.innerHeight + 100
+            if (ready) {
+              observer.disconnect()
+              doScroll()
+            }
+          })
+          observer.observe(document.body, { childList: true, subtree: true })
+          // 兜底：5 秒后无论如何尝试一次
+          setTimeout(() => {
+            observer.disconnect()
+            doScroll()
+          }, 5000)
         }
-        setTimeout(tryScroll, 500)
+
+        if (document.readyState === 'complete') {
+          waitAndScroll()
+        } else {
+          window.addEventListener('load', () => waitAndScroll(), { once: true })
+        }
 
         // 高亮闪烁
         if (highlightText) {
