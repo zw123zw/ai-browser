@@ -460,8 +460,14 @@ export default defineContentScript({
     // --- 自动笔记：页面加载时 AI 提炼笔记 ---
     let autoNoteRunning = false
     let autoNoteAbort: AbortController | null = null
+    let lastNotedUrl = ''  // 记录已生成笔记的 URL，防止同一页面重复触发
     async function runAutoNote() {
       if (autoNoteRunning) return
+      // 同一 URL 已生成过笔记，跳过（URL 变化时会清除）
+      if (lastNotedUrl === location.href) {
+        log.debug('[自动笔记] 该页面已生成过笔记，跳过')
+        return
+      }
       autoNoteRunning = true
       autoNoteAbort = new AbortController()
       const settings = await getTranslateSettings()
@@ -516,6 +522,7 @@ export default defineContentScript({
 
         // 最终更新：附上来源 URL
         const noteWithUrl = result + `\n\n> 📎 来源: [${document.title}](${location.href})`
+        lastNotedUrl = location.href  // 标记该 URL 已生成笔记
         window.dispatchEvent(new CustomEvent('aib-auto-note-result', {
           detail: { id: msgId, content: noteWithUrl },
         }))
@@ -555,6 +562,7 @@ export default defineContentScript({
         autoNoteAbort = null
       }
       autoNoteRunning = false
+      lastNotedUrl = ''  // URL 变化，清除已笔记标记
 
       if (urlChangeTimer) clearTimeout(urlChangeTimer)
       urlChangeTimer = setTimeout(async () => {
