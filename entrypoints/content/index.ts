@@ -34,7 +34,6 @@ export default defineContentScript({
     // ═══════════════════════════════════════════════════════════════
     function handleNoteJump() {
       const hash = location.hash
-      log.info('[笔记跳转] 检测 hash', { hash })
       if (!hash || !hash.includes('aib-scroll')) return
 
       try {
@@ -43,37 +42,34 @@ export default defineContentScript({
         const highlightText = params.get('aib-highlight') || ''
         log.info('[笔记跳转] 解析参数', { scrollY, highlightText: highlightText.slice(0, 30) })
 
-        // 禁用浏览器自动滚动恢复（防止 replaceState 后浏览器自己滚回原位）
-        const prevScrollRestoration = history.scrollRestoration
+        // 用 sessionStorage 标记已处理，防止刷新重复触发（不用 replaceState，避免触发滚动重置）
+        const jumpKey = `aib-jump-${location.href}`
+        if (sessionStorage.getItem(jumpKey)) {
+          // 已处理过，清除 hash（此时页面已稳定，replaceState 不会再影响滚动）
+          history.replaceState(null, '', location.pathname + location.search)
+          return
+        }
+        sessionStorage.setItem(jumpKey, '1')
+
+        // 禁用浏览器自动滚动恢复
         history.scrollRestoration = 'manual'
 
-        // 清除 hash（避免刷新重复触发）
-        history.replaceState(null, '', location.pathname + location.search)
-
-        // 滚动到指定位置
-        // 策略：从高亮文本所在元素向上找滚动容器（与保存时一致）
-        function doScroll() {
-          // 优先：页面本身可滚动
+        // 查找滚动容器（从高亮文本位置向上找，与保存时一致）
+        function findContainer(): HTMLElement | null {
           if (document.documentElement.scrollHeight > document.documentElement.clientHeight) {
-            window.scrollTo(0, scrollY)
-            return
+            return null // null = 用 window.scrollTo
           }
-
-          // 从高亮文本找目标元素，再找其滚动容器
-          let container: HTMLElement | null = null
+          // 从高亮文本找
           if (highlightText) {
-            // 用 TreeWalker 找包含高亮文本的元素
             const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT)
             let node: Text | null
             while ((node = walker.nextNode() as Text | null)) {
               if (node.textContent?.includes(highlightText.slice(0, 30))) {
-                // 找到了，从这个元素向上找滚动容器
                 let el: HTMLElement | null = node.parentElement
                 while (el && el !== document.body) {
                   const style = window.getComputedStyle(el)
                   if ((style.overflowY === 'auto' || style.overflowY === 'scroll') && el.scrollHeight > el.clientHeight) {
-                    container = el
-                    break
+                    return el
                   }
                   el = el.parentElement
                 }
@@ -81,44 +77,74 @@ export default defineContentScript({
               }
             }
           }
-
           // 兜底：找最大容器
-          if (!container) {
-            const allDivs = document.querySelectorAll('div')
-            let bestScore = 0
-            for (const div of allDivs) {
-              if (div.scrollHeight > div.clientHeight + 50) {
-                const style = window.getComputedStyle(div)
-                if (style.overflowY === 'auto' || style.overflowY === 'scroll') {
-                  const score = div.scrollHeight - div.clientHeight
-                  if (score > bestScore) {
-                    bestScore = score
-                    container = div
-                  }
-                }
+          const allDivs = document.querySelectorAll('div')
+          let best: HTMLElement | null = null
+          let bestScore = 0
+          for (const div of allDivs) {
+            if (div.scrollHeight > div.clientHeight + 50) {
+              const style = window.getComputedStyle(div)
+              if (style.overflowY === 'auto' || style.overflowY === 'scroll') {
+                const score = div.scrollHeight - div.clientHeight
+                if (score > bestScore) { bestScore = score; best = div }
               }
             }
           }
-
-          if (container) {
-            container.scrollTop = scrollY
-            log.info('[笔记跳转] 容器滚动', { scrollTop: container.scrollTop, scrollH: container.scrollHeight, clientH: container.clientHeight, scrollY })
-          } else {
-            window.scrollTo(0, scrollY)
-          }
+          return best
         }
 
-        // 延迟尝试（等页面内容加载完成）
-        const delays = [300, 1000, 2000]
-        delays.forEach(delay => setTimeout(doScroll, delay))
-        // 最后一次滚动后恢复浏览器默认行为
-        setTimeout(() => {
-          history.scrollRestoration = prevScrollRestoration
-        }, 2500)
+        // 滚动 + 验证 + 重试（只在未到位时重试）
+        let scrollDone = false
+        let retries = 0
+        function doScroll() {
+          if (scrollDone || retries >= 5) return
+          retries++
+          const container = findContainer()
+          if (container) {
+            container.scrollTop = scrollY
+            scrollDone = Math.abs(container.scrollTop - scrollY) < 50
+          } else {
+            window.scrollTo(0, scrollY)
+            scrollDone = Math.abs(window.scrollY - scrollY) < 50
+          }
+          log.info('[笔记跳转] doScroll', { retry: retries, scrollDone, scrollY, actual: container ? container.scrollTop : window.scrollY })
+        }
 
-        // 高亮闪烁
+        // 延迟滚动（等页面加载），只在未到位时重试
+        function tryWithDelay(delay: number) {
+          setTimeout(() => {
+            if (!scrollDone) doScroll()
+          }, delay)
+        }
+        tryWithDelay(300)
+        tryWithDelay(1000)
+        tryWithDelay(2000)
+
+        // 高亮闪烁：等滚动到位后再执行
         if (highlightText) {
-          setTimeout(() => highlightTextOnPage(highlightText), 1500)
+          function tryHighlight() {
+            if (scrollDone) {
+              // 滚动到位了，清除 hash 并高亮
+              history.replaceState(null, '', location.pathname + location.search)
+              history.scrollRestoration = 'auto'
+              highlightTextOnPage(highlightText)
+            } else if (retries < 5) {
+              // 还没到位，等一下再试
+              setTimeout(tryHighlight, 500)
+            } else {
+              // 放弃，清除 hash
+              history.replaceState(null, '', location.pathname + location.search)
+              history.scrollRestoration = 'auto'
+              highlightTextOnPage(highlightText)
+            }
+          }
+          setTimeout(tryHighlight, 2500)
+        } else {
+          // 没有高亮文本，滚动后清除 hash
+          setTimeout(() => {
+            history.replaceState(null, '', location.pathname + location.search)
+            history.scrollRestoration = 'auto'
+          }, 2500)
         }
       } catch {}
     }

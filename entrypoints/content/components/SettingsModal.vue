@@ -402,8 +402,8 @@ const autoSendOptions = computed(() => [
 
 const translateModeOptions = computed(() => [
   { value: 'selection' as const, label: t('settings.general.translateModes.selection.label'), desc: t('settings.general.translateModes.selection.desc') },
-  { value: 'auto' as const, label: t('settings.general.translateModes.auto.label'), desc: t('settings.general.translateModes.auto.desc') },
   { value: 'click' as const, label: t('settings.general.translateModes.click.label'), desc: t('settings.general.translateModes.click.desc') },
+  { value: 'auto' as const, label: t('settings.general.translateModes.auto.label'), desc: t('settings.general.translateModes.auto.desc') },
   { value: 'off' as const, label: t('settings.general.translateModes.off.label'), desc: t('settings.general.translateModes.off.desc') },
 ]);
 
