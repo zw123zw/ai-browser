@@ -51,40 +51,60 @@ export default defineContentScript({
         history.replaceState(null, '', location.pathname + location.search)
 
         // 滚动到指定位置
+        // 策略：从高亮文本所在元素向上找滚动容器（与保存时一致）
         function doScroll() {
-          const pageScrollable = document.documentElement.scrollHeight > document.documentElement.clientHeight
-          const docScrollH = document.documentElement.scrollHeight
-          const docClientH = document.documentElement.clientHeight
-          const currentScroll = window.scrollY
-          log.info('[笔记跳转] doScroll', { scrollY, pageScrollable, docScrollH, docClientH, currentScroll })
-
-          if (pageScrollable) {
+          // 优先：页面本身可滚动
+          if (document.documentElement.scrollHeight > document.documentElement.clientHeight) {
             window.scrollTo(0, scrollY)
-            log.info('[笔记跳转] window.scrollTo 执行', { result: window.scrollY })
             return
           }
-          // 查找最大的子容器
-          const allDivs = document.querySelectorAll('div')
-          let best: HTMLElement | null = null
-          let bestScore = 0
-          for (const div of allDivs) {
-            if (div.scrollHeight > div.clientHeight + 50) {
-              const style = window.getComputedStyle(div)
-              if (style.overflowY === 'auto' || style.overflowY === 'scroll') {
-                const score = div.scrollHeight - div.clientHeight
-                if (score > bestScore) {
-                  bestScore = score
-                  best = div
+
+          // 从高亮文本找目标元素，再找其滚动容器
+          let container: HTMLElement | null = null
+          if (highlightText) {
+            // 用 TreeWalker 找包含高亮文本的元素
+            const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT)
+            let node: Text | null
+            while ((node = walker.nextNode() as Text | null)) {
+              if (node.textContent?.includes(highlightText.slice(0, 30))) {
+                // 找到了，从这个元素向上找滚动容器
+                let el: HTMLElement | null = node.parentElement
+                while (el && el !== document.body) {
+                  const style = window.getComputedStyle(el)
+                  if ((style.overflowY === 'auto' || style.overflowY === 'scroll') && el.scrollHeight > el.clientHeight) {
+                    container = el
+                    break
+                  }
+                  el = el.parentElement
+                }
+                break
+              }
+            }
+          }
+
+          // 兜底：找最大容器
+          if (!container) {
+            const allDivs = document.querySelectorAll('div')
+            let bestScore = 0
+            for (const div of allDivs) {
+              if (div.scrollHeight > div.clientHeight + 50) {
+                const style = window.getComputedStyle(div)
+                if (style.overflowY === 'auto' || style.overflowY === 'scroll') {
+                  const score = div.scrollHeight - div.clientHeight
+                  if (score > bestScore) {
+                    bestScore = score
+                    container = div
+                  }
                 }
               }
             }
           }
-          if (best) {
-            log.info('[笔记跳转] 子容器滚动', { scrollH: best.scrollHeight, clientH: best.clientHeight, scrollY })
-            best.scrollTop = scrollY
+
+          if (container) {
+            container.scrollTop = scrollY
+            log.info('[笔记跳转] 容器滚动', { scrollTop: container.scrollTop, scrollH: container.scrollHeight, clientH: container.clientHeight, scrollY })
           } else {
             window.scrollTo(0, scrollY)
-            log.info('[笔记跳转] 兜底 window.scrollTo', { result: window.scrollY })
           }
         }
 
