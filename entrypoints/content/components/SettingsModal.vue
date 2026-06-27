@@ -1213,7 +1213,7 @@ function importModels(e: Event) {
               <input
                 type="range"
                 min="0.5"
-                max="2"
+                max="2.0"
                 step="0.1"
                 :value="voiceStore.settings.ttsRate"
                 @input="voiceStore.updateSetting('ttsRate', parseFloat(($event.target as HTMLInputElement).value))"

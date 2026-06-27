@@ -40,6 +40,8 @@ export interface VoiceManagerConfig {
   onUserMessage?: (text: string) => void
   onAssistantMessage?: (text: string) => void
   onError?: (error: string) => void
+  /** 打断当前处理（abort pipeline） */
+  onAbortProcess?: () => void
 }
 
 export class VoiceManager {
@@ -75,6 +77,7 @@ export class VoiceManager {
       onUserMessage: config.onUserMessage ?? (() => {}),
       onAssistantMessage: config.onAssistantMessage ?? (() => {}),
       onError: config.onError ?? (() => {}),
+      onAbortProcess: config.onAbortProcess ?? (() => {}),
     }
 
     this.broadcast = new VoiceBroadcast({
@@ -199,11 +202,20 @@ export class VoiceManager {
           return  // 不更新 interimText，onWakeWordDetected 已清空
         }
       }
-      // 唤醒词没匹配到才更新 interimText
+      // wake 状态下，匹配唤醒词的 interim 不更新显示（避免残留）
+      // command 状态下，始终更新（显示用户正在说的话）
+      if (this._state === 'wake' && this.wakeWordDetector) {
+        const { matched } = this.wakeWordDetector.matchWakeWord(text, true)
+        if (matched) return
+      }
       this.config.onInterimText?.(text)
-      // command 状态下，interim 重置计时器（长语句没说完不退出）
+      // command 状态下，interim 重置 idle 计时器和 buffer 计时器
       if (this._state === 'command') {
         this.resetIdleTimer()
+        // 用户还在说话，不要提前 flush buffer
+        if (this.speechBuffer.length > 0) {
+          this.resetBufferTimer()
+        }
       }
       return
     }
@@ -211,11 +223,11 @@ export class VoiceManager {
     // === final 结果 ===
     this.config.onInterimText?.('')
 
-    // processing → 缓冲命令（处理完后自动执行）
+    // processing → 缓冲命令，处理完后自动执行（不打断多步骤操作）
     if (this._state === 'processing') {
       if (this.wakeWordDetector) {
-        const { matched } = this.wakeWordDetector.matchWakeWord(text, false)
-        if (matched) {
+        const { matched, command } = this.wakeWordDetector.matchWakeWord(text, false)
+        if (matched && !command) {
           log.info('处理中忽略唤醒词', { text })
           return
         }
@@ -287,9 +299,9 @@ export class VoiceManager {
         }
         return
       }
-      // 先检查是否是唤醒词残留（冷却期间不匹配，但文本本身是唤醒词）
+      // 先检查是否是唤醒词残留（用更宽松的 interim 阈值）
       if (this.wakeWordDetector) {
-        const { matched: isWake } = this.wakeWordDetector.matchWakeWord(text, false)
+        const { matched: isWake } = this.wakeWordDetector.matchWakeWord(text, true)
         if (isWake) {
           log.info('忽略唤醒词残留', { text })
           this.resetIdleTimer()
@@ -388,12 +400,19 @@ export class VoiceManager {
       log.error('命令处理失败:', error)
       this.config.onError?.(`处理失败: ${error}`)
     } finally {
-      // 只恢复状态，不启动计时器
-      // 计时器由 speak() 在 TTS 结束后启动
-      // 如果 speak() 没被调用（TTS 被禁用），speak("") 也会启动计时器
       if (this._isActive && this._state === 'processing') {
         log.info('processCommand 结束，恢复 command 状态')
+        this.lastWakeTime = Date.now()
+        // 先保存缓冲的命令（setState('command') 会清空缓冲）
+        const buffered = [...this.speechBuffer]
         this.setState('command')
+        this.startIdleTimer()
+        // 处理完后，立即执行缓冲的命令
+        if (buffered.length > 0) {
+          const combined = buffered.join('')
+          log.info('处理完成，执行缓冲命令', { command: combined })
+          this.processCommand(combined)
+        }
       }
     }
   }
@@ -423,9 +442,14 @@ export class VoiceManager {
     log.debug(`状态转换: ${this._state} → ${state}`)
     this._state = state
     this.config.onStateChange?.(state)
-    // 切换到 wake 时清空 interim 文本
+    // 进入 wake 时清空 interim 文本
     if (state === 'wake') {
       this.config.onInterimText?.('')
+    }
+    // 进入 command 时清空缓冲（防止唤醒词残留拼接）
+    if (state === 'command') {
+      this.speechBuffer = []
+      if (this.bufferTimer) { clearTimeout(this.bufferTimer); this.bufferTimer = null }
     }
   }
 }

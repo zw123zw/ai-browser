@@ -49,30 +49,32 @@ function stripMarkdown(text: string): string {
 // TTS：已播报的 msgId 集合
 const spokenMsgIds = new Set<string>()
 
-/** 优化 TTS 文本 */
-function optimizeForSpeech(content: string): string {
-  // 命令执行结果 → 简短播报
-  if (content.startsWith('已执行：')) return '好的'
+/** 优化 TTS 文本：决定播报什么 */
+function getSpeakText(msg: { role: string; content: string }): string | null {
+  if (msg.role !== 'assistant') return null
+  const c = msg.content
+
+  // 命令执行成功 → "好的"
+  if (c.startsWith('已执行：')) return '好的'
+
+  // 下载/导出文件 → "文件已下载"
+  if (c.includes('[FILE:') || c.includes('[FILE：')) return '文件已下载'
+
+  // 占位消息 → 跳过
+  if (c === '正在执行操作...') return null
+
   // 错误 → 播报
-  if (content.startsWith('❌')) return stripMarkdown(content)
-  // 执行中 → 简短播报
-  if (content.startsWith('🔧')) {
-    const text = stripMarkdown(content)
-    // "🔧 正在执行第 2 条指令：..." → "执行第2条指令"
-    return text.replace(/正在执行/, '执行').slice(0, 30)
-  }
-  // 重试 → 播报
-  if (content.startsWith('🔄')) return stripMarkdown(content)
+  if (c.startsWith('❌')) return stripMarkdown(c)
+
   // 需要输入 → 播报
-  if (content.startsWith('💬')) return stripMarkdown(content)
-  // 用户输入记录 → 跳过
-  if (content.startsWith('📝')) return ''
-  // 停止 → 跳过
-  if (content.startsWith('⏹')) return ''
-  // 成功 → 简短播报
-  if (content.startsWith('✅')) return '操作成功'
-  // 聊天回复 → 播报原文
-  return stripMarkdown(content)
+  if (c.startsWith('💬')) return stripMarkdown(c)
+
+  // 跳过：执行中、重试、用户输入、停止、成功标记
+  if (c.startsWith('🔧') || c.startsWith('🔄') || c.startsWith('📝') ||
+      c.startsWith('⏹') || c.startsWith('✅')) return null
+
+  // 聊天回复（含 summarize 分析结果）→ 播报原文
+  return stripMarkdown(c)
 }
 
 // TTS：watch assistant 消息
@@ -95,8 +97,9 @@ watch(
         const arr = [...spokenMsgIds]
         arr.slice(0, 50).forEach(id => spokenMsgIds.delete(id))
       }
-      const speakText = optimizeForSpeech(lastMsg.content)
-      manager.speak(speakText)
+      // 根据消息类型决定是否播报
+      const speakText = getSpeakText(lastMsg)
+      if (speakText) manager.speak(speakText)
     }
   },
 )
@@ -108,6 +111,25 @@ watch(
     nextTick(() => {
       messageListRef.value?.jumpToBottom()
     })
+  },
+)
+
+// need_input：pipeline 等待用户输入时，语音自动提供输入
+watch(
+  () => pipeline.waitingInputPrompt.value,
+  (prompt) => {
+    if (!prompt || !manager?.isActive) return
+    log.info('pipeline 等待语音输入', { prompt })
+    // 播报提示
+    manager.speak(prompt)
+    // 临时切换 onProcessText：下一条语音命令作为输入提供给 pipeline
+    const originalHandler = manager.onProcessText
+    manager.onProcessText = async (text: string) => {
+      log.info('语音提供输入', { text })
+      pipeline.provideInput(text)
+      // 恢复原始 handler
+      manager!.onProcessText = originalHandler
+    }
   },
 )
 
@@ -183,9 +205,23 @@ function initManager() {
     },
     onUserMessage: (text) => {
       voiceStore.updateText(text, true)
+      // 用户说的话显示为消息
+      if (convStore.conversation) {
+        convStore.conversation.messages.push({
+          id: Date.now().toString(),
+          role: 'user',
+          content: text,
+          timestamp: Date.now(),
+          status: 'done',
+        })
+      }
     },
     onError: (error) => {
       log.error('语音错误', error)
+    },
+    onAbortProcess: () => {
+      log.info('打断当前处理')
+      pipeline.abort()
     },
   })
 

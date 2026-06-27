@@ -53,9 +53,9 @@ const DEFAULT_SETTINGS: VoiceSettings = {
   recognitionLang: 'zh-CN',
   wakeWord: '你好，小灵',
   enableTts: true,
-  ttsRate: 1.8,
+  ttsRate: 2.0,
   ttsVolume: 0.8,
-  bufferTimeout: 2000,
+  bufferTimeout: 1000,
   idleTimeout: 3000,
 }
 
