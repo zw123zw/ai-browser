@@ -69,7 +69,6 @@
       "langZhCN": "Chinese",
       "langEnUS": "English",
       "wakeWord": "Wake Word",
-      "enableWakeWord": "Enable Wake Word",
       "wakeWordLabel": "Wake Word",
       "wakeWordPlaceholder": "Hello, Ling",
       "enableWakeSound": "Wake Sound",
@@ -78,7 +77,10 @@
       "ttsRate": "Speed",
       "ttsVolume": "Volume",
       "behavior": "Behavior",
-      "autoStart": "Auto-start Listening"
+      "bufferTimeout": "Buffer Timeout",
+      "bufferTimeoutHint": "How long to wait before sending",
+      "idleTimeout": "Idle Timeout",
+      "idleTimeoutHint": "Time before returning to wake word listening"
     },
     "ai": {
       "title": "Model Configuration",

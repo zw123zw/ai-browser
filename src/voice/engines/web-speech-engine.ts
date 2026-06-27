@@ -69,6 +69,7 @@ export class WebSpeechEngine implements VoiceEngine {
   private _isActive = false
   private config: Required<VoiceEngineConfig>
   private restartTimer: ReturnType<typeof setTimeout> | null = null
+  private _paused = false
 
   onResult: ((text: string, isFinal: boolean, confidence: number) => void) | null = null
   onError: ((error: string) => void) | null = null
@@ -154,6 +155,9 @@ export class WebSpeechEngine implements VoiceEngine {
     }
 
     this.recognition.onend = () => {
+      // pause 状态下不重启，避免 aborted 风暴
+      if (this._paused) return
+
       if (this._isActive && this.config.continuous) {
         this.scheduleRestart(300)
         return
@@ -179,6 +183,7 @@ export class WebSpeechEngine implements VoiceEngine {
   stop(): void {
     log.info('停止语音识别')
     this._isActive = false
+    this._paused = false
     this.clearRestartTimer()
 
     if (this.recognition) {
@@ -195,6 +200,8 @@ export class WebSpeechEngine implements VoiceEngine {
 
   pause(): void {
     if (this.recognition && this._isActive) {
+      this._paused = true
+      this.clearRestartTimer()
       try {
         this.recognition.stop()
       } catch {
@@ -206,6 +213,7 @@ export class WebSpeechEngine implements VoiceEngine {
 
   resume(): void {
     if (this._isActive) {
+      this._paused = false
       this.scheduleRestart(100)
     }
   }

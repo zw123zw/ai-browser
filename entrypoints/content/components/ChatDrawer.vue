@@ -32,8 +32,20 @@ function openNoteViewer() {
   window.dispatchEvent(new Event('aib-toggle-note-viewer'));
 }
 
-/** 当前模式：chat 或 voice */
+/** 当前模式：chat 或 voice（持久化到 storage，新页面自动恢复） */
 const activeMode = ref<'chat' | 'voice'>('chat');
+
+// 从 storage 恢复模式
+chrome.storage.local.get('aib-voice-mode').then((result) => {
+  if (result['aib-voice-mode'] === 'voice') {
+    activeMode.value = 'voice';
+  }
+});
+
+// 模式变化时保存
+watch(activeMode, (mode) => {
+  chrome.storage.local.set({ 'aib-voice-mode': mode });
+});
 
 /* ---- 左侧拖拽调整宽度 ---- */
 const savedWidth = settingsStore.settings.drawerWidth;

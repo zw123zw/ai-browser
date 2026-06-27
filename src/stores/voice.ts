@@ -6,7 +6,7 @@
  */
 
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import { Logger } from '@/src/utils/logger'
 
 const log = new Logger('Store:Voice')
@@ -34,9 +34,7 @@ export interface VoiceSettings {
   recognitionLang: string
 
   // 🔔 唤醒词
-  enableWakeWord: boolean
   wakeWord: string
-  enableWakeSound: boolean
 
   // 🔊 TTS
   enableTts: boolean
@@ -44,7 +42,8 @@ export interface VoiceSettings {
   ttsVolume: number
 
   // ⚡ 行为
-  autoStart: boolean
+  bufferTimeout: number   // 语音缓冲时间（ms）
+  idleTimeout: number     // 语音自动退出时间（ms）
 }
 
 const DEFAULT_SETTINGS: VoiceSettings = {
@@ -52,13 +51,12 @@ const DEFAULT_SETTINGS: VoiceSettings = {
   iflytekApiKey: '',
   iflytekAppId: '',
   recognitionLang: 'zh-CN',
-  enableWakeWord: true,
   wakeWord: '你好，小灵',
-  enableWakeSound: true,
   enableTts: true,
-  ttsRate: 1.0,
+  ttsRate: 1.8,
   ttsVolume: 0.8,
-  autoStart: false,
+  bufferTimeout: 2000,
+  idleTimeout: 3000,
 }
 
 export const useVoiceStore = defineStore('voice', () => {
@@ -101,6 +99,11 @@ export const useVoiceStore = defineStore('voice', () => {
   function resetSettings() {
     Object.assign(settings.value, DEFAULT_SETTINGS)
   }
+
+  // 设置变更时自动保存到 storage
+  watch(settings, (val) => {
+    chrome.storage.local.set({ 'voice-settings': val })
+  }, { deep: true })
 
   // ========== 状态更新 ==========
   function setStatus(newStatus: VoiceStatus) {

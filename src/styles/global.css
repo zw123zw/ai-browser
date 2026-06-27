@@ -218,7 +218,7 @@ table {
   top: 0;
   right: 0;
   height: 100vh;
-  width: 480px;
+  width: 380px;
   min-width: 60px;
   max-width: 100vw;
   background: var(--aib-bg);
@@ -2976,8 +2976,8 @@ table {
     margin-bottom: 14px;
   }
   .aib-suggestions {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
+    display: flex;
+    flex-direction: column;
     gap: 8px;
     max-width: 100%;
   }

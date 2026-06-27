@@ -69,7 +69,6 @@
       "langZhCN": "中文",
       "langEnUS": "英文",
       "wakeWord": "唤醒词",
-      "enableWakeWord": "启用唤醒词",
       "wakeWordLabel": "唤醒词",
       "wakeWordPlaceholder": "你好，小灵",
       "enableWakeSound": "唤醒提示音",
@@ -78,7 +77,10 @@
       "ttsRate": "播报语速",
       "ttsVolume": "播报音量",
       "behavior": "行为",
-      "autoStart": "自动启动监听"
+      "bufferTimeout": "语音缓冲时间",
+      "bufferTimeoutHint": "连续说话多久算一条命令",
+      "idleTimeout": "自动退出时间",
+      "idleTimeoutHint": "多久不说话回到等待唤醒词"
     },
     "ai": {
       "title": "模型配置",

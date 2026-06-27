@@ -1186,22 +1186,6 @@ function importModels(e: Event) {
 
             <!-- 🔔 唤醒词 -->
             <div class="aib-form-row" style="margin-top:16px">
-              <label>{{ t('settings.voice.wakeWord') }}</label>
-            </div>
-
-            <div class="aib-form-row">
-              <label>{{ t('settings.voice.enableWakeWord') }}</label>
-              <label class="aib-switch">
-                <input
-                  type="checkbox"
-                  :checked="voiceStore.settings.enableWakeWord"
-                  @change="voiceStore.updateSetting('enableWakeWord', ($event.target as HTMLInputElement).checked)"
-                />
-                <span class="aib-switch-slider" />
-              </label>
-            </div>
-
-            <div v-if="voiceStore.settings.enableWakeWord" class="aib-form-row">
               <label>{{ t('settings.voice.wakeWordLabel') }}</label>
               <input
                 :value="voiceStore.settings.wakeWord"
@@ -1211,24 +1195,8 @@ function importModels(e: Event) {
               />
             </div>
 
-            <div v-if="voiceStore.settings.enableWakeWord" class="aib-form-row">
-              <label>{{ t('settings.voice.enableWakeSound') }}</label>
-              <label class="aib-switch">
-                <input
-                  type="checkbox"
-                  :checked="voiceStore.settings.enableWakeSound"
-                  @change="voiceStore.updateSetting('enableWakeSound', ($event.target as HTMLInputElement).checked)"
-                />
-                <span class="aib-switch-slider" />
-              </label>
-            </div>
-
             <!-- 🔊 语音播报 -->
             <div class="aib-form-row" style="margin-top:16px">
-              <label>{{ t('settings.voice.tts') }}</label>
-            </div>
-
-            <div class="aib-form-row">
               <label>{{ t('settings.voice.enableTts') }}</label>
               <label class="aib-switch">
                 <input
@@ -1272,15 +1240,31 @@ function importModels(e: Event) {
             </div>
 
             <div class="aib-form-row">
-              <label>{{ t('settings.voice.autoStart') }}</label>
-              <label class="aib-switch">
-                <input
-                  type="checkbox"
-                  :checked="voiceStore.settings.autoStart"
-                  @change="voiceStore.updateSetting('autoStart', ($event.target as HTMLInputElement).checked)"
-                />
-                <span class="aib-switch-slider" />
-              </label>
+              <label>{{ t('settings.voice.bufferTimeout') }}: {{ (voiceStore.settings.bufferTimeout / 1000).toFixed(1) }}s</label>
+              <span class="aib-form-hint">{{ t('settings.voice.bufferTimeoutHint') }}</span>
+              <input
+                type="range"
+                min="500"
+                max="5000"
+                step="500"
+                :value="voiceStore.settings.bufferTimeout"
+                @input="voiceStore.updateSetting('bufferTimeout', parseInt(($event.target as HTMLInputElement).value))"
+                class="aib-range"
+              />
+            </div>
+
+            <div class="aib-form-row">
+              <label>{{ t('settings.voice.idleTimeout') }}: {{ (voiceStore.settings.idleTimeout / 1000).toFixed(0) }}s</label>
+              <span class="aib-form-hint">{{ t('settings.voice.idleTimeoutHint') }}</span>
+              <input
+                type="range"
+                min="2000"
+                max="15000"
+                step="1000"
+                :value="voiceStore.settings.idleTimeout"
+                @input="voiceStore.updateSetting('idleTimeout', parseInt(($event.target as HTMLInputElement).value))"
+                class="aib-range"
+              />
             </div>
 
             <div class="aib-tab-footer">
@@ -2154,5 +2138,11 @@ label.aib-switch input:checked + .aib-switch-slider::before {
   border-radius: 50%;
   background: var(--aib-primary);
   cursor: pointer;
+}
+
+.aib-form-hint {
+  font-size: 11px;
+  color: var(--aib-text-faint);
+  margin-top: 2px;
 }
 </style>

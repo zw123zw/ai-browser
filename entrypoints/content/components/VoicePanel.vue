@@ -9,6 +9,7 @@ import { VoiceManager } from '@/src/voice/voice-manager'
 import { Logger } from '@/src/utils/logger'
 import type { SessionState } from '@/src/stores/voice'
 import type { VoiceManagerState } from '@/src/voice/voice-manager'
+import MessageList from './MessageList.vue'
 
 const { t } = useI18n()
 const emit = defineEmits<{ (e: 'switch-chat'): void }>()
@@ -17,20 +18,140 @@ const voiceStore = useVoiceStore()
 const convStore = useConversationsStore()
 const settingsStore = useSettingsStore()
 const pipeline = usePipeline()
+const messageListRef = ref<InstanceType<typeof MessageList> | null>(null)
 
-const messagesRef = ref<HTMLElement | null>(null)
 let manager: VoiceManager | null = null
 
-/** 自动滚动到底部 */
-function scrollToBottom() {
-  nextTick(() => {
-    if (messagesRef.value) {
-      messagesRef.value.scrollTop = messagesRef.value.scrollHeight
-    }
-  })
+/** 启动语音监听 */
+function startListening() {
+  if (!convStore.conversation) return
+  manager?.start()
 }
 
-/** 初始化语音管理器 */
+/** 停止语音监听 */
+function stopListening() {
+  manager?.stop()
+}
+
+/** 清理 markdown 格式 */
+function stripMarkdown(text: string): string {
+  return text
+    .replace(/\*\*(.+?)\*\*/g, '$1')
+    .replace(/\*(.+?)\*/g, '$1')
+    .replace(/`(.+?)`/g, '$1')
+    .replace(/```[\s\S]*?```/g, '')
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    .replace(/[#*_~>|]/g, '')
+    .replace(/\n{2,}/g, '。')
+    .trim()
+}
+
+// TTS：已播报的 msgId 集合
+const spokenMsgIds = new Set<string>()
+
+/** 优化 TTS 文本 */
+function optimizeForSpeech(content: string): string {
+  // 命令执行结果 → 简短播报
+  if (content.startsWith('已执行：')) return '好的'
+  // 错误 → 播报
+  if (content.startsWith('❌')) return stripMarkdown(content)
+  // 执行中 → 简短播报
+  if (content.startsWith('🔧')) {
+    const text = stripMarkdown(content)
+    // "🔧 正在执行第 2 条指令：..." → "执行第2条指令"
+    return text.replace(/正在执行/, '执行').slice(0, 30)
+  }
+  // 重试 → 播报
+  if (content.startsWith('🔄')) return stripMarkdown(content)
+  // 需要输入 → 播报
+  if (content.startsWith('💬')) return stripMarkdown(content)
+  // 用户输入记录 → 跳过
+  if (content.startsWith('📝')) return ''
+  // 停止 → 跳过
+  if (content.startsWith('⏹')) return ''
+  // 成功 → 简短播报
+  if (content.startsWith('✅')) return '操作成功'
+  // 聊天回复 → 播报原文
+  return stripMarkdown(content)
+}
+
+// TTS：watch assistant 消息
+watch(
+  () => {
+    const msgs = convStore.conversation?.messages
+    if (!msgs?.length) return ''
+    const last = msgs[msgs.length - 1]
+    return `${last.role}:${last.status}:${last.content}`
+  },
+  (val) => {
+    if (!manager?.isActive || !val) return
+    const msgs = convStore.conversation?.messages
+    if (!msgs?.length) return
+    const lastMsg = msgs[msgs.length - 1]
+    if (lastMsg.role === 'assistant' && lastMsg.status === 'done') {
+      if (spokenMsgIds.has(lastMsg.id)) return
+      spokenMsgIds.add(lastMsg.id)
+      if (spokenMsgIds.size > 100) {
+        const arr = [...spokenMsgIds]
+        arr.slice(0, 50).forEach(id => spokenMsgIds.delete(id))
+      }
+      const speakText = optimizeForSpeech(lastMsg.content)
+      manager.speak(speakText)
+    }
+  },
+)
+
+// 新消息自动滚动到底部
+watch(
+  () => convStore.conversation?.messages.length,
+  () => {
+    nextTick(() => {
+      messageListRef.value?.jumpToBottom()
+    })
+  },
+)
+
+// 设置变更 → 实时更新管理器
+watch(
+  () => [voiceStore.settings.wakeWord, voiceStore.settings.enableTts, voiceStore.settings.ttsRate, voiceStore.settings.ttsVolume, voiceStore.settings.bufferTimeout, voiceStore.settings.idleTimeout],
+  () => {
+    if (manager) {
+      manager.updateConfig({
+        wakeWord: voiceStore.settings.wakeWord,
+        enableTts: voiceStore.settings.enableTts,
+        ttsRate: voiceStore.settings.ttsRate,
+        ttsVolume: voiceStore.settings.ttsVolume,
+        bufferTimeout: voiceStore.settings.bufferTimeout,
+        idleTimeout: voiceStore.settings.idleTimeout,
+      })
+    }
+  },
+  { deep: true },
+)
+
+// 获取状态文字
+function getStatusText(state: SessionState): string {
+  switch (state) {
+    case 'wake': return '等待唤醒词...'
+    case 'command': return '请说出命令'
+    case 'processing': return t('voice.processing')
+    case 'speaking': return '播报中...'
+    default: return t('voice.listening')
+  }
+}
+
+// 标签页可见性 → 只有当前活跃标签页保持监听
+function handleVisibilityChange() {
+  if (document.hidden) {
+    log.info('标签页隐藏，暂停监听')
+    stopListening()
+  } else {
+    log.info('标签页可见，恢复监听')
+    startListening()
+  }
+}
+
+// 初始化语音管理器
 function initManager() {
   const s = voiceStore.settings
 
@@ -42,11 +163,11 @@ function initManager() {
     } : undefined,
     lang: s.recognitionLang,
     wakeWord: s.wakeWord,
-    enableWakeWord: s.enableWakeWord,
     enableTts: s.enableTts,
     ttsRate: s.ttsRate,
     ttsVolume: s.ttsVolume,
-    autoStart: false, // VoicePanel 自己控制启动
+    bufferTimeout: s.bufferTimeout,
+    idleTimeout: s.idleTimeout,
     onStateChange: (state: VoiceManagerState) => {
       const stateMap: Record<VoiceManagerState, SessionState> = {
         idle: 'idle',
@@ -68,7 +189,6 @@ function initManager() {
     },
   })
 
-  // 接入统一管线
   manager.onProcessText = async (text: string) => {
     try {
       await pipeline.processInput(text)
@@ -78,101 +198,17 @@ function initManager() {
   }
 }
 
-/** 启动监听 */
-function startListening() {
-  if (!convStore.conversation) {
-    log.warn('无活跃会话')
-    return
-  }
-  manager?.start()
-}
-
-/** 停止监听 */
-function stopListening() {
-  manager?.stop()
-}
-
-/** 清理 markdown 格式，提取纯文本用于 TTS */
-function stripMarkdown(text: string): string {
-  return text
-    .replace(/\*\*(.+?)\*\*/g, '$1')
-    .replace(/\*(.+?)\*/g, '$1')
-    .replace(/`(.+?)`/g, '$1')
-    .replace(/```[\s\S]*?```/g, '')
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
-    .replace(/[#*_~>|]/g, '')
-    .replace(/\n{2,}/g, '。')
-    .trim()
-}
-
-// TTS：watch 新 assistant 消息
-watch(
-  () => convStore.conversation?.messages.length,
-  (newLen, oldLen) => {
-    if (!manager?.isActive || !newLen || newLen <= (oldLen || 0)) return
-    const lastMsg = convStore.conversation!.messages[newLen - 1]
-    if (lastMsg.role === 'assistant' && lastMsg.status === 'done') {
-      const speakText = stripMarkdown(lastMsg.content)
-      if (speakText) {
-        manager.speak(speakText)
-      }
-    }
-  },
-)
-
-// 设置变更 → 实时更新管理器
-watch(
-  () => [voiceStore.settings.wakeWord, voiceStore.settings.enableWakeWord, voiceStore.settings.enableTts, voiceStore.settings.ttsRate, voiceStore.settings.ttsVolume],
-  () => {
-    if (manager) {
-      manager.updateConfig({
-        wakeWord: voiceStore.settings.wakeWord,
-        enableWakeWord: voiceStore.settings.enableWakeWord,
-        enableTts: voiceStore.settings.enableTts,
-        ttsRate: voiceStore.settings.ttsRate,
-        ttsVolume: voiceStore.settings.ttsVolume,
-      })
-    }
-  },
-  { deep: true },
-)
-
-// 自动滚动
-watch(
-  () => convStore.conversation?.messages.length,
-  () => scrollToBottom(),
-)
-
-// 消息列表
-const messages = () => convStore.conversation?.messages ?? []
-
-// 获取状态文字
-function getStatusText(state: SessionState): string {
-  switch (state) {
-    case 'wake':
-      return '等待唤醒词...'
-    case 'command':
-      return '请说出命令'
-    case 'processing':
-      return t('voice.processing')
-    case 'speaking':
-      return '播报中...'
-    default:
-      return t('voice.listening')
-  }
-}
-
-// 打开面板 → 初始化并启动
 onMounted(async () => {
   log.info('VoicePanel 已挂载')
   await voiceStore.initSettings()
   initManager()
   startListening()
+  document.addEventListener('visibilitychange', handleVisibilityChange)
 })
 
-// 关闭面板 → 停止
 onUnmounted(() => {
   log.info('VoicePanel 已卸载')
+  document.removeEventListener('visibilitychange', handleVisibilityChange)
   stopListening()
   manager?.destroy()
   manager = null
@@ -190,10 +226,9 @@ onUnmounted(() => {
       </span>
     </div>
 
-    <!-- 消息记录区 -->
-    <div ref="messagesRef" class="aib-voice-messages">
-      <!-- 空状态 -->
-      <div v-if="messages().length === 0" class="aib-voice-empty">
+    <!-- 消息列表（复用主面板组件） -->
+    <div class="aib-voice-messages aib-centered-body">
+      <div v-if="!convStore.conversation || convStore.conversation.messages.length === 0" class="aib-voice-empty">
         <div class="aib-empty-icon">🎤</div>
         <p>{{ t('voice.title') }}</p>
         <p class="aib-empty-hint">
@@ -202,28 +237,11 @@ onUnmounted(() => {
             : '直接说出命令' }}
         </p>
       </div>
-
-      <!-- 消息列表 -->
-      <div
-        v-for="msg in messages()"
-        :key="msg.id"
-        :class="['aib-voice-msg', `aib-${msg.role}`]"
-      >
-        <div class="aib-msg-role">
-          {{ msg.role === 'user' ? '🗣️ 你' : msg.role === 'assistant' ? '🤖 AI' : 'ℹ️ 系统' }}
-        </div>
-        <div class="aib-msg-content">{{ msg.content }}</div>
-      </div>
-
-      <!-- 处理中指示器 -->
-      <div v-if="pipeline.isProcessing.value" class="aib-voice-msg aib-assistant">
-        <div class="aib-msg-role">🤖 AI</div>
-        <div class="aib-msg-content aib-typing">
-          <span class="aib-dot" />
-          <span class="aib-dot" />
-          <span class="aib-dot" />
-        </div>
-      </div>
+      <MessageList
+        v-else
+        ref="messageListRef"
+        :conversation="convStore.conversation"
+      />
     </div>
 
     <!-- 底部状态指示 -->
@@ -322,10 +340,8 @@ onUnmounted(() => {
 .aib-voice-messages {
   flex: 1;
   overflow-y: auto;
-  padding: 20px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
 }
 
 .aib-voice-empty {
@@ -347,72 +363,6 @@ onUnmounted(() => {
   font-size: 12px;
   margin-top: 8px;
   color: var(--aib-text-faint);
-}
-
-.aib-voice-msg {
-  max-width: 88%;
-  padding: 12px 16px;
-  border-radius: 14px;
-  font-size: 14px;
-  line-height: 1.6;
-  word-break: break-word;
-}
-
-.aib-msg-role {
-  font-size: 11px;
-  color: var(--aib-text-faint);
-  margin-bottom: 4px;
-}
-
-.aib-user {
-  align-self: flex-end;
-  background: var(--aib-primary-soft);
-  color: var(--aib-text);
-  border: 1px solid var(--aib-border-strong);
-  border-bottom-right-radius: 6px;
-}
-
-.aib-user .aib-msg-role {
-  color: var(--aib-primary);
-  text-align: right;
-}
-
-.aib-assistant {
-  align-self: flex-start;
-  background: var(--aib-bg-card);
-  color: var(--aib-text);
-  border: 1px solid var(--aib-border);
-  border-bottom-left-radius: 6px;
-}
-
-.aib-system {
-  align-self: center;
-  background: transparent;
-  color: var(--aib-text-faint);
-  font-size: 12px;
-  padding: 4px 8px;
-}
-
-.aib-typing {
-  display: flex;
-  gap: 4px;
-  padding: 8px 12px;
-}
-
-.aib-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--aib-text-faint);
-  animation: typing 1.4s infinite;
-}
-
-.aib-dot:nth-child(2) { animation-delay: 0.2s; }
-.aib-dot:nth-child(3) { animation-delay: 0.4s; }
-
-@keyframes typing {
-  0%, 60%, 100% { opacity: 0.3; transform: translateY(0); }
-  30% { opacity: 1; transform: translateY(-4px); }
 }
 
 /* ========== 底部指示器 ========== */
@@ -490,9 +440,6 @@ onUnmounted(() => {
 /* ========== 响应式 ========== */
 @media (max-width: 640px) {
   .aib-voice-status { padding: 8px 14px; min-height: 38px; }
-  .aib-voice-messages { padding: 14px; gap: 12px; }
-  .aib-empty-icon { font-size: 36px; margin-bottom: 10px; }
-  .aib-voice-msg { max-width: 94%; padding: 10px 12px; font-size: 13px; border-radius: 12px; }
   .aib-voice-controls { padding: 16px 14px; }
   .aib-mic-wrapper { width: 72px; height: 72px; }
   .aib-mic-indicator { width: 58px; height: 58px; }
@@ -501,10 +448,6 @@ onUnmounted(() => {
 
 @media (max-height: 680px) {
   .aib-voice-status { padding: 6px 14px; min-height: 34px; }
-  .aib-voice-messages { padding: 10px 14px; gap: 10px; }
-  .aib-empty-icon { font-size: 32px; margin-bottom: 8px; }
-  .aib-empty-hint { margin-top: 4px; }
-  .aib-voice-msg { padding: 8px 12px; font-size: 13px; }
   .aib-voice-controls { padding: 12px 14px; }
   .aib-mic-wrapper { width: 64px; height: 64px; }
   .aib-mic-indicator { width: 52px; height: 52px; }

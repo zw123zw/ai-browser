@@ -2,7 +2,11 @@
  * 语音管理器
  *
  * 核心状态机：IDLE → WAKE → COMMAND → PROCESSING → SPEAKING → (循环)
- * 整合引擎、唤醒词、TTS、管线
+ *
+ * 关键设计：引擎永远不 pause，用状态过滤识别结果
+ * - processing/speaking 状态 → 忽略所有识别结果
+ * - wake 状态 → 检查唤醒词
+ * - command 状态 → 入缓冲队列
  */
 
 import { Logger } from '@/src/utils/logger'
@@ -13,44 +17,28 @@ import type { VoiceEngine, VoiceEngineStatus } from './engines/types'
 
 const log = new Logger('VoiceManager')
 
-/** 语音管理器状态 */
+const DEFAULT_COMMAND_TIMEOUT = 2000
+const DEFAULT_IDLE_TIMEOUT = 3000
+/** 唤醒冷却时间：防止同一句话重复触发 */
+const WAKE_COOLDOWN = 3000
+
 export type VoiceManagerState = 'idle' | 'wake' | 'command' | 'processing' | 'speaking'
 
-/** 语音管理器配置 */
 export interface VoiceManagerConfig {
-  /** 引擎类型 */
   engineType: 'web-speech' | 'iflytek'
-  /** 讯飞配置（engineType=iflytek 时必填） */
-  iflytekConfig: {
-    appId: string
-    apiKey: string
-    apiSecret?: string
-  } | undefined
-  /** 识别语言 */
+  iflytekConfig: { appId: string; apiKey: string; apiSecret?: string } | undefined
   lang?: string
-  /** 唤醒词 */
   wakeWord?: string
-  /** 是否启用唤醒词 */
-  enableWakeWord?: boolean
-  /** 是否启用 TTS */
   enableTts?: boolean
-  /** TTS 语速 */
   ttsRate?: number
-  /** TTS 音量 */
   ttsVolume?: number
-  /** 是否自动启动监听 */
-  autoStart?: boolean
+  bufferTimeout?: number
+  idleTimeout?: number
 
-  // 回调
-  /** 状态变化回调 */
   onStateChange?: (state: VoiceManagerState) => void
-  /** interim 文本更新回调 */
   onInterimText?: (text: string) => void
-  /** 用户消息回调 */
   onUserMessage?: (text: string) => void
-  /** 助手消息回调 */
   onAssistantMessage?: (text: string) => void
-  /** 错误回调 */
   onError?: (error: string) => void
 }
 
@@ -62,7 +50,13 @@ export class VoiceManager {
   private _isActive = false
   private config: Required<VoiceManagerConfig>
 
-  /** 处理用户文字的回调（接入 InputPipeline） */
+  private speechBuffer: string[] = []
+  private bufferTimer: ReturnType<typeof setTimeout> | null = null
+  private lastCommand = ''
+  private lastCommandTime = 0
+  private idleTimer: ReturnType<typeof setTimeout> | null = null
+  private lastWakeTime = 0
+
   onProcessText: ((text: string) => Promise<void>) | null = null
 
   constructor(config: VoiceManagerConfig) {
@@ -71,11 +65,11 @@ export class VoiceManager {
       iflytekConfig: config.iflytekConfig,
       lang: config.lang ?? 'zh-CN',
       wakeWord: config.wakeWord ?? '你好，小灵',
-      enableWakeWord: config.enableWakeWord ?? true,
       enableTts: config.enableTts ?? true,
-      ttsRate: config.ttsRate ?? 1.0,
+      ttsRate: config.ttsRate ?? 1.5,
       ttsVolume: config.ttsVolume ?? 0.8,
-      autoStart: config.autoStart ?? false,
+      bufferTimeout: config.bufferTimeout ?? DEFAULT_COMMAND_TIMEOUT,
+      idleTimeout: config.idleTimeout ?? DEFAULT_IDLE_TIMEOUT,
       onStateChange: config.onStateChange ?? (() => {}),
       onInterimText: config.onInterimText ?? (() => {}),
       onUserMessage: config.onUserMessage ?? (() => {}),
@@ -89,90 +83,64 @@ export class VoiceManager {
       volume: this.config.ttsVolume,
     })
 
-    if (this.config.enableWakeWord && this.config.wakeWord) {
+    if (this.config.wakeWord) {
       this.wakeWordDetector = new WakeWordDetector(this.config.wakeWord)
     }
   }
 
-  get state(): VoiceManagerState {
-    return this._state
-  }
+  get state(): VoiceManagerState { return this._state }
+  get isActive(): boolean { return this._isActive }
 
-  get isActive(): boolean {
-    return this._isActive
-  }
-
-  /** 启动监听 */
   start(): void {
     if (this._isActive) return
-
     log.info('启动语音管理器', { engineType: this.config.engineType })
     this._isActive = true
-
-    // 创建引擎
     this.createEngine()
 
-    if (this.config.enableWakeWord && this.wakeWordDetector) {
-      // 唤醒词模式：先监听唤醒词
-      this.setState('wake')
-      this.engine?.start()
-    } else {
-      // 无唤醒词模式：直接进入命令模式
-      this.setState('command')
-      this.engine?.start()
-    }
+    // 始终从 wake 状态开始，等待唤醒词
+    this.setState('wake')
+    this.engine?.start()
   }
 
-  /** 停止监听 */
   stop(): void {
     log.info('停止语音管理器')
     this._isActive = false
+    this.clearTimers()
     this.broadcast.cancel()
     this.engine?.stop()
     this.setState('idle')
   }
 
-  /** 更新配置（设置变更时调用） */
   updateConfig(config: Partial<VoiceManagerConfig>): void {
-    if (config.wakeWord !== undefined) {
-      this.wakeWordDetector?.setWakeWord(config.wakeWord)
-    }
-    if (config.enableTts !== undefined) {
-      this.config.enableTts = config.enableTts
-    }
-    if (config.ttsRate !== undefined) {
-      this.config.ttsRate = config.ttsRate
+    if (config.wakeWord !== undefined) this.wakeWordDetector?.setWakeWord(config.wakeWord)
+    if (config.enableTts !== undefined) this.config.enableTts = config.enableTts
+    if (config.ttsRate !== undefined || config.ttsVolume !== undefined) {
       this.broadcast = new VoiceBroadcast({
         lang: this.config.lang,
-        rate: config.ttsRate,
-        volume: this.config.ttsVolume,
+        rate: config.ttsRate ?? this.config.ttsRate,
+        volume: config.ttsVolume ?? this.config.ttsVolume,
       })
+      if (config.ttsRate !== undefined) this.config.ttsRate = config.ttsRate
+      if (config.ttsVolume !== undefined) this.config.ttsVolume = config.ttsVolume
     }
-    if (config.ttsVolume !== undefined) {
-      this.config.ttsVolume = config.ttsVolume
-      this.broadcast = new VoiceBroadcast({
-        lang: this.config.lang,
-        rate: this.config.ttsRate,
-        volume: config.ttsVolume,
-      })
-    }
-    if (config.wakeWord !== undefined && this.wakeWordDetector) {
-      this.wakeWordDetector.setWakeWord(config.wakeWord)
-    }
+    if (config.bufferTimeout !== undefined) this.config.bufferTimeout = config.bufferTimeout
+    if (config.idleTimeout !== undefined) this.config.idleTimeout = config.idleTimeout
   }
 
-  /** 播报文字（供外部调用） */
+  /** 播报文字。空文本仅恢复状态。引擎不 pause。 */
   async speak(text: string): Promise<void> {
-    if (!this.config.enableTts) return
-    this.setState('speaking')
-    await this.broadcast.speak(text)
-    if (this._isActive) {
-      this.setState(this.config.enableWakeWord ? 'wake' : 'command')
-      this.engine?.resume()
+    if (text && this.config.enableTts) {
+      this.setState('speaking')
+      await this.broadcast.speak(text)
+    }
+    // 只在状态仍是 speaking 时才切换（防止被打断时覆盖 processing 状态）
+    if (this._isActive && this._state === 'speaking') {
+      this.lastWakeTime = Date.now()
+      this.setState('command')
+      this.startIdleTimer()
     }
   }
 
-  /** 销毁 */
   destroy(): void {
     this.stop()
     this.broadcast.destroy()
@@ -180,25 +148,19 @@ export class VoiceManager {
     this.engine = null
   }
 
-  // ========== 内部方法 ==========
+  // ========== 引擎 ==========
 
-  /** 创建引擎 */
   private createEngine(): void {
-    if (this.engine) {
-      this.engine.destroy()
-    }
+    if (this.engine) this.engine.destroy()
 
     if (this.config.engineType === 'iflytek' && this.config.iflytekConfig) {
-      // 动态导入讯飞引擎
       import('./engines/iflytek-engine').then(({ IflytekEngine }) => {
         this.engine = new IflytekEngine(
           this.config.iflytekConfig!,
           { lang: this.config.lang, continuous: true, interimResults: true },
         )
         this.setupEngineCallbacks()
-        if (this._isActive) {
-          this.engine.start()
-        }
+        if (this._isActive) this.engine.start()
       }).catch((error) => {
         log.error('加载讯飞引擎失败:', error)
         this.config.onError?.('加载讯飞引擎失败')
@@ -213,82 +175,212 @@ export class VoiceManager {
     }
   }
 
-  /** 设置引擎回调 */
   private setupEngineCallbacks(): void {
     if (!this.engine) return
-
-    this.engine.onResult = (text, isFinal, confidence) => {
-      this.handleResult(text, isFinal, confidence)
-    }
-
+    this.engine.onResult = (text, isFinal, confidence) => this.handleResult(text, isFinal, confidence)
     this.engine.onError = (error) => {
       log.error('引擎错误:', error)
       this.config.onError?.(error)
     }
-
-    this.engine.onStatusChange = (status) => {
-      log.debug('引擎状态:', status)
-    }
+    this.engine.onStatusChange = (status) => log.debug('引擎状态:', status)
   }
 
-  /** 处理识别结果 */
+  // ========== 识别结果处理（核心：按状态过滤） ==========
+
   private handleResult(text: string, isFinal: boolean, _confidence: number): void {
-    // 更新 interim 文本
-    this.config.onInterimText?.(isFinal ? '' : text)
-
+    // === interim 结果 ===
     if (!isFinal) {
-      // interim 结果：检查唤醒词
-      if (this._state === 'wake' && this.wakeWordDetector?.check(text)) {
-        log.info('检测到唤醒词', { text })
-        this.onWakeWordDetected()
-      }
-      return
-    }
-
-    // final 结果
-    log.info('识别完成', { text, state: this._state })
-
-    if (this._state === 'wake') {
-      // 唤醒词模式下，检查是否包含唤醒词
-      if (this.wakeWordDetector?.check(text)) {
-        const command = this.wakeWordDetector.extractCommand(text)
-        if (command) {
-          // "你好，小灵 打开B站" → 直接执行命令
-          log.info('唤醒词+命令', { command })
-          this.processCommand(command)
-        } else {
-          // "你好，小灵" → 进入命令模式，等待下一句
-          log.info('唤醒词，等待命令')
+      // 只在 wake 状态检查 interim 唤醒词
+      if (this._state === 'wake' && this.wakeWordDetector && Date.now() - this.lastWakeTime > WAKE_COOLDOWN) {
+        const { matched } = this.wakeWordDetector.matchWakeWord(text, true)
+        if (matched) {
+          log.info('interim 检测到唤醒词', { text })
           this.onWakeWordDetected()
+          return  // 不更新 interimText，onWakeWordDetected 已清空
         }
       }
-      // 没有唤醒词，忽略
+      // 唤醒词没匹配到才更新 interimText
+      this.config.onInterimText?.(text)
+      // command 状态下，interim 重置计时器（长语句没说完不退出）
+      if (this._state === 'command') {
+        this.resetIdleTimer()
+      }
       return
     }
 
-    if (this._state === 'command') {
-      // 命令模式：处理命令
+    // === final 结果 ===
+    this.config.onInterimText?.('')
+
+    // processing → 缓冲命令（处理完后自动执行）
+    if (this._state === 'processing') {
+      if (this.wakeWordDetector) {
+        const { matched } = this.wakeWordDetector.matchWakeWord(text, false)
+        if (matched) {
+          log.info('处理中忽略唤醒词', { text })
+          return
+        }
+      }
+      log.info('处理中缓冲命令', { text })
+      this.bufferCommand(text)
+      return
+    }
+
+    // speaking → 打断播报
+    if (this._state === 'speaking') {
+      log.info('播报中打断', { text })
+      this.broadcast.cancel()
+      // 检查是否是唤醒词
+      if (this.wakeWordDetector) {
+        const { matched, command } = this.wakeWordDetector.matchWakeWord(text, false)
+        if (matched && !command) {
+          // 纯唤醒词 → 重新进入命令模式
+          this.onWakeWordDetected()
+          return
+        }
+        if (matched && command) {
+          // 唤醒词+命令 → 提取命令执行
+          this.onWakeWordDetected()
+          this.bufferCommand(command)
+          return
+        }
+      }
+      // 普通命令 → 直接执行
       this.processCommand(text)
+      return
+    }
+
+    log.info('识别完成', { text, state: this._state })
+
+    if (!this.wakeWordDetector) {
+      if (this._state === 'command') this.bufferCommand(text)
+      return
+    }
+
+    const now = Date.now()
+    const cooldownOk = now - this.lastWakeTime > WAKE_COOLDOWN
+    const { matched, command } = cooldownOk
+      ? this.wakeWordDetector.matchWakeWord(text, false)
+      : { matched: false, command: '' }
+
+    // === wake 状态 ===
+    if (this._state === 'wake') {
+      if (matched) {
+        this.onWakeWordDetected()
+        if (command) {
+          log.info('唤醒词+命令', { command })
+          this.bufferCommand(command)
+        }
+      }
+      return
+    }
+
+    // === command 状态 ===
+    if (this._state === 'command') {
+      if (matched) {
+        if (command) {
+          log.info('唤醒词+命令', { command })
+          this.bufferCommand(command)
+        } else {
+          log.info('再次听到唤醒词，继续等待命令')
+          this.playWakeSound()
+          this.resetIdleTimer()
+        }
+        return
+      }
+      // 先检查是否是唤醒词残留（冷却期间不匹配，但文本本身是唤醒词）
+      if (this.wakeWordDetector) {
+        const { matched: isWake } = this.wakeWordDetector.matchWakeWord(text, false)
+        if (isWake) {
+          log.info('忽略唤醒词残留', { text })
+          this.resetIdleTimer()
+          return
+        }
+      }
+      this.bufferCommand(text)
     }
   }
 
-  /** 唤醒词检测到 */
+  // ========== 唤醒 ==========
+
   private onWakeWordDetected(): void {
-    log.info('进入命令模式')
-    this.setState('command')
-    // 播放提示音（简短的 beep）
+    log.info('进入命令模式，重置所有状态')
+    this.lastWakeTime = Date.now()
+    // 打断一切：取消 TTS、清空缓冲、重置计时器、清空 interim
+    this.broadcast.cancel()
+    this.speechBuffer = []
+    this.clearTimers()
+    this.config.onInterimText?.('')
     this.playWakeSound()
+    // 播报"您好，请说"（speaking 状态下仍可缓冲命令）
+    this.speak('您好，请说')
   }
 
-  /** 处理命令 */
+  // ========== 语音缓冲 ==========
+
+  private bufferCommand(text: string): void {
+    this.speechBuffer.push(text)
+    this.resetBufferTimer()
+    this.resetIdleTimer()
+    log.debug('命令入缓冲', { text, bufferSize: this.speechBuffer.length })
+  }
+
+  private resetBufferTimer(): void {
+    if (this.bufferTimer) clearTimeout(this.bufferTimer)
+    this.bufferTimer = setTimeout(() => this.flushBuffer(), this.config.bufferTimeout)
+  }
+
+  private flushBuffer(): void {
+    if (this.speechBuffer.length === 0) return
+
+    const combined = this.speechBuffer.join('')
+    this.speechBuffer = []
+
+    const now = Date.now()
+    if (combined === this.lastCommand && now - this.lastCommandTime < COMMAND_TIMEOUT) {
+      log.info('命令去重，跳过', { command: combined })
+      return
+    }
+    this.lastCommand = combined
+    this.lastCommandTime = now
+
+    log.info('缓冲合并执行', { command: combined })
+    this.processCommand(combined)
+  }
+
+  // ========== 超时回退 ==========
+
+  private startIdleTimer(): void {
+    this.clearIdleTimer()
+    this.idleTimer = setTimeout(() => {
+      if (this._isActive && this._state === 'command') {
+        log.info('command 状态超时，回到 wake')
+        this.setState('wake')
+      }
+    }, this.config.idleTimeout)
+  }
+
+  private resetIdleTimer(): void {
+    if (this._state === 'command') this.startIdleTimer()
+  }
+
+  private clearIdleTimer(): void {
+    if (this.idleTimer) { clearTimeout(this.idleTimer); this.idleTimer = null }
+  }
+
+  private clearTimers(): void {
+    if (this.bufferTimer) { clearTimeout(this.bufferTimer); this.bufferTimer = null }
+    this.clearIdleTimer()
+  }
+
+  // ========== 命令执行 ==========
+
   private async processCommand(text: string): Promise<void> {
     log.info('处理命令', { text })
+    this.clearTimers()
     this.setState('processing')
-    this.engine?.pause()
     this.config.onUserMessage?.(text)
 
     try {
-      // 调用外部管线处理
       if (this.onProcessText) {
         await this.onProcessText(text)
       }
@@ -296,45 +388,44 @@ export class VoiceManager {
       log.error('命令处理失败:', error)
       this.config.onError?.(`处理失败: ${error}`)
     } finally {
-      // 处理完毕，回到监听状态
-      if (this._isActive) {
-        if (this.config.enableWakeWord) {
-          this.setState('wake')
-        } else {
-          this.setState('command')
-        }
-        this.engine?.resume()
+      // 只恢复状态，不启动计时器
+      // 计时器由 speak() 在 TTS 结束后启动
+      // 如果 speak() 没被调用（TTS 被禁用），speak("") 也会启动计时器
+      if (this._isActive && this._state === 'processing') {
+        log.info('processCommand 结束，恢复 command 状态')
+        this.setState('command')
       }
     }
   }
 
-  /** 播放唤醒提示音 */
+  // ========== 工具 ==========
+
   private playWakeSound(): void {
     try {
       const audioContext = new AudioContext()
       const oscillator = audioContext.createOscillator()
       const gainNode = audioContext.createGain()
-
       oscillator.connect(gainNode)
       gainNode.connect(audioContext.destination)
-
       oscillator.frequency.value = 800
       oscillator.type = 'sine'
       gainNode.gain.value = 0.1
-
       oscillator.start()
       gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.3)
       oscillator.stop(audioContext.currentTime + 0.3)
     } catch {
-      // 忽略音频播放错误
+      // 忽略
     }
   }
 
-  /** 设置状态 */
   private setState(state: VoiceManagerState): void {
     if (this._state === state) return
     log.debug(`状态转换: ${this._state} → ${state}`)
     this._state = state
     this.config.onStateChange?.(state)
+    // 切换到 wake 时清空 interim 文本
+    if (state === 'wake') {
+      this.config.onInterimText?.('')
+    }
   }
 }
