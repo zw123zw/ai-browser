@@ -338,6 +338,18 @@ function onAutoNoteResult(e: Event) {
   log.info('[自动笔记] 已更新聊天消息', { length: detail.content.length });
 }
 
+// 处理自动笔记中止：更新消息状态为 aborted
+function onAutoNoteAborted(e: Event) {
+  const detail = (e as CustomEvent).detail;
+  if (!detail?.id || !convStore.conversation) return;
+
+  const existing = convStore.conversation.messages.find((m) => m.id === detail.id);
+  if (existing) {
+    existing.status = 'aborted';
+    log.info('[自动笔记] 消息状态更新为 aborted', { id: detail.id });
+  }
+}
+
 // 处理笔记收藏请求：打开收藏弹框
 function onBookmarkNote(e: Event) {
   const detail = (e as CustomEvent).detail;
@@ -376,6 +388,7 @@ onMounted(async () => {
   window.addEventListener('aib-auto-note-start', onAutoNoteStart);
   window.addEventListener('aib-auto-note-delta', onAutoNoteDelta);
   window.addEventListener('aib-auto-note-result', onAutoNoteResult);
+  window.addEventListener('aib-auto-note-aborted', onAutoNoteAborted);
   window.addEventListener('aib-bookmark-note', onBookmarkNote);
   window.addEventListener('aib-toggle-note-viewer', toggleNoteViewer);
   window.addEventListener('aib-close-drawer', closeDrawer);
@@ -389,6 +402,7 @@ onUnmounted(() => {
   window.removeEventListener('aib-auto-note-start', onAutoNoteStart);
   window.removeEventListener('aib-auto-note-delta', onAutoNoteDelta);
   window.removeEventListener('aib-auto-note-result', onAutoNoteResult);
+  window.removeEventListener('aib-auto-note-aborted', onAutoNoteAborted);
   window.removeEventListener('aib-bookmark-note', onBookmarkNote);
   window.removeEventListener('aib-toggle-note-viewer', toggleNoteViewer);
   window.removeEventListener('aib-close-drawer', closeDrawer);

@@ -530,8 +530,16 @@ export default defineContentScript({
         window.dispatchEvent(new CustomEvent('aib-auto-note-result', {
           detail: { id: msgId, content: noteWithUrl },
         }))
-      } catch (err) {
-        log.error('[自动笔记] 失败', err)
+      } catch (err: any) {
+        // 如果是用户主动停止，更新消息状态为 aborted
+        if (err?.name === 'AbortError' || autoNoteAbort?.signal.aborted) {
+          log.info('[自动笔记] 用户停止')
+          window.dispatchEvent(new CustomEvent('aib-auto-note-aborted', {
+            detail: { id: msgId },
+          }))
+        } else {
+          log.error('[自动笔记] 失败', err)
+        }
       } finally {
         autoNoteRunning = false
       }
