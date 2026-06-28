@@ -322,9 +322,9 @@ export class VoiceManager {
         }
         return
       }
-      // 先检查是否是唤醒词残留（用更宽松的 interim 阈值）
+      // 先检查是否是唤醒词残留（用 final 严格阈值，避免误杀正常命令）
       if (this.wakeWordDetector) {
-        const { matched: isWake } = this.wakeWordDetector.matchWakeWord(text, true)
+        const { matched: isWake } = this.wakeWordDetector.matchWakeWord(text, false)
         if (isWake) {
           log.info('忽略唤醒词残留', { text })
           this.resetIdleTimer()
