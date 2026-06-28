@@ -396,6 +396,37 @@ const generalForm = reactive({
   maxContext: store.settings.maxContext || 100,
 });
 
+// 语音配置临时变量（点保存才写入 store）
+const voiceForm = reactive({
+  engineType: voiceStore.settings.engineType,
+  iflytekAppId: voiceStore.settings.iflytekAppId,
+  iflytekApiKey: voiceStore.settings.iflytekApiKey,
+  recognitionLang: voiceStore.settings.recognitionLang,
+  wakeWord: voiceStore.settings.wakeWord,
+  enableTts: voiceStore.settings.enableTts,
+  ttsRate: voiceStore.settings.ttsRate,
+  ttsVolume: voiceStore.settings.ttsVolume,
+  bufferTimeout: voiceStore.settings.bufferTimeout,
+  idleTimeout: voiceStore.settings.idleTimeout,
+})
+
+function saveVoice() {
+  voiceStore.updateSettings({
+    engineType: voiceForm.engineType,
+    iflytekAppId: voiceForm.iflytekAppId,
+    iflytekApiKey: voiceForm.iflytekApiKey,
+    recognitionLang: voiceForm.recognitionLang,
+    wakeWord: voiceForm.wakeWord,
+    enableTts: voiceForm.enableTts,
+    ttsRate: voiceForm.ttsRate,
+    ttsVolume: voiceForm.ttsVolume,
+    bufferTimeout: voiceForm.bufferTimeout,
+    idleTimeout: voiceForm.idleTimeout,
+  })
+  toast.success(t('settings.general.saved'))
+  emit('close')
+}
+
 const autoSendOptions = computed(() => [
   { value: 'auto' as const, label: t('settings.general.autoSendOptions.auto.label'), desc: t('settings.general.autoSendOptions.auto.desc') },
   { value: 'manual' as const, label: t('settings.general.autoSendOptions.manual.label'), desc: t('settings.general.autoSendOptions.manual.desc') },
@@ -501,6 +532,7 @@ async function saveAndClearHistory() {
   toast.success(t('settings.general.saved'));
   emit('close');
 }
+
 
 // 保存上下文消息数
 async function saveMaxContext() {
@@ -1132,35 +1164,35 @@ function importModels(e: Event) {
               <label>{{ t('settings.voice.engineType') }}</label>
               <div class="aib-select-group">
                 <button
-                  :class="['aib-select-btn', { active: voiceStore.settings.engineType === 'web-speech' }]"
-                  @click="voiceStore.updateSetting('engineType', 'web-speech')"
+                  :class="['aib-select-btn', { active: voiceForm.engineType === 'web-speech' }]"
+                  @click="voiceForm.engineType = 'web-speech'"
                 >
                   {{ t('settings.voice.engineWebSpeech') }}
                 </button>
                 <button
-                  :class="['aib-select-btn', { active: voiceStore.settings.engineType === 'iflytek' }]"
-                  @click="voiceStore.updateSetting('engineType', 'iflytek')"
+                  :class="['aib-select-btn', { active: voiceForm.engineType === 'iflytek' }]"
+                  @click="voiceForm.engineType = 'iflytek'"
                 >
                   {{ t('settings.voice.engineIflytek') }}
                 </button>
               </div>
             </div>
 
-            <div v-if="voiceStore.settings.engineType === 'iflytek'" class="aib-form-row">
+            <div v-if="voiceForm.engineType === 'iflytek'" class="aib-form-row">
               <label>{{ t('settings.voice.iflytekAppId') }}</label>
               <input
-                :value="voiceStore.settings.iflytekAppId"
-                @input="voiceStore.updateSetting('iflytekAppId', ($event.target as HTMLInputElement).value)"
+                :value="voiceForm.iflytekAppId"
+                @input="voiceForm.iflytekAppId = ($event.target as HTMLInputElement).value"
                 placeholder="xxxxxxxx"
                 class="aib-input"
               />
             </div>
 
-            <div v-if="voiceStore.settings.engineType === 'iflytek'" class="aib-form-row">
+            <div v-if="voiceForm.engineType === 'iflytek'" class="aib-form-row">
               <label>{{ t('settings.voice.iflytekApiKey') }}</label>
               <input
-                :value="voiceStore.settings.iflytekApiKey"
-                @input="voiceStore.updateSetting('iflytekApiKey', ($event.target as HTMLInputElement).value)"
+                :value="voiceForm.iflytekApiKey"
+                @input="voiceForm.iflytekApiKey = ($event.target as HTMLInputElement).value"
                 placeholder="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
                 class="aib-input"
               />
@@ -1170,14 +1202,14 @@ function importModels(e: Event) {
               <label>{{ t('settings.voice.recognitionLang') }}</label>
               <div class="aib-select-group">
                 <button
-                  :class="['aib-select-btn', { active: voiceStore.settings.recognitionLang === 'zh-CN' }]"
-                  @click="voiceStore.updateSetting('recognitionLang', 'zh-CN')"
+                  :class="['aib-select-btn', { active: voiceForm.recognitionLang === 'zh-CN' }]"
+                  @click="voiceForm.recognitionLang = 'zh-CN'"
                 >
                   {{ t('settings.voice.langZhCN') }}
                 </button>
                 <button
-                  :class="['aib-select-btn', { active: voiceStore.settings.recognitionLang === 'en-US' }]"
-                  @click="voiceStore.updateSetting('recognitionLang', 'en-US')"
+                  :class="['aib-select-btn', { active: voiceForm.recognitionLang === 'en-US' }]"
+                  @click="voiceForm.recognitionLang = 'en-US'"
                 >
                   {{ t('settings.voice.langEnUS') }}
                 </button>
@@ -1188,8 +1220,8 @@ function importModels(e: Event) {
             <div class="aib-form-row" style="margin-top:16px">
               <label>{{ t('settings.voice.wakeWordLabel') }}</label>
               <input
-                :value="voiceStore.settings.wakeWord"
-                @input="voiceStore.updateSetting('wakeWord', ($event.target as HTMLInputElement).value)"
+                :value="voiceForm.wakeWord"
+                @input="voiceForm.wakeWord = ($event.target as HTMLInputElement).value"
                 :placeholder="t('settings.voice.wakeWordPlaceholder')"
                 class="aib-input"
               />
@@ -1201,35 +1233,35 @@ function importModels(e: Event) {
               <label class="aib-switch">
                 <input
                   type="checkbox"
-                  :checked="voiceStore.settings.enableTts"
-                  @change="voiceStore.updateSetting('enableTts', ($event.target as HTMLInputElement).checked)"
+                  :checked="voiceForm.enableTts"
+                  @change="voiceForm.enableTts = ($event.target as HTMLInputElement).checked"
                 />
                 <span class="aib-switch-slider" />
               </label>
             </div>
 
-            <div v-if="voiceStore.settings.enableTts" class="aib-form-row">
-              <label>{{ t('settings.voice.ttsRate') }}: {{ voiceStore.settings.ttsRate.toFixed(1) }}x</label>
+            <div v-if="voiceForm.enableTts" class="aib-form-row">
+              <label>{{ t('settings.voice.ttsRate') }}: {{ voiceForm.ttsRate.toFixed(1) }}x</label>
               <input
                 type="range"
                 min="0.5"
                 max="2.0"
                 step="0.1"
-                :value="voiceStore.settings.ttsRate"
-                @input="voiceStore.updateSetting('ttsRate', parseFloat(($event.target as HTMLInputElement).value))"
+                :value="voiceForm.ttsRate"
+                @input="voiceForm.ttsRate = parseFloat(($event.target as HTMLInputElement).value)"
                 class="aib-range"
               />
             </div>
 
-            <div v-if="voiceStore.settings.enableTts" class="aib-form-row">
-              <label>{{ t('settings.voice.ttsVolume') }}: {{ Math.round(voiceStore.settings.ttsVolume * 100) }}%</label>
+            <div v-if="voiceForm.enableTts" class="aib-form-row">
+              <label>{{ t('settings.voice.ttsVolume') }}: {{ Math.round(voiceForm.ttsVolume * 100) }}%</label>
               <input
                 type="range"
                 min="0"
                 max="1"
                 step="0.05"
-                :value="voiceStore.settings.ttsVolume"
-                @input="voiceStore.updateSetting('ttsVolume', parseFloat(($event.target as HTMLInputElement).value))"
+                :value="voiceForm.ttsVolume"
+                @input="voiceForm.ttsVolume = parseFloat(($event.target as HTMLInputElement).value)"
                 class="aib-range"
               />
             </div>
@@ -1240,29 +1272,29 @@ function importModels(e: Event) {
             </div>
 
             <div class="aib-form-row">
-              <label>{{ t('settings.voice.bufferTimeout') }}: {{ (voiceStore.settings.bufferTimeout / 1000).toFixed(1) }}s</label>
+              <label>{{ t('settings.voice.bufferTimeout') }}: {{ (voiceForm.bufferTimeout / 1000).toFixed(1) }}s</label>
               <span class="aib-form-hint">{{ t('settings.voice.bufferTimeoutHint') }}</span>
               <input
                 type="range"
                 min="500"
                 max="5000"
                 step="500"
-                :value="voiceStore.settings.bufferTimeout"
-                @input="voiceStore.updateSetting('bufferTimeout', parseInt(($event.target as HTMLInputElement).value))"
+                :value="voiceForm.bufferTimeout"
+                @input="voiceForm.bufferTimeout = parseInt(($event.target as HTMLInputElement).value)"
                 class="aib-range"
               />
             </div>
 
             <div class="aib-form-row">
-              <label>{{ t('settings.voice.idleTimeout') }}: {{ (voiceStore.settings.idleTimeout / 1000).toFixed(0) }}s</label>
+              <label>{{ t('settings.voice.idleTimeout') }}: {{ (voiceForm.idleTimeout / 1000).toFixed(0) }}s</label>
               <span class="aib-form-hint">{{ t('settings.voice.idleTimeoutHint') }}</span>
               <input
                 type="range"
                 min="2000"
                 max="15000"
                 step="1000"
-                :value="voiceStore.settings.idleTimeout"
-                @input="voiceStore.updateSetting('idleTimeout', parseInt(($event.target as HTMLInputElement).value))"
+                :value="voiceForm.idleTimeout"
+                @input="voiceForm.idleTimeout = parseInt(($event.target as HTMLInputElement).value)"
                 class="aib-range"
               />
             </div>
@@ -1270,6 +1302,7 @@ function importModels(e: Event) {
             <div class="aib-tab-footer">
               <div style="flex:1" />
               <button class="aib-btn" @click="emit('close')">{{ t('settings.general.cancel') }}</button>
+              <button class="aib-btn aib-btn-primary" @click="saveVoice">{{ t('settings.general.save') }}</button>
             </div>
           </div>
         </div>
@@ -1564,9 +1597,16 @@ function importModels(e: Event) {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding-top: 16px;
-  margin-top: 8px;
+  padding: 12px 16px;
+  margin: 0 -16px;
   border-top: 1px solid var(--aib-border);
+  position: sticky;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: var(--aib-bg);
+  z-index: 1;
+  width: calc(100% + 32px);
 }
 
 .aib-btn-danger {

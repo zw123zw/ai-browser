@@ -69,6 +69,8 @@ export const useVoiceStore = defineStore('voice', () => {
   // ========== 设置（持久化） ==========
   const settings = ref<VoiceSettings>({ ...DEFAULT_SETTINGS })
   const ready = ref(false)
+  /** 保存时 +1，VoicePanel 监听此值变化来重建 manager */
+  const settingsVersion = ref(0)
 
   /** 初始化设置 */
   async function initSettings() {
@@ -93,6 +95,8 @@ export const useVoiceStore = defineStore('voice', () => {
   /** 批量更新设置 */
   function updateSettings(partial: Partial<VoiceSettings>) {
     Object.assign(settings.value, partial)
+    settingsVersion.value++
+    log.info('语音设置已更新', { version: settingsVersion.value })
   }
 
   /** 重置为默认设置 */
@@ -143,6 +147,7 @@ export const useVoiceStore = defineStore('voice', () => {
 
     // 设置
     settings,
+    settingsVersion,
     ready,
     initSettings,
     updateSetting,

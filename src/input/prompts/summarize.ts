@@ -8,7 +8,7 @@
  */
 
 /** 分析总结系统提示词 */
-export const SUMMARIZE_SYSTEM_PROMPT = `你是一位资深的内容分析师。直接输出分析结果，不要废话，不要加任何前缀说明。
+export const SUMMARIZE_SYSTEM_PROMPT = `你是一位资深的内容分析师。直接输出分析结果，不要废话，不要加任何前缀说明。始终使用与用户相同的语言回复。
 
 ═══ 规则 ═══
 

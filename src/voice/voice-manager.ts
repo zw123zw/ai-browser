@@ -128,6 +128,19 @@ export class VoiceManager {
     }
     if (config.bufferTimeout !== undefined) this.config.bufferTimeout = config.bufferTimeout
     if (config.idleTimeout !== undefined) this.config.idleTimeout = config.idleTimeout
+    // 引擎类型或语言变更 → 重建引擎
+    const engineChanged = config.engineType !== undefined && config.engineType !== this.config.engineType
+    const langChanged = config.lang !== undefined && config.lang !== this.config.lang
+    if (config.engineType !== undefined) this.config.engineType = config.engineType
+    if (config.lang !== undefined) this.config.lang = config.lang
+    if (config.iflytekConfig !== undefined) this.config.iflytekConfig = config.iflytekConfig
+    if ((engineChanged || langChanged) && this._isActive) {
+      log.info('引擎配置变更，重建引擎', { engineChanged, langChanged })
+      this.engine?.stop()
+      this.engine?.destroy()
+      this.createEngine()
+      this.engine?.start()
+    }
   }
 
   /** 播报文字。播报期间暂停引擎，防止 TTS 声音被识别。 */

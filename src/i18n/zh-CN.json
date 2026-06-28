@@ -78,7 +78,7 @@
       "ttsVolume": "播报音量",
       "behavior": "行为",
       "bufferTimeout": "语音缓冲时间",
-      "bufferTimeoutHint": "连续说话多久算一条命令",
+      "bufferTimeoutHint": "说话停顿多久算一条命令",
       "idleTimeout": "自动退出时间",
       "idleTimeoutHint": "多久不说话回到等待唤醒词"
     },

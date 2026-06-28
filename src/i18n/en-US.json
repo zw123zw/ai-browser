@@ -78,7 +78,7 @@
       "ttsVolume": "Volume",
       "behavior": "Behavior",
       "bufferTimeout": "Buffer Timeout",
-      "bufferTimeoutHint": "How long to wait before sending",
+      "bufferTimeoutHint": "Pause duration before command executes",
       "idleTimeout": "Idle Timeout",
       "idleTimeoutHint": "Time before returning to wake word listening"
     },

@@ -137,22 +137,18 @@ watch(
   },
 )
 
-// 设置变更 → 实时更新管理器
+// 设置变更 → 销毁旧 manager，延迟重建
 watch(
-  () => [voiceStore.settings.wakeWord, voiceStore.settings.enableTts, voiceStore.settings.ttsRate, voiceStore.settings.ttsVolume, voiceStore.settings.bufferTimeout, voiceStore.settings.idleTimeout],
-  () => {
+  () => voiceStore.settingsVersion,
+  (ver) => {
+    log.info('语音设置变更，重建管理器', { ver })
     if (manager) {
-      manager.updateConfig({
-        wakeWord: voiceStore.settings.wakeWord,
-        enableTts: voiceStore.settings.enableTts,
-        ttsRate: voiceStore.settings.ttsRate,
-        ttsVolume: voiceStore.settings.ttsVolume,
-        bufferTimeout: voiceStore.settings.bufferTimeout,
-        idleTimeout: voiceStore.settings.idleTimeout,
-      })
+      manager.destroy()
+      manager = null
     }
+    initManager()
+    startListening()
   },
-  { deep: true },
 )
 
 // 获取状态文字
