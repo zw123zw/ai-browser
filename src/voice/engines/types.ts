@@ -40,6 +40,9 @@ export interface VoiceEngine {
   /** 恢复识别 */
   resume(): void
 
+  /** 检查引擎是否还活着 */
+  isAlive(): boolean
+
   /** 识别结果回调 */
   onResult: ((text: string, isFinal: boolean, confidence: number) => void) | null
 

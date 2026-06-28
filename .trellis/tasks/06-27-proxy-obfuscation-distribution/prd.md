@@ -1,4 +1,4 @@
-# PRD：中转保护 + JS 混淆 + 国内外双分发
+# PRD：Wasm 全量加固 + JS 混淆轮转 + 激活码商业化
 
 ## 1. 背景与目标
 
@@ -6,19 +6,26 @@
 
 当前项目（AI 浏览器助手）需要商业化分发，面临以下问题：
 
-- **技术泄露风险**：直接调用 AI API 时，prompt 模板和 API Key 在网络请求中明文暴露，任何人打开 DevTools 即可看到
-- **国内外分发差异**：国内用户无法访问 Chrome 商店，海外用户习惯从商店安装
-- **语音识别方案**：Web Speech API 依赖 Google 服务（国内不可用），Sherpa-ONNX 模型文件过大（100-200MB）
-- **商业化需求**：需要支持免费增值模式，通过激活码收费
+- **源码泄露风险**：crx 解压就是 JS，prompt 模板和业务逻辑明文暴露
+- **授权无法保护**：纯前端无后端，任何付费限制、授权、会员都能被改 JS 直接破解
+- **无自动更新**：自建更新需要静态文件服务器，不算后端业务服务
+- **商业化需求**：需要支持免费试用 + 激活码付费模式
 
 ### 1.2 目标
 
-1. **核心逻辑零泄露**：prompt 模板、API Key、指令解析逻辑对用户完全不可见
-2. **国内外全覆盖**：海外走 Chrome 商店，国内走 .zip 自分发
-3. **语音双引擎**：海外用 Web Speech API（免费），国内用讯飞 API（免费 5 万次/天）
-4. **用户可自定义**：高级用户可填自己的 API Key，仍走中转保护 prompt
-5. **零服务器成本**：Cloudflare Worker（免费 10 万次/天）+ 腾讯云函数（免费 100 万次/月）
-6. **代码保护**：JS 混淆增加逆向难度
+1. **核心逻辑零泄露**：所有授权、校验、门控逻辑全部编译为 Wasm 二进制
+2. **源码高强度混淆 + 版本轮转**：每次发布重新混淆、重编译 wasm，旧版破解工具失效
+3. **激活码系统**：首次安装 7 天试用，激活后 1 个月有效
+4. **隐性二次验证**：激活后仍随机触发静默校验，破解版长期使用会"出 bug"
+5. **本地存储加密**：chrome.storage 中的授权信息 AES 加密，防直接篡改
+6. **零业务服务器**：纯前端实现，不需要任何后端服务
+7. **（可选·Phase2）远程静态黑名单**：等有用户量且出现盗版后再加，GitHub Pages 托管 JSON
+
+### 1.3 已接受的硬短板
+
+- 没有服务端校验 = 任何付费限制都能被改 JS 破解（Wasm + 隐性校验大幅提高门槛）
+- crx 解压就是 JS，只能提高逆向成本，做不到 100% 防泄露
+- 无法实现真正自动更新（需要静态托管）
 
 ---
 
@@ -27,470 +34,495 @@
 ### 2.1 整体架构
 
 ```
-┌─────────────────────────────────────────────────┐
-│                  用户浏览器                        │
-│  ┌───────────────────────────────────────────┐  │
-│  │         扩展端（JS 混淆保护）                │  │
-│  │  ├── UI（Vue 组件）                        │  │
-│  │  ├── 语音录音                              │  │
-│  │  │   ├── Web Speech API（海外）            │  │
-│  │  │   └── 讯飞 WebSocket（国内）            │  │
-│  │  ├── DOM 操作执行器（ActionExecutor）       │  │
-│  │  └── proxy-client.ts ──────────────────┐  │  │
-│  └───────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────┘
-                                               │
-           ┌───────────────────────────────────┤
-           │ 自动检测：国内 / 海外               │
-           ▼                                   ▼
-┌─────────────────────────┐      ┌──────────────────────────┐
-│  腾讯云函数（国内）        │      │  Cloudflare Worker        │
-│  ├── prompt 模板         │      │  （海外）                  │
-│  ├── 指令解析逻辑        │      │  ├── prompt 模板          │
-│  ├── 激活码验证          │      │  ├── 指令解析逻辑         │
-│  ├── 讯飞 API Key       │      │  ├── 激活码验证           │
-│  ├── 用户 Key 透传       │      │  ├── 用户 Key 透传        │
-│  └── 调用 AI API ───────┼──┐   │  └── 调用 AI API ────────┼──┐
-└─────────────────────────┘  │   └──────────────────────────┘  │
-                             │                                  │
-                             ▼                                  ▼
-                       ┌──────────┐                      ┌──────────┐
-                       │ AI 服务商 │                      │ AI 服务商 │
-                       │（国内）   │                      │（海外）   │
-                       └──────────┘                      └──────────┘
+┌─────────────────────────────────────────────────────────────┐
+│  Chrome 扩展 (JS 混淆产物, 自建 crx 分发)                     │
+│                                                             │
+│  ┌───────────────┐    ┌──────────────────────────────────┐  │
+│  │  JS 薄壳层     │───→│  license_bg.wasm                 │  │
+│  │  wasm-loader   │    │  (Rust 编译, 二进制)               │  │
+│  │  - initWasm()  │    │                                  │  │
+│  │  - activate()  │    │  全量逻辑都在 wasm 内:             │  │
+│  │  - tick()      │    │  ├─ verify_code() 激活码校验       │  │
+│  └───────┬───────┘    │  ├─ check_license() 授权状态      │  │
+│          │            │  ├─ hidden_verify() 隐性二次验证    │  │
+│          │            │  ├─ should_degrade() 渐进降级判断   │  │
+│          │            │  ├─ encrypt() / decrypt() 加密     │  │
+│          │            │  ├─ init_trial() 试用期初始化       │  │
+│          │            │  ├─ feature_gate() 功能门控         │  │
+│          │            │  └─ track_usage() 使用统计          │  │
+│          │            └──────────────────────────────────┘  │
+│          ▼                                                  │
+│  ┌───────────────┐    ┌──────────────────────────────────┐  │
+│  │ licenseStore   │───→│ chrome.storage.local              │  │
+│  │ (Pinia)        │    │ enc_blob: AES 加密的许可证数据     │  │
+│  │ - status       │    │ enc_usage: AES 加密的使用统计      │  │
+│  │ - daysLeft     │    └──────────────────────────────────┘  │
+│  │ - features     │                                         │
+│  │ - degraded     │                                         │
+│  └───────┬───────┘                                         │
+│          │                                                  │
+│          ▼                                                  │
+│  ┌───────────────────────────────────────────────────────┐  │
+│  │  功能门控 (wasm feature_gate 决定, JS 只读结果)         │  │
+│  │  - 基础聊天: 试用期可用，过期后受限                      │  │
+│  │  - 语音控制: 需要 active + 未降级                       │  │
+│  │  - 网页自动化: 需要 active + 未降级                     │  │
+│  └───────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-### 2.2 请求流程
+### 2.2 核心流程
 
 ```
-用户输入（文字/语音）
+用户安装扩展
     │
     ▼
-扩展端 proxy-client.ts
+首次启动
     │
-    ├─ 检测网络环境（2s 超时）
+    ├─ wasm init_trial(fingerprint) → 7 天试用加密 blob
+    ├─ 存入 chrome.storage.local
     │
-    ├─ 海外可达 → Cloudflare Worker
-    │              ├── 接收 { userText, userApiKey?, userModel?, systemPrompt? }
-    │              ├── 拼接 prompt（用户看不到）
-    │              ├── 用用户 Key 或默认 Key 调 AI
-    │              └── 返回结果
+    ▼
+每次启动 / 每次操作
     │
-    └─ 海外不可达 → 腾讯云函数
-                   └── 同上逻辑
+    ├─ wasm check_license(blob)        ← 解密 + 验签 + 时间检查
+    ├─ wasm track_usage(action)        ← 累计使用时长/次数
+    ├─ wasm hidden_verify()            ← 随机触发二次验证
+    │   ├─ 通过 → 正常
+    │   └─ 失败 → wasm should_degrade() → 渐进式降级
+    │
+    ├─ wasm feature_gate(feature)      ← 最终权限判断
+    │   ├─ allowed → 正常执行
+    │   └─ denied → 提示激活/已降级
+    │
+    └─ 返回结果给 JS 薄壳层执行
 ```
 
 ---
 
 ## 3. 功能需求
 
-### 3.1 中转服务（Cloudflare Worker + 腾讯云函数）
+### 3.1 Wasm 核心模块（Rust → wasm）
 
-#### 3.1.1 API 接口
-
-| 接口 | 方法 | 说明 |
-|------|------|------|
-| `/` (POST) | chat | 非流式 AI 聊天 |
-| `/` (POST) | chat-stream | 流式 AI 聊天（SSE） |
-| `/` (POST) | xfyun-token | 讯飞 WebSocket 鉴权 URL |
-| `/` (POST) | verify | 激活码验证 |
-
-#### 3.1.2 请求格式
-
-```json
-{
-  "action": "chat",
-  "data": {
-    "userText": "用户输入的文本",
-    "pageUrl": "https://example.com",
-    "pageHtml": "页面HTML（可选）",
-    "skeleton": {},
-    "systemPrompt": "Phase1/Phase2 prompt（由扩展端指定）",
-    "recentMessages": [{"role": "user", "content": "..."}],
-    "userApiKey": "sk-xxx（用户自定义Key，可选）",
-    "userModel": "gpt-4o（用户自定义模型，可选）"
-  }
-}
-```
-
-#### 3.1.3 响应格式
-
-```json
-// 非流式
-{ "reply": "AI回复内容" }
-
-// 流式（SSE）
-data: {"delta": "你"}
-data: {"delta": "好"}
-data: [DONE]
-
-// 讯飞鉴权
-{ "url": "wss://ws-api.xfyun.cn/v2/iat?..." }
-
-// 激活码验证
-{ "valid": true, "message": "激活成功" }
-```
-
-#### 3.1.4 Prompt 存储
-
-以下 prompt 从扩展端迁移到中转服务端：
-
-| 原文件 | 服务端字段 |
-|--------|-----------|
-| `src/input/prompts/phase1.ts` | `CONFIG.PHASE1_PROMPT` |
-| `src/input/prompts/phase2.ts` | `CONFIG.PHASE2_PROMPT` |
-| `src/input/prompts/common.ts` | `CONFIG.CAPABILITY_LIST` |
-| `src/voice/session.ts` | `CONFIG.VOICE_COMMAND_PROMPT` |
-
-#### 3.1.5 用户自定义 Key 逻辑
+#### 3.1.1 项目结构
 
 ```
-if (data.userApiKey) {
-  // 用用户的 Key 调 AI
-  apiKey = data.userApiKey
-  model = data.userModel || defaultModel
-} else {
-  // 用默认 Key 调 AI
-  apiKey = CONFIG.AI_API_KEY
-  model = CONFIG.AI_MODEL
-}
-
-// prompt 始终由服务端拼接（不管用谁的 Key）
-messages = [
-  { role: 'system', content: systemPrompt || CONFIG.DEFAULT_PROMPT },
-  { role: 'user', content: userContent }
-]
+wasm-license/
+├── Cargo.toml
+├── build.rs             # 构建脚本（读取 .build-seed 嵌入常量）
+├── src/
+│   ├── lib.rs           # wasm 入口，导出函数
+│   ├── crypto.rs        # AES-256-CBC + HMAC-SHA256 + PBKDF2
+│   ├── license.rs       # 激活码验证 + 试用期逻辑
+│   ├── stealth.rs       # 隐性二次验证 + 渐进降级
+│   ├── usage.rs         # 使用时长/次数统计
+│   └── gate.rs          # 功能门控（综合判断）
 ```
 
-### 3.2 扩展端改造
+#### 3.1.2 导出函数（全部逻辑在 wasm 内）
 
-#### 3.2.1 新增文件
+| 函数 | 输入 | 输出 | 说明 |
+|------|------|------|------|
+| `init_trial(fingerprint)` | 设备指纹 | JSON `{blob, status, daysLeft}` | 初始化 7 天试用期 |
+| `verify_code(code, version)` | 激活码 + 版本号 | JSON `{valid, blob, error}` | 验证激活码（绑定版本） |
+| `check_license(blob)` | 加密 blob | JSON `{status, daysLeft, features, maxMessages}` | 检查授权状态 |
+| `track_usage(blob, action, ts)` | blob + 动作 + 时间戳 | JSON `{totalHours, totalActions, shouldCheck}` | 使用统计 + 是否触发隐性校验 |
+| `hidden_verify(blob)` | blob | JSON `{passed, degradeLevel}` | 隐性二次验证（静默） |
+| `feature_gate(blob, feature, degraded)` | blob + 功能名 + 降级状态 | JSON `{allowed, reason}` | 最终功能门控 |
+| `encrypt_data(data, key_seed)` | 明文 + 种子 | 加密字符串 | AES-256-CBC 加密 |
+| `decrypt_data(encrypted, key_seed)` | 密文 + 种子 | 明文字符串 | AES-256-CBC 解密 |
 
-**`src/utils/proxy-client.ts`** — 中转客户端
+> **可选·Phase2**：`check_blacklist(blob, bl_json)` — 远程黑名单拦截，等有用户量且出现盗版后再加
 
-职责：
-- 自动检测国内/海外环境
-- 封装所有中转 API 调用
-- 提供 `proxyChat`、`proxyChatStream`、`getXfyunToken`、`verifyLicense` 方法
+**关键原则：JS 只做调用壳，不做任何判断逻辑。所有 if/else、校验、计算都在 wasm 内部。**
 
-关键逻辑：
-```typescript
-async function detectRegion(): Promise<'overseas' | 'domestic'> {
-  try {
-    const controller = new AbortController()
-    setTimeout(() => controller.abort(), 2000)
-    await fetch(PROXY_URLS.overseas, { method: 'OPTIONS', signal: controller.signal })
-    return 'overseas'
-  } catch {
-    return 'domestic'
-  }
-}
-```
-
-#### 3.2.2 修改文件
-
-**`src/input/intent-detector.ts`** — Phase 1/2 AI 调用改走中转
-
-改前（第 151-259 行）：
-```typescript
-private async callAI(scene, systemPrompt, userContent, onChunk) {
-  const adapter = createAdapter(model.provider || settings.provider)
-  await adapter.chat({ baseUrl, apiKey, modelName, messages }, callback)
-}
-```
-
-改后：
-```typescript
-private async callAI(scene, systemPrompt, userContent, onChunk) {
-  if (onChunk) {
-    return await proxyChatStream({
-      userText: userContent,
-      systemPrompt,
-      recentMessages: this.options.getRecentMessages?.(),
-      modelId: this.options.getModelId?.(),
-    }, onChunk)
-  } else {
-    const result = await proxyChat({
-      userText: userContent,
-      systemPrompt,
-      recentMessages: this.options.getRecentMessages?.(),
-      modelId: this.options.getModelId?.(),
-    })
-    return result.reply
-  }
-}
-```
-
-**`src/input/pipeline.ts`** — Phase 2 流式 AI 调用改走中转
-
-改前（第 853-955 行）：
-```typescript
-private async callStreamingAI(...) {
-  const adapter = createAdapter(...)
-  await adapter.chat({ ... }, callback)
-  const tags = extractTags(fullResponse)
-  return { commands, needFull, rawAiOutput }
-}
-```
-
-改后：
-```typescript
-private async callStreamingAI(...) {
-  let fullResponse = ''
-  await proxyChatStream({
-    userText: userContent,
-    skeleton,
-    systemPrompt,
-    recentMessages,
-    modelId,
-  }, (delta) => { fullResponse += delta })
-
-  // 标签解析保留客户端（need_full/need_input 是流程控制）
-  const tags = extractTags(fullResponse)
-  return { commands: tags.commands, needFull: tags.needFull, needInput: tags.needInput, rawAiOutput: fullResponse }
-}
-```
-
-**`src/voice/voice-manager.ts`** — 讯飞鉴权走中转
-
-改前（第 191-206 行）：
-```typescript
-import('./engines/iflytek-engine').then(({ IflytekEngine }) => {
-  this.engine = new IflytekEngine(this.config.iflytekConfig!, { ... })
-})
-```
-
-改后：
-```typescript
-import { getXfyunToken } from '@/src/utils/proxy-client'
-
-const { url } = await getXfyunToken()
-this.engine = new IflytekEngine({ wsUrl: url }, { ... })
-```
-
-**`src/stores/voice.ts`** — 删除讯飞 Key 配置
-
-改前：
-```typescript
-iflytekApiKey: string
-iflytekAppId: string
-```
-
-改后：删除这两个字段（Key 存在中转服务端）
-
-**`wxt.config.ts`** — 添加 JS 混淆
-
-```typescript
-import JavaScriptObfuscator from 'webpack-obfuscator'
-
-export default defineConfig({
-  vite: () => ({
-    esbuild: { charset: 'ascii' },
-    build: { cssMinify: 'esbuild' },
-    plugins: [
-      process.env.NODE_ENV === 'production'
-        ? JavaScriptObfuscator({
-            compact: true,
-            controlFlowFlattening: true,
-            controlFlowFlatteningThreshold: 0.75,
-            deadCodeInjection: true,
-            deadCodeInjectionThreshold: 0.4,
-            stringArray: true,
-            stringArrayEncoding: ['rc4'],
-            stringArrayThreshold: 0.75,
-            transformObjectKeys: true,
-          })
-        : null,
-    ].filter(Boolean),
-  }),
-  manifest: {
-    host_permissions: [
-      '<all_urls>',
-      'https://*.workers.dev/*',
-      'https://*.myqcloud.com/*',
-    ],
-  },
-})
-```
-
-**`package.json`** — 添加依赖和脚本
-
-```json
-{
-  "scripts": {
-    "build:overseas": "bash -c \"wxt build --mode overseas\"",
-    "build:domestic": "bash -c \"wxt build --mode domestic\"",
-    "build:all": "npm run build:overseas && npm run build:domestic"
-  },
-  "devDependencies": {
-    "javascript-obfuscator": "^4.1.1",
-    "webpack-obfuscator": "^3.5.1"
-  }
-}
-```
-
-### 3.3 语音识别方案
-
-| 环境 | 引擎 | 说明 |
-|------|------|------|
-| 海外（Chrome 商店版） | Web Speech API | 浏览器内置，免费，Google 服务 |
-| 国内（.zip 分发版） | 讯飞 API | 免费 5 万次/天，中文识别率最高 |
-
-切换逻辑：
-- 扩展端通过环境变量 `VITE_VOICE_ENGINE` 决定默认引擎
-- 用户可在设置中手动切换
-- 讯飞鉴权 URL 从中转服务获取（Key 不暴露）
-
-### 3.4 激活码系统
-
-#### 3.4.1 激活码格式
+#### 3.1.3 激活码格式
 
 ```
 AIB-XXXX-XXXX-XXXX
 ├── AIB：固定前缀
-├── XXXX：4 位大写字母+数字
-└── 校验：最后 2 位是校验码
+├── 第 1 组 XXXX：version(1B) + expire_month(1B) + features(1B) + random(1B)
+├── 第 2 组 XXXX：expire_ts 低 4 字节的 base32 编码
+├── 第 3 组 XXXX：HMAC-SHA256(version + expire_ts + features, per_version_key) 前 4 字节
 ```
 
-#### 3.4.2 验证逻辑（服务端）
+**版本绑定**：HMAC 密钥由 `master_secret + version + build_seed` 派生，激活码只能在对应版本上验证通过。
+用户升级版本后需要重新激活（或生成工具支持多版本码）。
+
+#### 3.1.4 试用期逻辑
+
+```
+首次安装:
+  fingerprint = hash(chrome.runtime.id + userAgent + screen.width + screen.height + installTs)
+  blob = wasm.init_trial(fingerprint)
+  chrome.storage.local.set({ enc_blob: blob })
+
+每次启动:
+  blob = chrome.storage.local.get('enc_blob')
+  result = wasm.check_license(blob)
+  → { status: 'trial', daysLeft: 5, features: ['chat'], maxMessages: 50 }
+```
+
+#### 3.1.5 授权状态
+
+| 状态 | 含义 | 可用功能 |
+|------|------|---------|
+| `trial` | 试用期内（7 天） | 基础聊天（每天 50 条），语音🔒，自动化🔒 |
+| `active` | 已激活 | 全部功能（受隐性校验约束） |
+| `expired` | 试用期已过，未激活 | 仅提示激活，不可使用 |
+
+### 3.2 版本轮转机制（每次发布自动变化）
+
+#### 3.2.1 原理
+
+每次 `npm run build:store` 时，构建脚本自动生成随机 `build_seed`，同时影响：
+
+1. **JS 混淆参数**：`stringArrayEncoding` 的 key、`controlFlowFlatteningThreshold`、`deadCodeInjectionThreshold` 随机微调
+2. **Wasm 编译**：`build_seed` 嵌入 Rust 编译常量，影响 HMAC 派生密钥、隐性校验阈值、降级触发条件
+3. **版本号自动递增**：`package.json` 的 patch 版本 +1
+
+**效果**：
+- 每个版本的混淆 JS 完全不同（破解一个版本的 deobfuscate 脚本对下一个版本无效）
+- 每个版本的 wasm 二进制不同（即使提取 wasm，密钥也对不上其他版本）
+- 旧版本破解后，升级新版本需要重新破解（成本持续累积）
+
+#### 3.2.2 构建脚本流程
+
+```
+scripts/build-store.sh:
+
+1. 生成 build_seed = random 32 字节 hex
+2. 写入 .build-seed 文件
+3. 递增 package.json patch 版本号
+4. 读取当前版本号
+
+5. wasm-pack build --target web --release
+   (Cargo build.rs 读取 .build-seed，编译为 Rust 常量)
+
+6. wxt build
+
+7. node scripts/obfuscate.js --seed $build_seed
+   (混淆参数基于 seed 随机微调)
+
+8. zip -r lingbot-v$VERSION-$BUILD_SEED_SHORT.zip
+```
+
+#### 3.2.3 版本绑定激活码
 
 ```javascript
-function verifyLicense(code) {
-  if (!/^AIB-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(code)) {
-    return { valid: false, message: '激活码格式错误' }
+// scripts/gen-license.js
+// 生成时指定目标版本
+node gen-license.js --version 1.3.2 --days 30 --features voice,automation
+
+// wasm 验证时检查版本
+// verify_code("AIB-XXXX-XXXX-XXXX", "1.3.2")
+// → HMAC(version="1.3.2") 匹配 → valid
+// → 用在 v1.3.1 上 → HMAC(version="1.3.1") 不匹配 → invalid
+```
+
+### 3.3 隐性二次验证（防破解长期使用）
+
+#### 3.3.1 机制
+
+wasm 内部维护使用统计，随机触发静默校验：
+
+```
+触发条件（全部在 wasm 内计算，用户无法预测）：
+  - 累计使用时长达到随机阈值（48-96 小时之间，每次安装不同）
+  - 累计操作次数达到随机阈值（300-800 次之间）
+  - 距离上次校验超过随机时间（24-72 小时）
+
+触发时：
+  wasm.hidden_verify(blob)
+  ├─ 重新计算 fingerprint → 与 blob 中存储的对比
+  ├─ 重新验证 blob HMAC 签名
+  ├─ 检查使用时长是否合理（不能凭空跳变）
+  └─ 返回 { passed: true/false, degradeLevel: 0-3 }
+```
+
+#### 3.3.2 渐进式降级（看起来像 bug，不像防破解）
+
+**不弹任何提示，不告诉用户"验证失败"**。降级是渐进的、随机的，让用户以为是网络问题或 AI 服务不稳定：
+
+| 降级等级 | 表现 | 用户感知 |
+|---------|------|---------|
+| Level 0 | 正常 | 无感知 |
+| Level 1 | AI 回复前随机延迟 3-8 秒 | "网络有点慢" |
+| Level 2 | 10% 概率返回"AI 响应异常，请重试" | "服务不太稳定" |
+| Level 3 | 30% 概率失败 + 功能偶尔不可用 | "这软件 bug 太多" |
+
+**降级状态持久化**：写入加密 blob，wasm 每次启动读取。只有重新激活有效激活码才能清除降级。
+
+#### 3.3.3 JS 薄壳层调用
+
+```typescript
+// src/license/wasm-loader.ts
+// 每次用户操作（发送消息、执行命令）时调用
+function tick(action: 'chat' | 'voice' | 'automation') {
+  const usage = JSON.parse(track_usage(blob, action, Date.now()));
+  if (usage.shouldCheck) {
+    // 静默校验，不通知用户
+    const verify = JSON.parse(hidden_verify(blob));
+    if (!verify.passed) {
+      // 更新降级状态，用户无感知
+      degradeLevel = verify.degradeLevel;
+    }
   }
-  const parts = code.split('-').slice(1)
-  const hash = simpleHash(parts.join('') + CONFIG.LICENSE_SECRET)
-  const valid = hash % 97 === parseInt(parts[2].slice(-2), 36) % 97
-  return { valid, message: valid ? '激活成功' : '激活码无效' }
 }
 ```
 
-#### 3.4.3 免费版/付费版区分
+### 3.4 （可选·Phase2）远程静态黑名单
 
-| 功能 | 免费版 | 付费版（¥39/月） |
-|------|--------|----------------|
-| 文字指令 | 每天 10 次 | 无限 |
-| 语音控制 | ❌ | ✅ |
-| 多步骤任务 | ❌ | ✅ |
-| 激活码 | 不需要 | 需要输入 |
+> **暂不实施**，等有用户量且出现盗版后再加。不影响主流程。
 
-### 3.5 分发方案
+<details>
+<summary>展开查看方案设计（备忘）</summary>
 
-#### 3.5.1 海外版（Chrome 商店）
+**原理**：GitHub Pages 托管 `blacklist.json`，wasm 读取并拦截盗版机器码/泄露激活码。
 
-- 语音引擎：Web Speech API（默认）
-- 中转地址：Cloudflare Worker
-- 收款：Gumroad（邮箱注册，不需要信用卡）
-- 隐私政策：Neocities（免费）
-
-#### 3.5.2 国内版（.zip 自分发）
-
-- 语音引擎：讯飞 API（默认）
-- 中转地址：腾讯云函数
-- 分发渠道：蓝奏云 + free3v + 吾爱破解
-- 收款：爱发电（支付宝收款，自动发激活码）
-
-#### 3.5.3 环境变量
-
-`.env.overseas`：
-```
-VITE_PROXY_URL_OVERSEAS=https://ai-browser-proxy.xxx.workers.dev
-VITE_PROXY_URL_DOMESTIC=https://xxx.ap-guangzhou.myqcloud.com
-VITE_REGION=overseas
-VITE_VOICE_ENGINE=web-speech
+**`blacklist.json` 结构**：
+```json
+{
+  "blockedFingerprints": ["a1b2c3d4..."],
+  "blockedCodes": ["AIB-XK3M-P7N2-R9TQ"],
+  "minVersion": "1.3.1"
+}
 ```
 
-`.env.domestic`：
+**流程**：JS fetch JSON → 传入 wasm → 验签 + 匹配 → 命中则锁定
+
+**管理**：编辑 JSON → 提交 GitHub → 自动生效
+
+**注意**：破解者可删掉 JS 中的 fetch 调用绕过，因此这只是辅助手段。
+
+</details>
+
+### 3.5 全量 Wasm 逻辑（JS 只做薄壳）
+
+#### 3.5.1 Wasm 内部模块
+
 ```
-VITE_PROXY_URL_OVERSEAS=https://ai-browser-proxy.xxx.workers.dev
-VITE_PROXY_URL_DOMESTIC=https://xxx.ap-guangzhou.myqcloud.com
-VITE_REGION=domestic
-VITE_VOICE_ENGINE=iflytek
+license_bg.wasm 内部:
+├── crypto.rs        AES-256-CBC + HMAC-SHA256 + PBKDF2 密钥派生
+├── license.rs       激活码验证 + 试用期初始化 + 授权状态管理
+├── stealth.rs       隐性校验触发器 + 渐进降级状态机
+├── usage.rs         使用时长/次数统计（加密存储）
+└── gate.rs          功能门控（综合所有因素的最终判断）
 ```
+
+#### 3.5.2 JS 薄壳层职责（极简）
+
+```typescript
+// src/license/wasm-loader.ts — JS 只做这些事：
+// 1. 加载 wasm 模块
+// 2. 从 chrome.storage 读取加密 blob → 传给 wasm
+// 3. 调用 wasm 函数 → 读取返回结果
+// 4. 用户操作时调用 tick() → wasm 内部统计
+// 5. 把 wasm 返回的状态暴露给 Vue 组件
+
+// 不做任何 if/else 判断，不做任何校验逻辑
+// 所有判断都在 wasm 内部完成
+```
+
+### 3.6 JS 混淆（自建 crx 分发 + 版本轮转）
+
+#### 3.6.1 混淆配置（基于 build_seed 随机微调）
+
+```javascript
+// scripts/obfuscate.js
+const seed = process.argv.find(a => a.startsWith('--seed='))?.split('=')[1];
+const rng = seedRng(seed);  // 基于 seed 的确定性随机
+
+const options = {
+  compact: true,
+  controlFlowFlattening: true,
+  controlFlowFlatteningThreshold: 0.6 + rng() * 0.3,  // 0.6~0.9 随机
+  deadCodeInjection: true,
+  deadCodeInjectionThreshold: 0.2 + rng() * 0.3,      // 0.2~0.5 随机
+  stringArray: true,
+  stringArrayEncoding: ['base64'],
+  stringArrayThreshold: 0.6 + rng() * 0.3,             // 0.6~0.9 随机
+  transformObjectKeys: true,
+  splitStrings: true,
+  splitStringsChunkLength: 6 + Math.floor(rng() * 8),  // 6~13 随机
+};
+```
+
+#### 3.6.2 混淆目标
+
+构建产物中所有 `.js` 文件：
+- `background.js`
+- `content-scripts/content.js`
+
+### 3.7 本地存储加密
+
+#### 3.7.1 存储结构
+
+```javascript
+chrome.storage.local.get(['enc_blob', 'enc_usage'])
+// enc_blob:  "U2FsdGVkX1+..."  ← AES 加密的许可证数据
+// enc_usage: "U2FsdGVkX1+..."  ← AES 加密的使用统计
+```
+
+**`enc_blob` 解密后**：
+```json
+{
+  "status": "active",
+  "installTs": 1735689600000,
+  "expireTs": 1738368000000,
+  "fingerprint": "a1b2c3d4...",
+  "features": ["chat", "voice", "automation"],
+  "maxMessages": -1,
+  "hmac": "...",
+  "degradeLevel": 0,
+  "lastHiddenCheck": 1735776000000
+}
+```
+
+**`enc_usage` 解密后**：
+```json
+{
+  "totalHours": 12.5,
+  "totalActions": 342,
+  "dailyUsed": 8,
+  "dailyResetDate": "2026-06-28",
+  "lastTickTs": 1735776000000,
+  "nextCheckThreshold": 67.3
+}
+```
+
+#### 3.7.2 防篡改机制
+
+- AES 密钥由 wasm 内部派生，JS 层不可见
+- 每个 blob 都有 HMAC 签名，wasm 解密后先验签
+- 指纹绑定：换设备后试用期不继承
+- 时间合理性检查：expireTs 不能早于 installTs，不能超过合理范围
+- 使用统计防跳变：totalHours 不能凭空增加（与实际 tick 频率对比）
+
+### 3.8 激活码生成工具
+
+#### 3.8.1 工具文件
+
+`scripts/gen-license.js` — 私有脚本，不随扩展分发
+
+```bash
+# 生成 100 个 30 天激活码（绑定版本 1.3.2）
+node scripts/gen-license.js --version 1.3.2 --count 100 --days 30 --features voice,automation
+
+# 输出 licenses.csv
+# AIB-XK3M-P7N2-R9TQ,1.3.2,2026-07-28,voice|automation
+# AIB-L5F8-W2J6-H4Y1,1.3.2,2026-07-28,voice|automation
+```
+
+#### 3.8.2 销售渠道
+
+| 渠道 | 地区 | 收款 | 自动发码 |
+|------|------|------|---------|
+| Gumroad | 海外 | 信用卡/PayPal | ✅ 邮箱自动发码 |
+| 爱发电 | 国内 | 支付宝 | ✅ 自动发码（需配置） |
+| 手动分发 | 全球 | 微信/红包 | ❌ 手动 |
 
 ---
 
 ## 4. 文件变更清单
 
-### 4.1 新增文件（5 个）
+### 4.1 新增文件（15 个）
 
 | 文件 | 用途 |
 |------|------|
-| `src/utils/proxy-client.ts` | 中转 API 客户端 |
-| `workers/ai-proxy.js` | Cloudflare Worker 代码 |
-| `tencent-scf/index.js` | 腾讯云函数代码 |
-| `.env.domestic` | 国内版环境变量 |
-| `.env.overseas` | 海外版环境变量 |
+| `wasm-license/Cargo.toml` | Rust crate 配置 |
+| `wasm-license/build.rs` | 构建脚本（读取 .build-seed 嵌入常量） |
+| `wasm-license/src/lib.rs` | wasm 主入口，导出函数 |
+| `wasm-license/src/crypto.rs` | AES-256-CBC + HMAC-SHA256 + PBKDF2 |
+| `wasm-license/src/license.rs` | 激活码验证 + 试用期逻辑 |
+| `wasm-license/src/stealth.rs` | 隐性二次验证 + 渐进降级状态机 |
+| `wasm-license/src/usage.rs` | 使用时长/次数统计 |
+| `wasm-license/src/gate.rs` | 功能门控（综合判断） |
+| `public/wasm/license.js` | wasm-bindgen 生成的 JS 胶水层（构建产物） |
+| `public/wasm/license_bg.wasm` | Rust 编译的 wasm 二进制（构建产物） |
+| `src/license/wasm-loader.ts` | JS 加载 wasm 的封装层（薄壳） |
+| `src/stores/license.ts` | Pinia license store（状态管理） |
+| `scripts/obfuscate.js` | JS 混淆脚本（版本轮转） |
+| `scripts/gen-license.js` | 激活码生成工具（私有，不分发） |
+| `scripts/build-store.sh` | 完整构建脚本（wasm + wxt + 混淆 + zip） |
 
-### 4.2 修改文件（6 个）
+### 4.2 修改文件（8 个）
 
 | 文件 | 改动内容 |
 |------|---------|
-| `src/input/intent-detector.ts` | `callAI` 方法改走 `proxyChat`/`proxyChatStream` |
-| `src/input/pipeline.ts` | `callStreamingAI` 方法改走 `proxyChatStream` |
-| `src/voice/voice-manager.ts` | 讯飞鉴权改走 `getXfyunToken` |
-| `src/stores/voice.ts` | 删除 `iflytekApiKey`/`iflytekAppId` 字段 |
-| `wxt.config.ts` | 添加 JS 混淆插件 + host_permissions |
-| `package.json` | 添加 `javascript-obfuscator` 依赖 + 打包脚本 |
+| `wxt.config.ts` | `web_accessible_resources` 添加 `wasm/*.js` + `wasm/*.wasm` |
+| `package.json` | 添加 `javascript-obfuscator` 依赖 + 构建脚本 |
+| `entrypoints/content/App.vue` | `onMounted` 时初始化 `licenseStore.init()` |
+| `entrypoints/content/components/SettingsModal.vue` | 实现 `activateLicense()`，接入 licenseStore |
+| `src/voice/voice-manager.ts` | `start()` 方法开头调用 `tick('voice')` + `feature_gate` |
+| `src/input/pipeline.ts` | `executeCommand()` 调用 `tick('automation')` + `feature_gate` |
+| `src/i18n/zh-CN.json` | 新增 license 相关文案 |
+| `src/i18n/en-US.json` | 同上英文版 |
 
 ### 4.3 不修改的文件
 
 | 文件 | 原因 |
 |------|------|
-| 所有 Vue 组件 | UI 层，不需要改 |
-| `src/browser/action-executor.ts` | DOM 操作，不需要改 |
-| `src/browser/skeleton.ts` | 骨架提取，不需要改 |
+| 所有 Vue 组件（除 SettingsModal） | UI 层不需要改 |
+| `src/adapters/*.ts` | AI 适配器不受授权影响 |
+| `src/browser/action-executor.ts` | DOM 操作由 pipeline 门控 |
 | `src/voice/web-speech-engine.ts` | 纯浏览器 API |
 | `src/voice/broadcast.ts` | TTS 播报 |
 | `src/voice/wake-word.ts` | 唤醒词检测 |
-| `src/input/tag-parser.ts` | 标签解析保留客户端 |
-| `src/input/prompts/*.ts` | 保留客户端（中转也有副本，用于无 systemPrompt 时的默认值） |
-| `src/adapters/*.ts` | 保留（用户自定义 Key 直连模式需要） |
+| `src/input/tag-parser.ts` | 标签解析 |
+| `src/input/prompts/*.ts` | Prompt 模板 |
+| `src/utils/*.ts` | 工具函数 |
 
 ---
 
 ## 5. 实施计划
 
-### 第 1 天：中转服务部署
+### 第 1 天：Rust Wasm 模块
 
-1. 创建 `src/utils/proxy-client.ts`
-2. 创建 `workers/ai-proxy.js`（迁移 prompt）
-3. 注册 Cloudflare，部署 Worker，拿到地址
-4. 创建 `tencent-scf/index.js`（复制 Worker 逻辑）
-5. 注册腾讯云，部署云函数，拿到地址
+1. 安装 Rust 工具链（rustup + wasm-pack + wasm32 target）
+2. 创建 `wasm-license/` crate
+3. 实现 `crypto.rs`（AES-256-CBC + HMAC-SHA256 + PBKDF2）
+4. 实现 `license.rs`（激活码验证 + 试用期逻辑）
+5. 实现 `usage.rs`（使用统计）
+6. 实现 `stealth.rs`（隐性验证 + 降级）
+7. 实现 `gate.rs`（功能门控）
+8. 实现 `build.rs`（读取 build-seed 嵌入常量）
+9. `wasm-pack build --target web --release` 编译
 
-### 第 2 天：扩展端改造
+### 第 2 天：JS 集成
 
-1. 修改 `src/input/intent-detector.ts`（callAI 走中转）
-2. 修改 `src/input/pipeline.ts`（callStreamingAI 走中转）
-3. 修改 `src/voice/voice-manager.ts`（讯飞鉴权走中转）
-4. 修改 `src/stores/voice.ts`（删除 Key 配置）
-5. 创建 `.env.domestic` 和 `.env.overseas`
+1. 创建 `src/license/wasm-loader.ts`（wasm 薄壳加载层）
+2. 创建 `src/stores/license.ts`（Pinia store）
+3. 修改 `entrypoints/content/App.vue`（初始化 license）
+4. 修改 `SettingsModal.vue`（实现 activateLicense）
+5. 修改 `wxt.config.ts`（添加 wasm 资源声明）
+6. 测试：试用期初始化、激活码验证、状态切换
 
-### 第 3 天：JS 混淆 + 打包
+### 第 3 天：功能门控 + 隐性校验
 
-1. 安装 `javascript-obfuscator` + `webpack-obfuscator`
-2. 修改 `wxt.config.ts`
-3. 修改 `package.json`（添加脚本）
-4. 测试海外版打包（`npm run build:overseas`）
-5. 测试国内版打包（`npm run build:domestic`）
+1. 修改 `src/voice/voice-manager.ts`（语音门控 + tick）
+2. 修改 `src/input/pipeline.ts`（自动化门控 + tick）
+3. 测试：隐性二次验证触发、渐进降级效果
+4. 修改 `src/i18n/zh-CN.json` + `en-US.json`
 
-### 第 4 天：测试
+### 第 4 天：混淆 + 版本轮转 + 打包
 
-1. 测试海外版：Web Speech API + Cloudflare Worker
-2. 测试国内版：讯飞 API + 腾讯云函数
-3. 测试 prompt 不在 Network 面板暴露
-4. 测试激活码验证
-5. 测试用户自定义 Key 走中转
+1. `npm install javascript-obfuscator --save-dev`
+2. 创建 `scripts/obfuscate.js`（版本轮转混淆）
+3. 创建 `scripts/build-store.sh`（完整构建流程）
+4. 创建 `scripts/gen-license.js`（激活码生成）
+5. 修改 `package.json`（添加脚本）
+6. 测试 `npm run build:store` 完整流程
 
-### 第 5 天：上架
+### 第 5 天：测试 + 上架
 
-1. Chrome 商店上传海外版（$5 注册费）
-2. 蓝奏云上传国内版
-3. free3v 做下载页
-4. 吾爱破解发帖
-5. 爱发电上架激活码
+1. 完整 E2E 测试：安装 → 试用 → 激活 → 过期 → 重新激活
+2. 测试篡改 storage → wasm 校验失败
+3. 测试换设备 → 试用期不继承
+4. 测试隐性降级（长时间使用后）
+5. 测试版本轮转（连续构建两次，产物不同）
+6. 准备分发材料
+7. 上传 GitHub Releases / 蓝奏云
 
 ---
 
@@ -498,33 +530,45 @@ VITE_VOICE_ENGINE=iflytek
 
 | 项目 | 费用 |
 |------|------|
-| Cloudflare Worker | 免费（10 万次/天） |
-| 腾讯云函数 | 免费（100 万次/月） |
-| Chrome 商店注册 | $5（一次性，约 ¥36） |
-| 讯飞语音 API | 免费（5 万次/天） |
-| Web Speech API | 免费（浏览器内置） |
-| 蓝奏云 | 免费 |
-| free3v | 免费 |
+| Rust 工具链 | 免费 |
+| wasm-pack | 免费 |
+| javascript-obfuscator | 免费 |
 | Gumroad | 免费（抽成 10%） |
 | 爱发电 | 免费（抽成 5-6%） |
-| **总计** | **¥36（一次性）** |
+| GitHub Releases | 免费 |
+| 蓝奏云 | 免费 |
+| **总计** | **¥0** |
 
 ---
 
 ## 7. 验收标准
 
-- [ ] 打开 DevTools → Network → 发送消息 → 请求体里没有 prompt
-- [ ] 请求体只有 `{ action: "chat", data: { userText: "..." } }`
-- [ ] API Key 不在任何请求里出现
-- [ ] 海外版自动连接 Cloudflare Worker
-- [ ] 国内版自动连接腾讯云函数
-- [ ] JS 混淆后代码可读性极低
-- [ ] 激活码验证正常工作
-- [ ] Web Speech API 语音识别正常（海外版）
-- [ ] 讯飞 API 语音识别正常（国内版）
-- [ ] 用户自定义 Key 走中转正常
-- [ ] Chrome 商店审核通过（海外版）
-- [ ] .zip 国内版可正常安装使用
+### 基础功能
+- [ ] `npm run build:store` 成功编译完整产物
+- [ ] 首次安装自动进入 7 天试用期
+- [ ] 试用期只能使用基础聊天（每天 50 条），语音和自动化显示🔒
+- [ ] 输入有效激活码后，status 变为 active，所有功能解锁
+- [ ] 激活码过期后，功能降级回 expired 状态
+
+### 加密与防篡改
+- [ ] chrome.storage.local 中的 license 数据是 AES 加密的，无法直接读取
+- [ ] 手动修改 chrome.storage 中的加密数据后，wasm 校验失败
+- [ ] 换设备（不同 fingerprint）后试用期不继承
+
+### 版本轮转
+- [ ] 连续运行两次 `npm run build:store`，产出的 JS 混淆结果不同
+- [ ] 连续运行两次，产出的 wasm 二进制不同（build_seed 不同）
+- [ ] 旧版本激活码在新版本上验证失败
+
+### 隐性二次验证
+- [ ] 激活后累计使用一定时长/次数后，wasm 触发 hidden_verify
+- [ ] 验证失败时渐进降级（延迟、随机失败），无任何提示
+- [ ] 降级状态持久化，重启后仍保持
+
+### 混淆与打包
+- [ ] 混淆后的扩展能正常安装和运行
+- [ ] 混淆后 JS 可读性极低（变量名随机、控制流扁平化、死代码注入）
+- [ ] wasm 二进制无法直接阅读
 
 ---
 
@@ -532,8 +576,28 @@ VITE_VOICE_ENGINE=iflytek
 
 | 风险 | 影响 | 应对 |
 |------|------|------|
-| Cloudflare Worker 国内访问慢 | 国内用户体验差 | 自动降级到腾讯云函数 |
-| 腾讯云函数需要实名 | 泄露身份 | 用家人身份注册 |
-| Chrome 商店审核拒绝 | 海外无法分发 | 修改后重新提交 |
-| 讯飞免费额度用完 | 语音不可用 | 用户可切换 Web Speech API |
-| JS 混淆被逆向 | 核心逻辑泄露 | 混淆只是增加难度，prompt 在服务端才是真正的保护 |
+| Rust 工具链安装复杂 | 开发环境搭建慢 | 提供详细安装文档；备选 AssemblyScript |
+| wasm 被提取逆向 | 核心逻辑泄露 | 混淆 + wasm 双重保护 + 版本轮转 |
+| 用户篡改时间戳 | 绕过试用期 | wasm 检查时间合理性 + 隐性验证 |
+| 激活码被批量生成 | 收入损失 | HMAC 在 wasm 中 + 版本绑定 |
+| wasm 增加扩展体积 | 下载变慢 | `opt-level = "s"` + LTO + strip，预期 < 100KB |
+| Chrome 沙箱兼容性 | 扩展崩溃 | 不开 selfDefending / debugProtection |
+| 用户改 JS 绕过门控 | 免费用付费功能 | 全量逻辑在 wasm，JS 只是调用壳 |
+| 隐性降级被用户发现 | 差评 | 降级表现像自然 bug，不暴露防破解意图 |
+| 旧版本被长期使用 | 安全风险 | 版本轮转 + 激活码绑定版本号 |
+
+---
+
+## 9. 备选方案：AssemblyScript
+
+如果 Rust 工具链安装困难，可用 AssemblyScript 替代：
+
+| 对比 | Rust → wasm | AssemblyScript → wasm |
+|------|------------|----------------------|
+| 语法 | Rust（学习曲线陡） | TypeScript-like（前端友好） |
+| 工具链 | rustup + wasm-pack | npm install assemblyscript |
+| wasm 体积 | ~50-80KB | ~30-50KB |
+| 安全性 | 更高（内存安全 + 编译优化） | 较高（wasm 层面等价） |
+| 开发速度 | 较慢 | 较快 |
+
+**结论**：优先 Rust，如果环境搞不定就切 AssemblyScript。两者产出的 wasm 在逆向难度上没有本质区别。

@@ -55,7 +55,7 @@ const DEFAULT_SETTINGS: VoiceSettings = {
   enableTts: true,
   ttsRate: 2.0,
   ttsVolume: 0.8,
-  bufferTimeout: 1000,
+  bufferTimeout: 1500,
   idleTimeout: 3000,
 }
 

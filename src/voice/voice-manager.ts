@@ -17,7 +17,7 @@ import type { VoiceEngine, VoiceEngineStatus } from './engines/types'
 
 const log = new Logger('VoiceManager')
 
-const DEFAULT_COMMAND_TIMEOUT = 2000
+const DEFAULT_COMMAND_TIMEOUT = 1500
 const DEFAULT_IDLE_TIMEOUT = 3000
 /** 唤醒冷却时间：防止同一句话重复触发 */
 const WAKE_COOLDOWN = 3000
@@ -130,11 +130,13 @@ export class VoiceManager {
     if (config.idleTimeout !== undefined) this.config.idleTimeout = config.idleTimeout
   }
 
-  /** 播报文字。空文本仅恢复状态。引擎不 pause。 */
+  /** 播报文字。播报期间暂停引擎，防止 TTS 声音被识别。 */
   async speak(text: string): Promise<void> {
     if (text && this.config.enableTts) {
       this.setState('speaking')
+      this.engine?.pause()
       await this.broadcast.speak(text)
+      this.engine?.resume()
     }
     // 只在状态仍是 speaking 时才切换（防止被打断时覆盖 processing 状态）
     if (this._isActive && this._state === 'speaking') {
@@ -239,6 +241,15 @@ export class VoiceManager {
 
     // speaking → 打断播报
     if (this._state === 'speaking') {
+      // 冷却期内的唤醒词 final 结果是 interim 触发的残留，忽略
+      const cooldownOk = Date.now() - this.lastWakeTime > WAKE_COOLDOWN
+      if (!cooldownOk && this.wakeWordDetector) {
+        const { matched } = this.wakeWordDetector.matchWakeWord(text, false)
+        if (matched) {
+          log.info('播报中忽略冷却期内的唤醒词残留', { text })
+          return
+        }
+      }
       log.info('播报中打断', { text })
       this.broadcast.cancel()
       // 检查是否是唤醒词
@@ -451,5 +462,20 @@ export class VoiceManager {
       this.speechBuffer = []
       if (this.bufferTimer) { clearTimeout(this.bufferTimer); this.bufferTimer = null }
     }
+    // 进入 wake/command 时检查引擎健康，死了就重启
+    if ((state === 'wake' || state === 'command') && this._isActive) {
+      this.ensureEngineAlive()
+    }
+  }
+
+  /** 检查引擎是否还活着，死了就重启 */
+  private ensureEngineAlive(): void {
+    const alive = this.engine?.isAlive()
+    const hasRecognition = (this.engine as any)?.recognition !== null
+    log.info('引擎健康检查', { alive, hasRecognition, isActive: this.engine?.isActive, status: this.engine?.status })
+    if (alive) return
+    log.warn('引擎已死亡，重启中...')
+    this.engine?.stop()
+    this.engine?.start()
   }
 }

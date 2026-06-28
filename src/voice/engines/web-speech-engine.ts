@@ -70,6 +70,8 @@ export class WebSpeechEngine implements VoiceEngine {
   private config: Required<VoiceEngineConfig>
   private restartTimer: ReturnType<typeof setTimeout> | null = null
   private _paused = false
+  /** 上一个错误是 aborted，onend 延迟重启而非立即重启 */
+  private _aborted = false
 
   onResult: ((text: string, isFinal: boolean, confidence: number) => void) | null = null
   onError: ((error: string) => void) | null = null
@@ -91,6 +93,11 @@ export class WebSpeechEngine implements VoiceEngine {
     return this._status
   }
 
+  /** 检查引擎是否还活着（recognition 实例存在且 _isActive） */
+  isAlive(): boolean {
+    return this._isActive && this.recognition !== null
+  }
+
   /** 检查浏览器是否支持 */
   static isSupported(): boolean {
     return !!(window.SpeechRecognition || window.webkitSpeechRecognition)
@@ -108,6 +115,7 @@ export class WebSpeechEngine implements VoiceEngine {
       return
     }
 
+    this._aborted = false
     this.recognition = new SpeechRecognition()
     this.recognition.lang = this.config.lang
     this.recognition.continuous = this.config.continuous
@@ -131,7 +139,14 @@ export class WebSpeechEngine implements VoiceEngine {
     }
 
     this.recognition.onerror = (event: any) => {
-      log.warn('Error:', event.error)
+      log.warn(`Error: ${event.error}, isActive=${this._isActive}, recognition=${!!this.recognition}`)
+
+      // aborted → 标记，阻止 onend 立即重启（延迟 2s 重试）
+      if (event.error === 'aborted') {
+        this._aborted = true
+        this.clearRestartTimer()
+        return
+      }
 
       if (event.error === 'no-speech' || event.error === 'audio-capture') {
         this.scheduleRestart(1000)
@@ -155,8 +170,18 @@ export class WebSpeechEngine implements VoiceEngine {
     }
 
     this.recognition.onend = () => {
-      // pause 状态下不重启，避免 aborted 风暴
+      log.info(`onend fired, isActive=${this._isActive}, paused=${this._paused}, aborted=${this._aborted}`)
+      // pause 状态下不重启
       if (this._paused) return
+
+      // aborted 后延迟 2s 重启（避免 300ms 立即重试又撞上竞争者）
+      if (this._aborted) {
+        this._aborted = false
+        if (this._isActive) {
+          this.scheduleRestart(2000)
+        }
+        return
+      }
 
       if (this._isActive && this.config.continuous) {
         this.scheduleRestart(300)
@@ -184,6 +209,7 @@ export class WebSpeechEngine implements VoiceEngine {
     log.info('停止语音识别')
     this._isActive = false
     this._paused = false
+    this._aborted = false
     this.clearRestartTimer()
 
     if (this.recognition) {
@@ -230,16 +256,23 @@ export class WebSpeechEngine implements VoiceEngine {
 
   private scheduleRestart(delay: number): void {
     this.clearRestartTimer()
+    log.info(`scheduleRestart(${delay}), isActive=${this._isActive}, recognition=${!!this.recognition}`)
     this.restartTimer = setTimeout(() => {
-      if (!this._isActive) return
+      if (!this._isActive) {
+        log.info('scheduleRestart 跳过: isActive=false')
+        return
+      }
 
       if (this.recognition) {
         try {
           this.recognition.start()
           this.updateStatus('listening')
-        } catch {
-          // 忽略
+          log.info('scheduleRestart: recognition.start() 成功')
+        } catch (e) {
+          log.warn('scheduleRestart: recognition.start() 失败', e)
         }
+      } else {
+        log.warn('scheduleRestart 跳过: recognition=null')
       }
     }, delay)
   }
