@@ -1,157 +1,28 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue'
+import { ref, watch } from 'vue'
 import { useI18n } from '@/src/i18n'
 import { useVoiceStore } from '@/src/stores/voice'
 import { useConversationsStore } from '@/src/stores/conversations'
-import { useSettingsStore } from '@/src/stores/settings'
-import { usePipeline } from '@/src/composables/usePipeline'
-import { VoiceManager } from '@/src/voice/voice-manager'
-import { Logger } from '@/src/utils/logger'
 import type { SessionState } from '@/src/stores/voice'
-import type { VoiceManagerState } from '@/src/voice/voice-manager'
 import MessageList from './MessageList.vue'
 
 const { t } = useI18n()
 const emit = defineEmits<{ (e: 'switch-chat'): void }>()
-const log = new Logger('VoicePanel')
 const voiceStore = useVoiceStore()
 const convStore = useConversationsStore()
-const settingsStore = useSettingsStore()
-const pipeline = usePipeline()
 const messageListRef = ref<InstanceType<typeof MessageList> | null>(null)
 
-let manager: VoiceManager | null = null
-
-/** 启动语音监听 */
-function startListening() {
-  if (!convStore.conversation) return
-  manager?.start()
-}
-
-/** 停止语音监听 */
-function stopListening() {
-  manager?.stop()
-}
-
-/** 清理 markdown 格式 */
-function stripMarkdown(text: string): string {
-  return text
-    .replace(/\*\*(.+?)\*\*/g, '$1')
-    .replace(/\*(.+?)\*/g, '$1')
-    .replace(/`(.+?)`/g, '$1')
-    .replace(/```[\s\S]*?```/g, '')
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
-    .replace(/[#*_~>|]/g, '')
-    .replace(/\n{2,}/g, '。')
-    .trim()
-}
-
-// TTS：已播报的 msgId 集合
-const spokenMsgIds = new Set<string>()
-
-/** 优化 TTS 文本：决定播报什么 */
-function getSpeakText(msg: { role: string; content: string }): string | null {
-  if (msg.role !== 'assistant') return null
-  const c = msg.content
-
-  // 命令执行成功 → "好的"
-  if (c.startsWith('已执行：')) return '好的'
-
-  // 下载/导出文件 → "文件已下载"
-  if (c.includes('[FILE:') || c.includes('[FILE：')) return '文件已下载'
-
-  // 占位消息 → 跳过
-  if (c === '正在执行操作...') return null
-
-  // 错误 → 播报
-  if (c.startsWith('❌')) return stripMarkdown(c)
-
-  // 需要输入 → 播报
-  if (c.startsWith('💬')) return stripMarkdown(c)
-
-  // 跳过：执行中、重试、用户输入、停止、成功标记
-  if (c.startsWith('🔧') || c.startsWith('🔄') || c.startsWith('📝') ||
-      c.startsWith('⏹') || c.startsWith('✅')) return null
-
-  // 聊天回复（含 summarize 分析结果）→ 播报原文
-  return stripMarkdown(c)
-}
-
-// TTS：watch assistant 消息
-watch(
-  () => {
-    const msgs = convStore.conversation?.messages
-    if (!msgs?.length) return ''
-    const last = msgs[msgs.length - 1]
-    return `${last.role}:${last.status}:${last.content}`
-  },
-  (val) => {
-    if (!manager?.isActive || !val) return
-    const msgs = convStore.conversation?.messages
-    if (!msgs?.length) return
-    const lastMsg = msgs[msgs.length - 1]
-    if (lastMsg.role === 'assistant' && lastMsg.status === 'done') {
-      if (spokenMsgIds.has(lastMsg.id)) return
-      spokenMsgIds.add(lastMsg.id)
-      if (spokenMsgIds.size > 100) {
-        const arr = [...spokenMsgIds]
-        arr.slice(0, 50).forEach(id => spokenMsgIds.delete(id))
-      }
-      // 根据消息类型决定是否播报
-      const speakText = getSpeakText(lastMsg)
-      if (speakText) manager.speak(speakText)
-    }
-  },
-)
-
-// 新消息自动滚动到底部（flush: post 确保 DOM 更新后再执行）
+// 新消息自动滚动到底部
 watch(
   () => convStore.conversation?.messages.length,
-  (len) => {
-    log.info('scroll watcher 触发', { len, hasRef: !!messageListRef.value })
-    // 延迟 200ms 确保 MessageList 完全渲染
+  () => {
     setTimeout(() => {
-      log.info('scroll setTimeout 执行', { hasRef: !!messageListRef.value })
       messageListRef.value?.jumpToBottom()
     }, 200)
   },
   { flush: 'post' },
 )
 
-// need_input：pipeline 等待用户输入时，语音自动提供输入
-watch(
-  () => pipeline.waitingInputPrompt.value,
-  (prompt) => {
-    if (!prompt || !manager?.isActive) return
-    log.info('pipeline 等待语音输入', { prompt })
-    // 播报提示
-    manager.speak(prompt)
-    // 临时切换 onProcessText：下一条语音命令作为输入提供给 pipeline
-    const originalHandler = manager.onProcessText
-    manager.onProcessText = async (text: string) => {
-      log.info('语音提供输入', { text })
-      pipeline.provideInput(text)
-      // 恢复原始 handler
-      manager!.onProcessText = originalHandler
-    }
-  },
-)
-
-// 设置变更 → 销毁旧 manager，延迟重建
-watch(
-  () => voiceStore.settingsVersion,
-  (ver) => {
-    log.info('语音设置变更，重建管理器', { ver })
-    if (manager) {
-      manager.destroy()
-      manager = null
-    }
-    initManager()
-    startListening()
-  },
-)
-
-// 获取状态文字
 function getStatusText(state: SessionState): string {
   switch (state) {
     case 'wake': return '等待唤醒词...'
@@ -161,96 +32,6 @@ function getStatusText(state: SessionState): string {
     default: return t('voice.listening')
   }
 }
-
-// 标签页可见性 → 只有当前活跃标签页保持监听
-function handleVisibilityChange() {
-  if (document.hidden) {
-    log.info('标签页隐藏，暂停监听')
-    stopListening()
-  } else {
-    log.info('标签页可见，恢复监听')
-    startListening()
-  }
-}
-
-// 初始化语音管理器
-function initManager() {
-  const s = voiceStore.settings
-
-  manager = new VoiceManager({
-    engineType: s.engineType,
-    iflytekConfig: s.engineType === 'iflytek' ? {
-      appId: s.iflytekAppId,
-      apiKey: s.iflytekApiKey,
-    } : undefined,
-    lang: s.recognitionLang,
-    wakeWord: s.wakeWord,
-    enableTts: s.enableTts,
-    ttsRate: s.ttsRate,
-    ttsVolume: s.ttsVolume,
-    bufferTimeout: s.bufferTimeout,
-    idleTimeout: s.idleTimeout,
-    onStateChange: (state: VoiceManagerState) => {
-      const stateMap: Record<VoiceManagerState, SessionState> = {
-        idle: 'idle',
-        wake: 'wake',
-        command: 'command',
-        processing: 'processing',
-        speaking: 'speaking',
-      }
-      voiceStore.setSessionState(stateMap[state])
-    },
-    onInterimText: (text) => {
-      voiceStore.updateText(text, false)
-    },
-    onUserMessage: (text) => {
-      voiceStore.updateText(text, true)
-      // 用户说的话显示为消息
-      if (convStore.conversation) {
-        convStore.conversation.messages.push({
-          id: Date.now().toString(),
-          role: 'user',
-          content: text,
-          timestamp: Date.now(),
-          status: 'done',
-        })
-      }
-    },
-    onError: (error) => {
-      log.error('语音错误', error)
-      // 语音播报错误，让用户知道发生了什么
-      manager?.speak(error)
-    },
-    onAbortProcess: () => {
-      log.info('打断当前处理')
-      pipeline.abort()
-    },
-  })
-
-  manager.onProcessText = async (text: string) => {
-    try {
-      await pipeline.processInput(text)
-    } catch (error) {
-      log.error('管线处理失败', error)
-    }
-  }
-}
-
-onMounted(async () => {
-  log.info('VoicePanel 已挂载')
-  await voiceStore.initSettings()
-  initManager()
-  startListening()
-  document.addEventListener('visibilitychange', handleVisibilityChange)
-})
-
-onUnmounted(() => {
-  log.info('VoicePanel 已卸载')
-  document.removeEventListener('visibilitychange', handleVisibilityChange)
-  stopListening()
-  manager?.destroy()
-  manager = null
-})
 </script>
 
 <template>

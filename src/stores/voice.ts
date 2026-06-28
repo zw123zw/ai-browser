@@ -35,6 +35,7 @@ export interface VoiceSettings {
 
   // 🔔 唤醒词
   wakeWord: string
+  alwaysOnVoice: boolean
 
   // 🔊 TTS
   enableTts: boolean
@@ -52,6 +53,7 @@ const DEFAULT_SETTINGS: VoiceSettings = {
   iflytekAppId: '',
   recognitionLang: 'zh-CN',
   wakeWord: '你好，小灵',
+  alwaysOnVoice: false,
   enableTts: true,
   ttsRate: 1.5,
   ttsVolume: 0.8,

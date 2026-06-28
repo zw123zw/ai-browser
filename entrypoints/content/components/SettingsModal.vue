@@ -403,6 +403,7 @@ const voiceForm = reactive({
   iflytekApiKey: voiceStore.settings.iflytekApiKey,
   recognitionLang: voiceStore.settings.recognitionLang,
   wakeWord: voiceStore.settings.wakeWord,
+  alwaysOnVoice: voiceStore.settings.alwaysOnVoice,
   enableTts: voiceStore.settings.enableTts,
   ttsRate: voiceStore.settings.ttsRate,
   ttsVolume: voiceStore.settings.ttsVolume,
@@ -417,6 +418,7 @@ function saveVoice() {
     iflytekApiKey: voiceForm.iflytekApiKey,
     recognitionLang: voiceForm.recognitionLang,
     wakeWord: voiceForm.wakeWord,
+    alwaysOnVoice: voiceForm.alwaysOnVoice,
     enableTts: voiceForm.enableTts,
     ttsRate: voiceForm.ttsRate,
     ttsVolume: voiceForm.ttsVolume,
@@ -1225,6 +1227,18 @@ function importModels(e: Event) {
                 :placeholder="t('settings.voice.wakeWordPlaceholder')"
                 class="aib-input"
               />
+            </div>
+            <div class="aib-form-row">
+              <label>{{ t('settings.voice.alwaysOnVoice') }}</label>
+              <span class="aib-form-hint">{{ t('settings.voice.alwaysOnVoiceHint') }}</span>
+              <label class="aib-switch">
+                <input
+                  type="checkbox"
+                  :checked="voiceForm.alwaysOnVoice"
+                  @change="voiceForm.alwaysOnVoice = ($event.target as HTMLInputElement).checked"
+                />
+                <span class="aib-switch-slider" />
+              </label>
             </div>
 
             <!-- 🔊 语音播报 -->

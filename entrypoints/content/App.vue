@@ -8,6 +8,9 @@ import NoteViewerDialog from './components/NoteViewerDialog.vue';
 import ToastContainer from './components/ToastContainer.vue';
 import { useSettingsStore } from '@/src/stores/settings';
 import { useConversationsStore } from '@/src/stores/conversations';
+import { useVoiceStore } from '@/src/stores/voice';
+import { usePipeline } from '@/src/composables/usePipeline';
+import { VoiceManager } from '@/src/voice/voice-manager';
 import { useNotesStore } from '@/src/stores/notes';
 import { matchShortcut } from '@/src/utils/shortcut';
 import { getThemeById } from '@/src/themes';
@@ -27,7 +30,120 @@ const rootEl = ref<HTMLElement | null>(null);
 const settingsStore = useSettingsStore();
 const convStore = useConversationsStore();
 const notesStore = useNotesStore();
+const voiceStore = useVoiceStore();
+const pipeline = usePipeline();
 const { setLocale } = useI18n();
+
+// ========== 统一语音管理（App.vue 持有，VoicePanel 只显示） ==========
+let bgManager: VoiceManager | null = null
+const spokenMsgIds = new Set<string>()
+
+function stripMarkdown(text: string): string {
+  return text.replace(/\*\*(.+?)\*\*/g, '$1').replace(/`(.+?)`/g, '$1').replace(/[#*_~>|]/g, '').trim()
+}
+
+function getSpeakText(msg: { role: string; content: string }): string | null {
+  if (msg.role !== 'assistant') return null
+  const c = msg.content
+  if (c.startsWith('已执行：')) return '好的'
+  if (c.includes('[FILE:') || c.includes('[FILE：')) return '文件已下载'
+  if (c === '正在执行操作...') return null
+  if (c.startsWith('❌')) return stripMarkdown(c)
+  if (c.startsWith('💬')) return stripMarkdown(c)
+  if (c.startsWith('🔧') || c.startsWith('🔄') || c.startsWith('📝') || c.startsWith('⏹') || c.startsWith('✅')) return null
+  return stripMarkdown(c)
+}
+
+function startBgVoice() {
+  if (bgManager) return
+  const s = voiceStore.settings
+  log.info('常驻语音启动')
+  bgManager = new VoiceManager({
+    engineType: s.engineType,
+    iflytekConfig: s.engineType === 'iflytek' ? { appId: s.iflytekAppId, apiKey: s.iflytekApiKey } : undefined,
+    lang: s.recognitionLang,
+    wakeWord: s.wakeWord,
+    enableTts: s.enableTts,
+    ttsRate: s.ttsRate,
+    ttsVolume: s.ttsVolume,
+    bufferTimeout: s.bufferTimeout,
+    idleTimeout: s.idleTimeout,
+    onStateChange: (state) => voiceStore.setSessionState(
+      state === 'idle' ? 'idle' : state === 'wake' ? 'wake' : state === 'command' ? 'command' : state === 'processing' ? 'processing' : 'speaking'
+    ),
+    onInterimText: (text) => voiceStore.updateText(text, false),
+    onUserMessage: (text) => {
+      voiceStore.updateText(text, true)
+      if (convStore.conversation) {
+        convStore.conversation.messages.push({
+          id: Date.now().toString(), role: 'user', content: text, timestamp: Date.now(), status: 'done',
+        })
+      }
+    },
+    onError: (error) => log.error('常驻语音错误', error),
+  })
+  bgManager.onProcessText = async (text: string) => {
+    try { await pipeline.processInput(text) } catch (e) { log.error('管线处理失败', e) }
+  }
+  bgManager.start()
+}
+
+function stopBgVoice() {
+  if (!bgManager) return
+  log.info('常驻语音停止')
+  bgManager.destroy()
+  bgManager = null
+}
+
+// TTS：watch assistant 消息（常驻模式）
+watch(
+  () => {
+    const msgs = convStore.conversation?.messages
+    if (!msgs?.length) return ''
+    const last = msgs[msgs.length - 1]
+    return `${last.role}:${last.status}:${last.content}`
+  },
+  (val) => {
+    if (!bgManager?.isActive || !val) return
+    const msgs = convStore.conversation?.messages
+    if (!msgs?.length) return
+    const lastMsg = msgs[msgs.length - 1]
+    if (lastMsg.role === 'assistant' && lastMsg.status === 'done') {
+      if (spokenMsgIds.has(lastMsg.id)) return
+      spokenMsgIds.add(lastMsg.id)
+      if (spokenMsgIds.size > 100) {
+        const arr = [...spokenMsgIds]; arr.slice(0, 50).forEach(id => spokenMsgIds.delete(id))
+      }
+      const speakText = getSpeakText(lastMsg)
+      if (speakText) bgManager.speak(speakText)
+    }
+  },
+)
+
+// 常驻语音开关
+watch(
+  () => voiceStore.settings.alwaysOnVoice,
+  (on) => { if (on) startBgVoice(); else stopBgVoice() },
+  { immediate: true },
+)
+
+// 常驻模式下设置变更 → 重建 bgManager
+watch(
+  () => voiceStore.settingsVersion,
+  () => {
+    if (voiceStore.settings.alwaysOnVoice && bgManager) {
+      log.info('常驻语音设置变更，重建 bgManager')
+      stopBgVoice()
+      startBgVoice()
+    }
+  },
+)
+
+// 抽屉开关 → 非常驻模式管理引擎生命周期
+watch(open, (isOpen) => {
+  if (voiceStore.settings.alwaysOnVoice) return // 常驻模式不随抽屉变化
+  if (isOpen) { startBgVoice() } else { stopBgVoice() }
+})
 
 // 笔记收藏弹框状态
 const showBookmarkDialog = ref(false);

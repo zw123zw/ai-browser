@@ -72,6 +72,8 @@
       "wakeWordLabel": "唤醒词",
       "wakeWordPlaceholder": "你好，小灵",
       "enableWakeSound": "唤醒提示音",
+      "alwaysOnVoice": "常驻语音",
+      "alwaysOnVoiceHint": "关闭抽屉后仍可语音操作",
       "tts": "语音播报",
       "enableTts": "启用播报",
       "ttsRate": "播报语速",

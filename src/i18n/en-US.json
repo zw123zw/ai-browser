@@ -72,6 +72,8 @@
       "wakeWordLabel": "Wake Word",
       "wakeWordPlaceholder": "Hello, Ling",
       "enableWakeSound": "Wake Sound",
+      "alwaysOnVoice": "Always-On Voice",
+      "alwaysOnVoiceHint": "Keep voice active when drawer is closed",
       "tts": "Text-to-Speech",
       "enableTts": "Enable TTS",
       "ttsRate": "Speed",
