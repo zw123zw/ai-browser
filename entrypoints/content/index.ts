@@ -503,13 +503,13 @@ export default defineContentScript({
 
         // 流式调用 AI 分析笔记
         const modelId = await getCurrentModelId()
-        log.info('[自动笔记] 触发', { url: location.href.slice(0, 80) })
+        log.info('[自动笔记] 触发', { url: location.href.slice(0, 80), hasSignal: !!autoNoteAbort?.signal })
         const result = await optimizeAsNoteStream(pageText, settings, (delta, full) => {
           // 每个 chunk 更新同一条消息
           window.dispatchEvent(new CustomEvent('aib-auto-note-delta', {
             detail: { id: msgId, content: full },
           }))
-        }, modelId)
+        }, modelId, autoNoteAbort?.signal)
 
         // 如果已被取消（URL 变了），丢弃结果
         if (autoNoteAbort?.signal.aborted) return
@@ -557,6 +557,15 @@ export default defineContentScript({
     } else {
       window.addEventListener('load', () => initAutoNote(), { once: true })
     }
+
+    // 监听停止自动笔记事件（用户点击停止按钮时触发）
+    window.addEventListener('aib-stop-auto-note', () => {
+      if (autoNoteAbort) {
+        log.info('[自动笔记] 用户停止')
+        autoNoteAbort.abort()
+        autoNoteAbort = null
+      }
+    })
 
     // --- 自动翻译：URL 变化时重新翻译 ---
     let currentUrl = location.href

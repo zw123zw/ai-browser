@@ -120,17 +120,23 @@ watch(
   },
 )
 
-// 常驻语音开关
+// 常驻语音开关（仅焦点标签页响应）
 watch(
   () => voiceStore.settings.alwaysOnVoice,
-  (on) => { if (on) startBgVoice(); else stopBgVoice() },
+  (on) => {
+    // 只有焦点标签页才能启动/停止引擎
+    if (!document.hasFocus()) return
+    if (on) startBgVoice(); else stopBgVoice()
+  },
   { immediate: true },
 )
 
-// 常驻模式下设置变更 → 重建 bgManager
+// 常驻模式下设置变更 → 重建 bgManager（仅焦点标签页响应）
 watch(
   () => voiceStore.settingsVersion,
   () => {
+    // 只有焦点标签页才能重建引擎
+    if (!document.hasFocus()) return
     // 常驻模式 或 抽屉打开时，设置变更都需要重建引擎
     if ((voiceStore.settings.alwaysOnVoice || open.value) && bgManager) {
       log.info('语音设置变更，重建 bgManager')
@@ -236,11 +242,16 @@ function onMouseup(e: MouseEvent) {
 }
 
 // 标签页可见性 → 隐藏时暂停引擎（防止多标签页抢麦克风），可见时恢复
+// 仅在常驻模式 或 抽屉打开时才管理引擎
 function handleVisibilityChange() {
   if (document.hidden) {
+    // 隐藏时停止引擎
     stopBgVoice()
   } else {
-    startBgVoice()
+    // 可见时：仅在常驻模式或抽屉打开时才启动
+    if (voiceStore.settings.alwaysOnVoice || open.value) {
+      startBgVoice()
+    }
   }
 }
 

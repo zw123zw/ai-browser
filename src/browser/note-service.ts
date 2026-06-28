@@ -86,6 +86,7 @@ export async function optimizeAsNote(
  * @param settings - 全局设置
  * @param onChunk - 每个增量回调
  * @param modelId - 可选模型 id
+ * @param signal - 可选 AbortSignal，用于取消请求
  * @returns 完整的笔记内容
  */
 export async function optimizeAsNoteStream(
@@ -93,6 +94,7 @@ export async function optimizeAsNoteStream(
   settings: AppSettings,
   onChunk: (delta: string, full: string) => void,
   modelId?: string,
+  signal?: AbortSignal,
 ): Promise<string> {
   const trimmed = text.trim();
   if (!trimmed) {
@@ -114,24 +116,33 @@ export async function optimizeAsNoteStream(
     { id: 'user', role: 'user' as const, content: `${NOTE_SYSTEM_PROMPT}\n\n[页面内容]\n${trimmed}`, timestamp: Date.now() },
   ];
 
-  log.info('流式调用 AI 分析笔记', { model: model.modelName, textLength: trimmed.length });
+  log.info('流式调用 AI 分析笔记', { model: model.modelName, textLength: trimmed.length, hasSignal: !!signal });
 
   let result = '';
-  await adapter.chat(
-    {
-      baseUrl: model.baseUrl || settings.baseUrl || '',
-      apiKey: model.apiKey || settings.apiKey || '',
-      modelName: model.modelName,
-      provider: model.provider,
-      messages,
-    },
-    (chunk: StreamChunk) => {
-      if (chunk.delta) {
-        result += chunk.delta;
-        onChunk(chunk.delta, result);
-      }
-    },
-  );
+  try {
+    await adapter.chat(
+      {
+        baseUrl: model.baseUrl || settings.baseUrl || '',
+        apiKey: model.apiKey || settings.apiKey || '',
+        modelName: model.modelName,
+        provider: model.provider,
+        messages,
+        signal,
+      },
+      (chunk: StreamChunk) => {
+        if (chunk.delta) {
+          result += chunk.delta;
+          onChunk(chunk.delta, result);
+        }
+      },
+    );
+  } catch (e: any) {
+    if (e?.name === 'AbortError' || signal?.aborted) {
+      log.info('笔记流式分析被取消');
+      throw e;
+    }
+    throw e;
+  }
 
   log.info('笔记流式分析完成', { length: result.length, preview: result.slice(0, 80) });
   return result;

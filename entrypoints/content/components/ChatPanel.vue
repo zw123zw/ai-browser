@@ -127,6 +127,8 @@ async function onSend(payload: { text: string; attachments: import('@/src/types'
 async function onAbort() {
   convStore.abort();
   await pipeline.abort();
+  // 停止自动笔记
+  window.dispatchEvent(new CustomEvent('aib-stop-auto-note'));
 }
 
 async function onPick(text: string) {
