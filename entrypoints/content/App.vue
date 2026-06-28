@@ -235,6 +235,15 @@ function onMouseup(e: MouseEvent) {
   }
 }
 
+// 标签页可见性 → 隐藏时暂停引擎（防止多标签页抢麦克风），可见时恢复
+function handleVisibilityChange() {
+  if (document.hidden) {
+    stopBgVoice()
+  } else {
+    startBgVoice()
+  }
+}
+
 /** 应用主题 CSS 变量到 shadow host */
 function applyTheme() {
   const el = rootEl.value;
@@ -352,6 +361,7 @@ onMounted(async () => {
   chrome.runtime?.onMessage?.addListener(onMessage);
   document.addEventListener('keydown', onKeydown, true);
   document.addEventListener('mouseup', onMouseup, true);
+  document.addEventListener('visibilitychange', handleVisibilityChange);
   window.addEventListener('aib-auto-note-start', onAutoNoteStart);
   window.addEventListener('aib-auto-note-delta', onAutoNoteDelta);
   window.addEventListener('aib-auto-note-result', onAutoNoteResult);
@@ -364,6 +374,7 @@ onUnmounted(() => {
   chrome.runtime?.onMessage?.removeListener?.(onMessage);
   document.removeEventListener('keydown', onKeydown, true);
   document.removeEventListener('mouseup', onMouseup, true);
+  document.removeEventListener('visibilitychange', handleVisibilityChange);
   window.removeEventListener('aib-auto-note-start', onAutoNoteStart);
   window.removeEventListener('aib-auto-note-delta', onAutoNoteDelta);
   window.removeEventListener('aib-auto-note-result', onAutoNoteResult);
