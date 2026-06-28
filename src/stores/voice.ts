@@ -6,8 +6,9 @@
  */
 
 import { defineStore } from 'pinia'
-import { ref, watch } from 'vue'
+import { ref } from 'vue'
 import { Logger } from '@/src/utils/logger'
+import { defineStorageSync, plain } from '@/src/utils/storage-sync'
 import voiceConfig from '@/src/voice-config.json'
 
 const log = new Logger('Store:Voice')
@@ -58,10 +59,32 @@ const DEFAULT_SETTINGS: VoiceSettings = {
   wakeWord: '你好，小灵',
   alwaysOnVoice: false,
   enableTts: true,
-  ttsRate: 1.5,
+  ttsRate: 1.8,
   ttsVolume: 0.8,
   bufferTimeout: 1500,
   idleTimeout: 3000,
+}
+
+/** wxt storage item 封装 */
+const voiceSettingsStorage = {
+  async getValue(): Promise<VoiceSettings | null> {
+    const stored = await chrome.storage.local.get('voice-settings')
+    return stored['voice-settings'] || null
+  },
+  async setValue(v: VoiceSettings | null): Promise<void> {
+    if (v) {
+      await chrome.storage.local.set({ 'voice-settings': v })
+    } else {
+      await chrome.storage.local.remove('voice-settings')
+    }
+  },
+  watch(cb: (nv: VoiceSettings | null) => void): void {
+    chrome.storage.onChanged.addListener((changes, area) => {
+      if (area === 'local' && changes['voice-settings']) {
+        cb(changes['voice-settings'].newValue ?? null)
+      }
+    })
+  },
 }
 
 export const useVoiceStore = defineStore('voice', () => {
@@ -74,24 +97,36 @@ export const useVoiceStore = defineStore('voice', () => {
   // ========== 设置（持久化） ==========
   const settings = ref<VoiceSettings>({ ...DEFAULT_SETTINGS })
   const ready = ref(false)
-  /** 保存时 +1，VoicePanel 监听此值变化来重建 manager */
+  /** 保存时 +1，App.vue 监听此值变化来重建 manager */
   const settingsVersion = ref(0)
+
+  // 双向同步：settings ↔ chrome.storage
+  const sync = defineStorageSync<VoiceSettings>({
+    source: settings,
+    storage: voiceSettingsStorage,
+    ready,
+    applyRemote: (nv) => {
+      settings.value = { ...DEFAULT_SETTINGS, ...nv }
+      log.info('语音设置从 storage 同步', { engineType: settings.value.engineType })
+    },
+  })
 
   /** 初始化设置 */
   async function initSettings() {
     try {
-      const stored = await chrome.storage.local.get('voice-settings')
-      const storedSettings = stored['voice-settings']
-      log.info('initSettings 读取 storage', {
-        hasStored: !!storedSettings,
-        storedEngineType: storedSettings?.engineType,
-        defaultEngineType: DEFAULT_SETTINGS.engineType,
-      })
-      if (storedSettings) {
-        settings.value = { ...DEFAULT_SETTINGS, ...storedSettings }
-        log.info('initSettings 合并后', { engineType: settings.value.engineType })
+      const stored = await voiceSettingsStorage.getValue()
+      if (stored) {
+        settings.value = { ...DEFAULT_SETTINGS, ...stored }
+        sync.markSelfWrite()
+        log.info('initSettings 从 storage 加载', {
+          engineType: settings.value.engineType,
+          ttsRate: settings.value.ttsRate,
+        })
       } else {
-        log.info('initSettings 无存储，使用默认值', { engineType: DEFAULT_SETTINGS.engineType })
+        settings.value = { ...DEFAULT_SETTINGS }
+        sync.markSelfWrite()
+        await voiceSettingsStorage.setValue(plain(settings.value))
+        log.info('initSettings 无存储，写入默认值')
       }
       ready.value = true
     } catch (error) {
@@ -103,29 +138,19 @@ export const useVoiceStore = defineStore('voice', () => {
   /** 更新单个设置项 */
   function updateSetting<K extends keyof VoiceSettings>(key: K, value: VoiceSettings[K]) {
     settings.value[key] = value
-    // 自动保存（defineStorageSync 会处理防抖写入）
   }
 
   /** 批量更新设置 */
   function updateSettings(partial: Partial<VoiceSettings>) {
     Object.assign(settings.value, partial)
     settingsVersion.value++
-    // 同步写入 storage，不依赖 watcher 异步保存
-    const toSave = { ...settings.value }
-    log.info('updateSettings 写入 storage', { engineType: toSave.engineType })
-    chrome.storage.local.set({ 'voice-settings': toSave })
-    log.info('语音设置已更新', { version: settingsVersion.value })
+    log.info('语音设置已更新', { version: settingsVersion.value, engineType: settings.value.engineType })
   }
 
   /** 重置为默认设置 */
   function resetSettings() {
     Object.assign(settings.value, DEFAULT_SETTINGS)
   }
-
-  // 设置变更时自动保存到 storage（展开为普通对象，避免 reactive proxy 序列化问题）
-  watch(settings, (val) => {
-    chrome.storage.local.set({ 'voice-settings': { ...val } })
-  }, { deep: true })
 
   // ========== 状态更新 ==========
   function setStatus(newStatus: VoiceStatus) {

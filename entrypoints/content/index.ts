@@ -423,7 +423,10 @@ export default defineContentScript({
     }
 
     // --- 自动翻译：页面加载后首次触发 ---
+    let autoTranslateInited = false
     async function initAutoTranslate() {
+      if (autoTranslateInited) return
+      autoTranslateInited = true
       log.info('[自动翻译] 页面加载，检查是否开启')
       // 等待 DOM 稳定
       await new Promise(resolve => setTimeout(resolve, 500))
@@ -534,7 +537,10 @@ export default defineContentScript({
     }
 
     // --- 自动笔记：页面加载/跳转后触发 ---
+    let autoNoteInited = false
     async function initAutoNote() {
+      if (autoNoteInited) return
+      autoNoteInited = true
       log.info('[自动笔记] 页面加载，检查是否开启')
       await new Promise(resolve => setTimeout(resolve, 1000)) // 等页面稳定
       await runAutoNote()
