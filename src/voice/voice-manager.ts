@@ -136,6 +136,8 @@ export class VoiceManager {
       this.setState('speaking')
       this.engine?.pause()
       await this.broadcast.speak(text)
+      // 播报完等 300ms，让用户准备说话
+      await new Promise(r => setTimeout(r, 300))
       this.engine?.resume()
     }
     // 只在状态仍是 speaking 时才切换（防止被打断时覆盖 processing 状态）
@@ -241,14 +243,11 @@ export class VoiceManager {
 
     // speaking → 打断播报
     if (this._state === 'speaking') {
-      // 冷却期内的唤醒词 final 结果是 interim 触发的残留，忽略
+      // 冷却期内的文本很可能是唤醒词的 final 残留（如"你好"、"你好小林"），忽略
       const cooldownOk = Date.now() - this.lastWakeTime > WAKE_COOLDOWN
-      if (!cooldownOk && this.wakeWordDetector) {
-        const { matched } = this.wakeWordDetector.matchWakeWord(text, false)
-        if (matched) {
-          log.info('播报中忽略冷却期内的唤醒词残留', { text })
-          return
-        }
+      if (!cooldownOk) {
+        log.info('播报中忽略冷却期内的语音', { text })
+        return
       }
       log.info('播报中打断', { text })
       this.broadcast.cancel()

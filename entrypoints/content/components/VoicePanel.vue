@@ -109,7 +109,10 @@ watch(
   () => convStore.conversation?.messages.length,
   () => {
     nextTick(() => {
-      messageListRef.value?.jumpToBottom()
+      // 双重 nextTick：确保 DOM 更新完成后再滚动
+      nextTick(() => {
+        messageListRef.value?.jumpToBottom()
+      })
     })
   },
 )

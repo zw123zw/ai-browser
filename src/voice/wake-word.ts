@@ -60,8 +60,8 @@ export class WakeWordDetector {
     this.wakeWordNormalized = normalize(wakeWord)
     // final: 每 4 个字允许 1 个错误，至少 1
     this.maxErrors = Math.max(1, Math.floor(this.wakeWordNormalized.length / 4))
-    // interim: 稍宽松，每 3 个字允许 1 个错误，至少 2
-    this.maxErrorsInterim = Math.max(2, Math.floor(this.wakeWordNormalized.length / 3))
+    // interim: 每 4 个字允许 1 个错误，至少 1
+    this.maxErrorsInterim = Math.max(1, Math.floor(this.wakeWordNormalized.length / 4))
     log.info('唤醒词已设置', { wakeWord, normalized: this.wakeWordNormalized, maxErrors: this.maxErrors, maxErrorsInterim: this.maxErrorsInterim })
   }
 
@@ -69,7 +69,7 @@ export class WakeWordDetector {
     this.wakeWord = word
     this.wakeWordNormalized = normalize(word)
     this.maxErrors = Math.max(1, Math.floor(this.wakeWordNormalized.length / 4))
-    this.maxErrorsInterim = Math.max(2, Math.floor(this.wakeWordNormalized.length / 3))
+    this.maxErrorsInterim = Math.max(1, Math.floor(this.wakeWordNormalized.length / 4))
     log.info('唤醒词已更新', { wakeWord: word, maxErrors: this.maxErrors, maxErrorsInterim: this.maxErrorsInterim })
   }
 
