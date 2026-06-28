@@ -1,6 +1,41 @@
 import { storage } from 'wxt/storage';
 import type { AppSettings, Conversation, ModelConfig, NotesData, Provider } from '@/src/types';
 import rawModels from '@/src/local-config.json';
+import voiceConfig from '@/src/voice-config.json';
+
+/** 语音引擎类型 */
+type EngineType = 'web-speech' | 'iflytek'
+
+/** 语音设置 */
+export interface VoiceSettings {
+  engineType: EngineType
+  iflytekAppId: string
+  iflytekApiKey: string
+  iflytekApiSecret: string
+  recognitionLang: string
+  wakeWord: string
+  alwaysOnVoice: boolean
+  enableTts: boolean
+  ttsRate: number
+  ttsVolume: number
+  bufferTimeout: number
+  idleTimeout: number
+}
+
+export const DEFAULT_VOICE_SETTINGS: VoiceSettings = {
+  engineType: (voiceConfig.engineType as EngineType) || 'web-speech',
+  iflytekAppId: voiceConfig.iflytekAppId || '',
+  iflytekApiKey: voiceConfig.iflytekApiKey || '',
+  iflytekApiSecret: voiceConfig.iflytekApiSecret || '',
+  recognitionLang: 'zh-CN',
+  wakeWord: '你好，小灵',
+  alwaysOnVoice: false,
+  enableTts: true,
+  ttsRate: 1.8,
+  ttsVolume: 0.8,
+  bufferTimeout: 1500,
+  idleTimeout: 3000,
+}
 
 /** 从 local-config.json 映射到 ModelConfig */
 function parseLocalModels(list: any[]): ModelConfig[] {
@@ -55,6 +90,11 @@ const KEY_FAB_POS = 'local:ai-browser-fab-pos';
 
 export const settingsStorage = storage.defineItem<AppSettings>(KEY_SETTINGS, {
   fallback: DEFAULT_SETTINGS,
+});
+
+/** 语音设置存储 */
+export const voiceSettingsStorage = storage.defineItem<VoiceSettings>('local:voice-settings', {
+  fallback: DEFAULT_VOICE_SETTINGS,
 });
 
 /** 单会话存储（新） */

@@ -423,10 +423,9 @@ export default defineContentScript({
     }
 
     // --- 自动翻译：页面加载后首次触发 ---
-    let autoTranslateInited = false
     async function initAutoTranslate() {
-      if (autoTranslateInited) return
-      autoTranslateInited = true
+      if ((document as any).__aibAutoTranslateInited) return
+      ;(document as any).__aibAutoTranslateInited = true
       log.info('[自动翻译] 页面加载，检查是否开启')
       // 等待 DOM 稳定
       await new Promise(resolve => setTimeout(resolve, 500))
@@ -464,6 +463,8 @@ export default defineContentScript({
     let autoNoteRunning = false
     let autoNoteAbort: AbortController | null = null
     let lastNotedUrl = ''  // 记录已生成笔记的 URL，防止同一页面重复触发
+    let autoNoteTimer: ReturnType<typeof setTimeout> | null = null  // 防抖计时器
+
     async function runAutoNote() {
       if (autoNoteRunning) return
       // 同一 URL 已生成过笔记，跳过（URL 变化时会清除）
@@ -537,13 +538,18 @@ export default defineContentScript({
     }
 
     // --- 自动笔记：页面加载/跳转后触发 ---
-    let autoNoteInited = false
+    // 用 document 级别标志防重复（content script 可能被注入多次）
+    // 使用防抖计时器，避免 initAutoNote 和 contentObserver 同时触发
+    function scheduleAutoNote(delay: number) {
+      if (autoNoteTimer) clearTimeout(autoNoteTimer)
+      autoNoteTimer = setTimeout(() => runAutoNote(), delay)
+    }
+
     async function initAutoNote() {
-      if (autoNoteInited) return
-      autoNoteInited = true
+      if ((document as any).__aibAutoNoteInited) return
+      ;(document as any).__aibAutoNoteInited = true
       log.info('[自动笔记] 页面加载，检查是否开启')
-      await new Promise(resolve => setTimeout(resolve, 1000)) // 等页面稳定
-      await runAutoNote()
+      scheduleAutoNote(1000) // 等页面稳定后触发
     }
 
     if (document.readyState === 'complete') {
@@ -574,7 +580,7 @@ export default defineContentScript({
       urlChangeTimer = setTimeout(async () => {
         translateService.reset()
         await runAutoTranslate()
-        await runAutoNote()
+        scheduleAutoNote(0) // URL 变化后立即触发（无延迟）
       }, 800)
     }
 
@@ -623,8 +629,8 @@ export default defineContentScript({
 
     // --- 自动笔记：MutationObserver 检测页面内容变化 ---
     // 不依赖 URL 变化，适用于 Livewire/Turbo 等非标准 SPA 框架
+    // 使用 scheduleAutoNote 防抖，避免与 initAutoNote 同时触发
     let lastContentLength = document.body.innerText.length
-    let contentChangeTimer: ReturnType<typeof setTimeout> | null = null
 
     const contentObserver = new MutationObserver(() => {
       const newLength = document.body.innerText.length
@@ -633,16 +639,13 @@ export default defineContentScript({
       // 内容变化超过阈值 → 触发自动笔记
       if (delta > 200) {
         lastContentLength = newLength
-        if (contentChangeTimer) clearTimeout(contentChangeTimer)
-        contentChangeTimer = setTimeout(async () => {
-          // 取消正在执行的自动笔记
-          if (autoNoteAbort) {
-            autoNoteAbort.abort()
-            autoNoteAbort = null
-          }
-          autoNoteRunning = false
-          await runAutoNote()
-        }, 2000)
+        // 取消正在执行的自动笔记
+        if (autoNoteAbort) {
+          autoNoteAbort.abort()
+          autoNoteAbort = null
+        }
+        autoNoteRunning = false
+        scheduleAutoNote(2000) // 使用统一的防抖函数
       }
     })
 

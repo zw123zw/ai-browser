@@ -9,7 +9,8 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { Logger } from '@/src/utils/logger'
 import { defineStorageSync, plain } from '@/src/utils/storage-sync'
-import voiceConfig from '@/src/voice-config.json'
+import { voiceSettingsStorage, DEFAULT_VOICE_SETTINGS } from '@/src/storage'
+import type { VoiceSettings } from '@/src/storage'
 
 const log = new Logger('Store:Voice')
 
@@ -24,68 +25,7 @@ export type SessionState =
   | 'processing'  // AI 处理中
   | 'speaking'    // TTS 播报中
 
-/** 识别引擎类型 */
-export type EngineType = 'web-speech' | 'iflytek'
-
-/** 语音设置 */
-export interface VoiceSettings {
-  // 🎤 语音识别
-  engineType: EngineType
-  iflytekAppId: string
-  iflytekApiKey: string
-  iflytekApiSecret: string
-  recognitionLang: string
-
-  // 🔔 唤醒词
-  wakeWord: string
-  alwaysOnVoice: boolean
-
-  // 🔊 TTS
-  enableTts: boolean
-  ttsRate: number
-  ttsVolume: number
-
-  // ⚡ 行为
-  bufferTimeout: number   // 语音缓冲时间（ms）
-  idleTimeout: number     // 语音自动退出时间（ms）
-}
-
-const DEFAULT_SETTINGS: VoiceSettings = {
-  engineType: (voiceConfig.engineType as EngineType) || 'web-speech',
-  iflytekAppId: voiceConfig.iflytekAppId || '',
-  iflytekApiKey: voiceConfig.iflytekApiKey || '',
-  iflytekApiSecret: voiceConfig.iflytekApiSecret || '',
-  recognitionLang: 'zh-CN',
-  wakeWord: '你好，小灵',
-  alwaysOnVoice: false,
-  enableTts: true,
-  ttsRate: 1.8,
-  ttsVolume: 0.8,
-  bufferTimeout: 1500,
-  idleTimeout: 3000,
-}
-
-/** wxt storage item 封装 */
-const voiceSettingsStorage = {
-  async getValue(): Promise<VoiceSettings | null> {
-    const stored = await chrome.storage.local.get('voice-settings')
-    return stored['voice-settings'] || null
-  },
-  async setValue(v: VoiceSettings | null): Promise<void> {
-    if (v) {
-      await chrome.storage.local.set({ 'voice-settings': v })
-    } else {
-      await chrome.storage.local.remove('voice-settings')
-    }
-  },
-  watch(cb: (nv: VoiceSettings | null) => void): void {
-    chrome.storage.onChanged.addListener((changes, area) => {
-      if (area === 'local' && changes['voice-settings']) {
-        cb(changes['voice-settings'].newValue ?? null)
-      }
-    })
-  },
-}
+const DEFAULT_SETTINGS = DEFAULT_VOICE_SETTINGS
 
 export const useVoiceStore = defineStore('voice', () => {
   // ========== 状态 ==========
@@ -117,7 +57,6 @@ export const useVoiceStore = defineStore('voice', () => {
       const stored = await voiceSettingsStorage.getValue()
       if (stored) {
         settings.value = { ...DEFAULT_SETTINGS, ...stored }
-        sync.markSelfWrite()
         log.info('initSettings 从 storage 加载', {
           engineType: settings.value.engineType,
           ttsRate: settings.value.ttsRate,
@@ -125,7 +64,7 @@ export const useVoiceStore = defineStore('voice', () => {
       } else {
         settings.value = { ...DEFAULT_SETTINGS }
         sync.markSelfWrite()
-        await voiceSettingsStorage.setValue(plain(settings.value))
+        await voiceSettingsStorage.setValue(plain(settings.value) as VoiceSettings)
         log.info('initSettings 无存储，写入默认值')
       }
       ready.value = true
@@ -138,13 +77,21 @@ export const useVoiceStore = defineStore('voice', () => {
   /** 更新单个设置项 */
   function updateSetting<K extends keyof VoiceSettings>(key: K, value: VoiceSettings[K]) {
     settings.value[key] = value
+    sync.flush()
   }
 
   /** 批量更新设置 */
-  function updateSettings(partial: Partial<VoiceSettings>) {
+  async function updateSettings(partial: Partial<VoiceSettings>) {
     Object.assign(settings.value, partial)
     settingsVersion.value++
-    log.info('语音设置已更新', { version: settingsVersion.value, engineType: settings.value.engineType })
+    await sync.flush()
+    // 验证写入结果
+    const verify = await voiceSettingsStorage.getValue()
+    log.info('语音设置已更新并验证', {
+      version: settingsVersion.value,
+      engineType: settings.value.engineType,
+      storedEngineType: verify?.engineType,
+    })
   }
 
   /** 重置为默认设置 */

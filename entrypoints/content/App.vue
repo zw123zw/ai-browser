@@ -343,7 +343,7 @@ function onBookmarkNote(e: Event) {
 
 onMounted(async () => {
   try {
-    await Promise.all([settingsStore.init(), convStore.init(), notesStore.init()]);
+    await Promise.all([settingsStore.init(), convStore.init(), notesStore.init(), voiceStore.initSettings()]);
   } catch (error) {
     log.error('Store 初始化失败:', error);
   }
