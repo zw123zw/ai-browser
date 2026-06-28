@@ -6,6 +6,9 @@ import { useToast } from '@/src/composables/useToast';
 import MessageItem from './MessageItem.vue';
 import EmptyChat from './EmptyChat.vue';
 import MessageContextMenu from './MessageContextMenu.vue';
+import { Logger } from '@/src/utils/logger';
+
+const log = new Logger('MessageList');
 
 const props = defineProps<{ conversation: Conversation }>();
 const emit = defineEmits<{ (e: 'scroll-to-bottom'): void }>();
@@ -112,8 +115,18 @@ function jumpToBottom() {
 }
 
 function scrollToBottom() {
+  // 优先用 anchor.scrollIntoView（flex 布局下 scrollTop 不可靠）
+  if (anchor.value) {
+    anchor.value.scrollIntoView({ block: 'end' })
+    log.info('scrollToBottom: scrollIntoView')
+    return
+  }
   const container = scrollContainer.value;
-  if (!container) return;
+  if (!container) {
+    log.warn('scrollToBottom: container is null');
+    return;
+  }
+  log.info('scrollToBottom: scrollTop', { scrollHeight: container.scrollHeight, scrollTop: container.scrollTop, clientHeight: container.clientHeight });
   container.scrollTop = container.scrollHeight;
 }
 

@@ -104,17 +104,18 @@ watch(
   },
 )
 
-// 新消息自动滚动到底部
+// 新消息自动滚动到底部（flush: post 确保 DOM 更新后再执行）
 watch(
   () => convStore.conversation?.messages.length,
-  () => {
-    nextTick(() => {
-      // 双重 nextTick：确保 DOM 更新完成后再滚动
-      nextTick(() => {
-        messageListRef.value?.jumpToBottom()
-      })
-    })
+  (len) => {
+    log.info('scroll watcher 触发', { len, hasRef: !!messageListRef.value })
+    // 延迟 200ms 确保 MessageList 完全渲染
+    setTimeout(() => {
+      log.info('scroll setTimeout 执行', { hasRef: !!messageListRef.value })
+      messageListRef.value?.jumpToBottom()
+    }, 200)
   },
+  { flush: 'post' },
 )
 
 // need_input：pipeline 等待用户输入时，语音自动提供输入
@@ -221,6 +222,8 @@ function initManager() {
     },
     onError: (error) => {
       log.error('语音错误', error)
+      // 语音播报错误，让用户知道发生了什么
+      manager?.speak(error)
     },
     onAbortProcess: () => {
       log.info('打断当前处理')
