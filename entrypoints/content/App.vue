@@ -60,7 +60,7 @@ function startBgVoice() {
   log.info('常驻语音启动')
   bgManager = new VoiceManager({
     engineType: s.engineType,
-    iflytekConfig: s.engineType === 'iflytek' ? { appId: s.iflytekAppId, apiKey: s.iflytekApiKey } : undefined,
+    iflytekConfig: s.engineType === 'iflytek' ? { appId: s.iflytekAppId, apiKey: s.iflytekApiKey, apiSecret: s.iflytekApiSecret } : undefined,
     lang: s.recognitionLang,
     wakeWord: s.wakeWord,
     enableTts: s.enableTts,
@@ -131,8 +131,9 @@ watch(
 watch(
   () => voiceStore.settingsVersion,
   () => {
-    if (voiceStore.settings.alwaysOnVoice && bgManager) {
-      log.info('常驻语音设置变更，重建 bgManager')
+    // 常驻模式 或 抽屉打开时，设置变更都需要重建引擎
+    if ((voiceStore.settings.alwaysOnVoice || open.value) && bgManager) {
+      log.info('语音设置变更，重建 bgManager')
       stopBgVoice()
       startBgVoice()
     }

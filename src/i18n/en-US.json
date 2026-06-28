@@ -64,6 +64,7 @@
       "engineWebSpeech": "Web Speech API",
       "engineIflytek": "iFlytek",
       "iflytekApiKey": "iFlytek API Key",
+      "iflytekApiSecret": "iFlytek API Secret",
       "iflytekAppId": "iFlytek App ID",
       "recognitionLang": "Language",
       "langZhCN": "Chinese",

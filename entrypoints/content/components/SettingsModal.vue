@@ -401,6 +401,7 @@ const voiceForm = reactive({
   engineType: voiceStore.settings.engineType,
   iflytekAppId: voiceStore.settings.iflytekAppId,
   iflytekApiKey: voiceStore.settings.iflytekApiKey,
+  iflytekApiSecret: voiceStore.settings.iflytekApiSecret,
   recognitionLang: voiceStore.settings.recognitionLang,
   wakeWord: voiceStore.settings.wakeWord,
   alwaysOnVoice: voiceStore.settings.alwaysOnVoice,
@@ -416,6 +417,7 @@ function saveVoice() {
     engineType: voiceForm.engineType,
     iflytekAppId: voiceForm.iflytekAppId,
     iflytekApiKey: voiceForm.iflytekApiKey,
+    iflytekApiSecret: voiceForm.iflytekApiSecret,
     recognitionLang: voiceForm.recognitionLang,
     wakeWord: voiceForm.wakeWord,
     alwaysOnVoice: voiceForm.alwaysOnVoice,
@@ -1195,6 +1197,16 @@ function importModels(e: Event) {
               <input
                 :value="voiceForm.iflytekApiKey"
                 @input="voiceForm.iflytekApiKey = ($event.target as HTMLInputElement).value"
+                placeholder="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+                class="aib-input"
+              />
+            </div>
+
+            <div v-if="voiceForm.engineType === 'iflytek'" class="aib-form-row">
+              <label>{{ t('settings.voice.iflytekApiSecret') }}</label>
+              <input
+                :value="voiceForm.iflytekApiSecret"
+                @input="voiceForm.iflytekApiSecret = ($event.target as HTMLInputElement).value"
                 placeholder="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
                 class="aib-input"
               />

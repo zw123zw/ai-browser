@@ -64,6 +64,7 @@
       "engineWebSpeech": "Web Speech API",
       "engineIflytek": "讯飞语音",
       "iflytekApiKey": "讯飞 API Key",
+      "iflytekApiSecret": "讯飞 API Secret",
       "iflytekAppId": "讯飞 App ID",
       "recognitionLang": "识别语言",
       "langZhCN": "中文",

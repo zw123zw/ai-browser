@@ -462,7 +462,8 @@ export class VoiceManager {
 
   private setState(state: VoiceManagerState): void {
     if (this._state === state) return
-    log.debug(`状态转换: ${this._state} → ${state}`)
+    const prevState = this._state
+    log.debug(`状态转换: ${prevState} → ${state}`)
     this._state = state
     this.config.onStateChange?.(state)
     // 进入 wake 时清空 interim 文本
@@ -474,8 +475,9 @@ export class VoiceManager {
       this.speechBuffer = []
       if (this.bufferTimer) { clearTimeout(this.bufferTimer); this.bufferTimer = null }
     }
-    // 进入 wake/command 时检查引擎健康，死了就重启
-    if ((state === 'wake' || state === 'command') && this._isActive) {
+    // 仅从 processing/speaking 回到 wake/command 时检查引擎健康
+    if ((state === 'wake' || state === 'command') && this._isActive
+      && (prevState === 'processing' || prevState === 'speaking')) {
       this.ensureEngineAlive()
     }
   }

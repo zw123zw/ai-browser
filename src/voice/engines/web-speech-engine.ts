@@ -93,7 +93,7 @@ export class WebSpeechEngine implements VoiceEngine {
     return this._status
   }
 
-  /** 检查引擎是否还活着（recognition 实例存在且 _isActive） */
+  /** 检查引擎是否还活着 */
   isAlive(): boolean {
     return this._isActive && this.recognition !== null
   }

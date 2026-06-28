@@ -58,6 +58,12 @@ export class IflytekEngine implements VoiceEngine {
   private scriptProcessor: ScriptProcessorNode | null = null
   private isFirstFrame = true
   private finalText = ''
+  /** 静音帧计数，用于自动发送最后一帧 */
+  private silenceFrames = 0
+  /** 连续多少帧静音后自动结束（每帧 256ms，10帧 ≈ 2.5秒） */
+  private static readonly SILENCE_THRESHOLD = 10
+  /** 静音能量阈值 */
+  private static readonly SILENCE_ENERGY = 0.01
 
   onResult: ((text: string, isFinal: boolean, confidence: number) => void) | null = null
   onError: ((error: string) => void) | null = null
@@ -74,6 +80,10 @@ export class IflytekEngine implements VoiceEngine {
 
   get isActive(): boolean {
     return this._isActive
+  }
+
+  isAlive(): boolean {
+    return this._isActive && this.ws !== null
   }
 
   get status(): VoiceEngineStatus {
@@ -99,6 +109,8 @@ export class IflytekEngine implements VoiceEngine {
 
       // 3. 创建音频处理管道
       this.audioContext = new AudioContext({ sampleRate: 16000 })
+      // Chrome 要求用户手势后才能启动 AudioContext
+      await this.audioContext.resume()
       const source = this.audioContext.createMediaStreamSource(this.mediaStream)
       this.scriptProcessor = this.audioContext.createScriptProcessor(4096, 1, 1)
 
@@ -111,14 +123,33 @@ export class IflytekEngine implements VoiceEngine {
         const audioData = event.inputBuffer.getChannelData(0)
         const pcmData = this.float32ToInt16(audioData)
 
-        if (this.isFirstFrame) {
-          // 第一帧：发送 common + business 参数
-          this.sendFirstFrame(pcmData)
-          this.isFirstFrame = false
-        } else {
-          // 后续帧：发送音频数据
-          this.sendAudioFrame(pcmData)
+        // VAD：检测静音
+        let energy = 0
+        for (let i = 0; i < audioData.length; i++) {
+          energy += audioData[i] * audioData[i]
         }
+        energy /= audioData.length
+
+        if (energy < IflytekEngine.SILENCE_ENERGY) {
+          this.silenceFrames++
+          if (this.silenceFrames >= IflytekEngine.SILENCE_THRESHOLD) {
+            log.info('VAD 静音检测，发送最后一帧', { frames: this.silenceFrames, energy })
+            this.silenceFrames = 0
+            this.sendLastFrame()
+            return
+          }
+        } else {
+          this.silenceFrames = 0
+        }
+
+        if (this.isFirstFrame) {
+          // 第一帧：只发参数，不发音频
+          this.sendFirstFrame()
+          this.isFirstFrame = false
+        }
+
+        // 每帧都发音频数据（status=1）
+        this.sendAudioFrame(pcmData)
       }
 
       source.connect(this.scriptProcessor)
@@ -165,23 +196,29 @@ export class IflytekEngine implements VoiceEngine {
   }
 
   /** 构建鉴权 URL */
-  private buildAuthUrl(): string {
+  private async buildAuthUrl(): Promise<string> {
     const url = 'wss://iat-api.xfyun.cn/v2/iat'
     const { apiKey, apiSecret, appId } = this.iflytekConfig
 
+    log.info('构建鉴权 URL', { appId, apiKey: apiKey?.slice(0, 8) + '...', hasSecret: !!apiSecret })
+
     // 如果没有 apiSecret，使用简化鉴权（仅 apiKey + appId）
     if (!apiSecret) {
-      return `${url}?appid=${appId}&apikey=${apiKey}`
+      const authUrl = `${url}?appid=${appId}&apikey=${apiKey}`
+      log.info('简化鉴权 URL', { url: authUrl.slice(0, 80) + '...' })
+      return authUrl
     }
 
     // 完整鉴权：HMAC-SHA256 签名
     const date = new Date().toUTCString()
     const signatureOrigin = `host: iat-api.xfyun.cn\ndate: ${date}\nGET /v2/iat HTTP/1.1`
-    const signature = this.hmacSha256(signatureOrigin, apiSecret)
+    const signature = await this.hmacSha256(signatureOrigin, apiSecret)
     const authorizationOrigin = `api_key="${apiKey}", algorithm="hmac-sha256", headers="host date request-line", signature="${signature}"`
     const authorization = btoa(authorizationOrigin)
 
-    return `${url}?authorization=${encodeURIComponent(authorization)}&date=${encodeURIComponent(date)}&host=iat-api.xfyun.cn`
+    const authUrl = `${url}?authorization=${encodeURIComponent(authorization)}&date=${encodeURIComponent(date)}&host=iat-api.xfyun.cn`
+    log.info('完整鉴权 URL', { url: authUrl.slice(0, 80) + '...', date, signature: signature.slice(0, 20) + '...' })
+    return authUrl
   }
 
   /** HMAC-SHA256 签名 */
@@ -204,7 +241,7 @@ export class IflytekEngine implements VoiceEngine {
 
   /** 连接 WebSocket */
   private async connectWebSocket(): Promise<void> {
-    const url = this.buildAuthUrl()
+    const url = await this.buildAuthUrl()
 
     return new Promise((resolve, reject) => {
       this.ws = new WebSocket(url)
@@ -223,8 +260,8 @@ export class IflytekEngine implements VoiceEngine {
         reject(new Error('WebSocket 连接失败'))
       }
 
-      this.ws.onclose = () => {
-        log.info('WebSocket 连接关闭')
+      this.ws.onclose = (event) => {
+        log.info('WebSocket 连接关闭', { code: event.code, reason: event.reason })
       }
     })
   }
@@ -233,10 +270,22 @@ export class IflytekEngine implements VoiceEngine {
   private handleMessage(data: string): void {
     try {
       const result: IflytekResult = JSON.parse(data)
+      log.info('讯飞消息', { code: result.code, status: result.data?.status, hasResult: !!result.data?.result })
 
       if (result.code !== 0) {
         log.error('讯飞错误:', result.code, result.message)
         this.onError?.(`讯飞错误: ${result.message}`)
+        return
+      }
+
+      // 服务端 VAD 结束（status=2）→ 识别完成，重新连接
+      if (result.data?.status === 2) {
+        log.info('讯飞识别完成（服务端 VAD）')
+        if (this.finalText) {
+          this.onResult?.(this.finalText, true, 1)
+          this.finalText = ''
+        }
+        this.reconnect()
         return
       }
 
@@ -268,9 +317,11 @@ export class IflytekEngine implements VoiceEngine {
       log.info('识别结果:', { text: this.finalText, isFinal, confidence })
       this.onResult?.(this.finalText, isFinal, confidence / 100)
 
-      // 最终结果后重置
+      // 最终结果后重置，重新建立连接继续监听
       if (isFinal) {
         this.finalText = ''
+        // 重新连接以支持连续识别
+        this.reconnect()
       }
 
     } catch (error) {
@@ -278,8 +329,8 @@ export class IflytekEngine implements VoiceEngine {
     }
   }
 
-  /** 发送第一帧（含参数） */
-  private sendFirstFrame(audioData: Int16Array): void {
+  /** 发送第一帧（仅参数，不含音频） */
+  private sendFirstFrame(): void {
     const frame = {
       common: {
         app_id: this.iflytekConfig.appId,
@@ -288,7 +339,7 @@ export class IflytekEngine implements VoiceEngine {
         language: this.config.lang === 'en-US' ? 'en_us' : 'zh_cn',
         domain: 'iat',
         accent: 'mandarin',
-        vad_eos: 3000,
+        vad_eos: 5000,
         dwa: 'wpgs',
         ptt: 0,
         nunum: 1,
@@ -297,7 +348,6 @@ export class IflytekEngine implements VoiceEngine {
         status: 0,
         format: 'audio/L16;rate=16000',
         encoding: 'raw',
-        audio: this.arrayBufferToBase64(audioData.buffer),
       },
     }
 
@@ -331,6 +381,25 @@ export class IflytekEngine implements VoiceEngine {
       }
 
       this.ws.send(JSON.stringify(frame))
+    }
+  }
+
+  /** 重新建立 WebSocket 连接（final 结果后继续监听） */
+  private async reconnect(): Promise<void> {
+    try {
+      // 关闭旧连接
+      if (this.ws) {
+        this.ws.onclose = null
+        this.ws.onerror = null
+        this.ws.close()
+        this.ws = null
+      }
+      // 重新连接
+      this.isFirstFrame = true
+      this.silenceFrames = 0
+      await this.connectWebSocket()
+    } catch (error) {
+      log.error('重新连接失败:', error)
     }
   }
 

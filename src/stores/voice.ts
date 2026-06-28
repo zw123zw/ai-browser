@@ -8,6 +8,7 @@
 import { defineStore } from 'pinia'
 import { ref, watch } from 'vue'
 import { Logger } from '@/src/utils/logger'
+import voiceConfig from '@/src/voice-config.json'
 
 const log = new Logger('Store:Voice')
 
@@ -29,8 +30,9 @@ export type EngineType = 'web-speech' | 'iflytek'
 export interface VoiceSettings {
   // 🎤 语音识别
   engineType: EngineType
-  iflytekApiKey: string
   iflytekAppId: string
+  iflytekApiKey: string
+  iflytekApiSecret: string
   recognitionLang: string
 
   // 🔔 唤醒词
@@ -48,9 +50,10 @@ export interface VoiceSettings {
 }
 
 const DEFAULT_SETTINGS: VoiceSettings = {
-  engineType: 'web-speech',
-  iflytekApiKey: '',
-  iflytekAppId: '',
+  engineType: (voiceConfig.engineType as EngineType) || 'web-speech',
+  iflytekAppId: voiceConfig.iflytekAppId || '',
+  iflytekApiKey: voiceConfig.iflytekApiKey || '',
+  iflytekApiSecret: voiceConfig.iflytekApiSecret || '',
   recognitionLang: 'zh-CN',
   wakeWord: '你好，小灵',
   alwaysOnVoice: false,
