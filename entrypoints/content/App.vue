@@ -395,6 +395,16 @@ function onAutoSendCommand(e: Event) {
   });
 }
 
+// 处理模式切换事件：文字模式时停止麦克风
+function onModeChanged(e: Event) {
+  const detail = (e as CustomEvent).detail;
+  if (!detail?.mode) return;
+  log.info('[模式切换]', { mode: detail.mode, alwaysOn: voiceStore.settings.alwaysOnVoice })
+  if (detail.mode === 'chat' && !voiceStore.settings.alwaysOnVoice) {
+    stopBgVoice()
+  }
+}
+
 // 处理笔记收藏请求：打开收藏弹框
 function onBookmarkNote(e: Event) {
   const detail = (e as CustomEvent).detail;
@@ -438,6 +448,7 @@ onMounted(async () => {
   window.addEventListener('aib-toggle-note-viewer', toggleNoteViewer);
   window.addEventListener('aib-close-drawer', closeDrawer);
   window.addEventListener('aib-auto-send-command', onAutoSendCommand);
+  window.addEventListener('aib-mode-changed', onModeChanged);
 });
 
 onUnmounted(() => {
@@ -453,6 +464,7 @@ onUnmounted(() => {
   window.removeEventListener('aib-toggle-note-viewer', toggleNoteViewer);
   window.removeEventListener('aib-close-drawer', closeDrawer);
   window.removeEventListener('aib-auto-send-command', onAutoSendCommand);
+  window.removeEventListener('aib-mode-changed', onModeChanged);
 });
 </script>
 
