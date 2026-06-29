@@ -81,17 +81,9 @@ function startBgVoice() {
       }
     },
     onError: (error) => log.error('常驻语音错误', error),
-    // 播报条件：侧边栏抽屉打开且处于语音助手界面模式 OR alwaysOnVoice 为 true
+    // 播报条件：麦克风打开就播报（bgManager 存在且 active）
     getBroadcastCondition: () => {
-      // 条件1：alwaysOnVoice 为 true
-      if (voiceStore.settings.alwaysOnVoice) return true
-      // 条件2：侧边栏抽屉打开且处于语音助手界面模式
-      if (open.value) {
-        // 从 storage 读取当前模式
-        const mode = localStorage.getItem('aib-voice-mode')
-        return mode === 'voice'
-      }
-      return false
+      return bgManager?.isActive || false
     },
   })
   bgManager.onProcessText = async (text: string) => {
@@ -116,6 +108,7 @@ watch(
     return `${last.role}:${last.status}:${last.content}`
   },
   (val) => {
+    log.info('[TTS] watch 触发', { hasBgManager: !!bgManager, isActive: bgManager?.isActive, val: val?.slice(0, 50) })
     if (!bgManager?.isActive || !val) return
     const msgs = convStore.conversation?.messages
     if (!msgs?.length) return
@@ -127,6 +120,7 @@ watch(
         const arr = [...spokenMsgIds]; arr.slice(0, 50).forEach(id => spokenMsgIds.delete(id))
       }
       const speakText = getSpeakText(lastMsg)
+      log.info('[TTS] 准备播报', { speakText: speakText?.slice(0, 50), content: lastMsg.content?.slice(0, 50) })
       if (speakText) bgManager.speak(speakText)
     }
   },
@@ -158,10 +152,18 @@ watch(
   },
 )
 
-// 抽屉开关 → 非常驻模式管理引擎生命周期
+// 抽屉开关 → 语音助手模式才启动麦克风
 watch(open, (isOpen) => {
   if (voiceStore.settings.alwaysOnVoice) return // 常驻模式不随抽屉变化
-  if (isOpen) { startBgVoice() } else { stopBgVoice() }
+  // 只有抽屉打开且处于语音助手模式才启动麦克风
+  if (isOpen) {
+    const mode = localStorage.getItem('aib-voice-mode')
+    if (mode !== 'chat') {
+      startBgVoice()
+    }
+  } else {
+    stopBgVoice()
+  }
 })
 
 // 笔记收藏弹框状态
@@ -254,15 +256,18 @@ function onMouseup(e: MouseEvent) {
 }
 
 // 标签页可见性 → 隐藏时暂停引擎（防止多标签页抢麦克风），可见时恢复
-// 仅在常驻模式 或 抽屉打开时才管理引擎
 function handleVisibilityChange() {
   if (document.hidden) {
-    // 隐藏时停止引擎
     stopBgVoice()
   } else {
-    // 可见时：仅在常驻模式或抽屉打开时才启动
-    if (voiceStore.settings.alwaysOnVoice || open.value) {
+    // 可见时：常驻语音 或 语音助手模式+抽屉打开 才启动
+    if (voiceStore.settings.alwaysOnVoice) {
       startBgVoice()
+    } else if (open.value) {
+      const mode = localStorage.getItem('aib-voice-mode')
+      if (mode !== 'chat') {
+        startBgVoice()
+      }
     }
   }
 }

@@ -42,9 +42,15 @@ chrome.storage.local.get('aib-voice-mode').then((result) => {
   }
 });
 
-// 模式变化时保存
+// 模式变化时保存，并通知 App 管理麦克风
 watch(activeMode, (mode) => {
   chrome.storage.local.set({ 'aib-voice-mode': mode });
+  // 切换到文字模式时，停止麦克风（除非常驻语音开启）
+  if (mode === 'chat') {
+    window.dispatchEvent(new CustomEvent('aib-mode-changed', { detail: { mode: 'chat' } }))
+  } else {
+    window.dispatchEvent(new CustomEvent('aib-mode-changed', { detail: { mode: 'voice' } }))
+  }
 });
 
 /* ---- 左侧拖拽调整宽度 ---- */

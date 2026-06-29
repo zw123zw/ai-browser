@@ -163,7 +163,9 @@ export class VoiceManager {
 
   /** 播报文字。播报期间暂停引擎，防止 TTS 声音被识别。 */
   async speak(text: string): Promise<void> {
-    if (text && this.config.enableTts && this.canBroadcast()) {
+    // 唤醒词播报无条件执行，其他播报检查条件
+    const isWakeGreeting = text === '您好，请说'
+    if (text && this.config.enableTts && (isWakeGreeting || this.canBroadcast())) {
       this.setState('speaking')
       this.engine?.pause()
       await this.broadcast.speak(text)
@@ -183,7 +185,9 @@ export class VoiceManager {
   private canBroadcast(): boolean {
     // 如果设置了 getBroadcastCondition 回调，使用它来判断
     if (this.config.getBroadcastCondition) {
-      return this.config.getBroadcastCondition()
+      const result = this.config.getBroadcastCondition()
+      log.info('[播报条件] getBroadcastCondition 返回', { result })
+      return result
     }
     // 默认允许播报（保持向后兼容）
     return true
@@ -376,7 +380,7 @@ export class VoiceManager {
     this.clearTimers()
     this.config.onInterimText?.('')
     this.playWakeSound()
-    // 播报"您好，请说"（speaking 状态下仍可缓冲命令）
+    // 播报"您好，请说"（唤醒词播报无条件执行）
     this.speak('您好，请说')
   }
 

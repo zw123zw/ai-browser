@@ -412,6 +412,55 @@ export class InputPipeline {
       })
 
       callbacks.onCommandsParsed([cmd], i + 1)
+
+      // ★ translate → 触发自动翻译功能
+      if (cmd.action === 'translate') {
+        try {
+          const { TranslateService } = await import('@/src/browser/translate-service')
+          const translateService = new TranslateService()
+          const settings = this.options.getSettings()
+          const targetLang = settings.translateTargetLang || '中文'
+          await translateService.translateVisible(targetLang, settings)
+          callbacks.onCommandResult('translate', true, '翻译完成')
+          callbacks.onBroadcast?.('翻译完成')
+          completed.push(cmd)
+        } catch (err) {
+          const errMsg = err instanceof Error ? err.message : String(err)
+          callbacks.onCommandResult('translate', false, errMsg)
+          log.error('[Phase 1 快速通道] translate 失败', err)
+        }
+        continue
+      }
+
+      // ★ note → 触发自动笔记功能
+      if (cmd.action === 'note') {
+        try {
+          const { optimizeAsNoteStream } = await import('@/src/browser/note-service')
+          const settings = this.options.getSettings()
+          const pageText = extractPageText()
+          if (pageText.length < 100) {
+            callbacks.onCommandResult('note', false, '页面内容过少')
+          } else {
+            callbacks.onChatStart()
+            const signal = this.options.getSignal?.()
+            const result = await optimizeAsNoteStream(pageText, settings, (delta, full) => {
+              callbacks.onChatDelta(delta)
+            }, undefined, signal)
+            callbacks.onChatEnd()
+            callbacks.onCommandResult('note', true, '笔记生成完成')
+            callbacks.onBroadcast?.(result)
+            completed.push(cmd)
+          }
+        } catch (err) {
+          if (err instanceof DOMException && err.name === 'AbortError') throw err
+          const errMsg = err instanceof Error ? err.message : String(err)
+          callbacks.onCommandResult('note', false, errMsg)
+          log.error('[Phase 1 快速通道] note 失败', err)
+        }
+        continue
+      }
+
+      // 其他 command → ActionExecutor 执行
       const result = await this.executor.execute(cmd, this.options.getSignal?.())
       callbacks.onCommandResult(cmd.action, result.success, result.message)
 
