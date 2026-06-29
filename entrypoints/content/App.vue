@@ -395,13 +395,16 @@ function onAutoSendCommand(e: Event) {
   });
 }
 
-// 处理模式切换事件：文字模式时停止麦克风
+// 处理模式切换事件：管理麦克风启停
 function onModeChanged(e: Event) {
   const detail = (e as CustomEvent).detail;
   if (!detail?.mode) return;
-  log.info('[模式切换]', { mode: detail.mode, alwaysOn: voiceStore.settings.alwaysOnVoice })
-  if (detail.mode === 'chat' && !voiceStore.settings.alwaysOnVoice) {
+  log.info('[模式切换]', { mode: detail.mode, alwaysOn: voiceStore.settings.alwaysOnVoice, drawerOpen: open.value })
+  if (voiceStore.settings.alwaysOnVoice) return // 常驻模式不随模式切换变化
+  if (detail.mode === 'chat') {
     stopBgVoice()
+  } else if (detail.mode === 'voice' && open.value) {
+    startBgVoice()
   }
 }
 
