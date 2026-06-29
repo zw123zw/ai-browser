@@ -491,6 +491,8 @@ export class InputPipeline {
       if (phase2Result.needInput) {
         log.info('[Phase 2] → need_input', { message: phase2Result.needInput.message })
         try {
+          // 播报 AI 返回的提示信息
+          callbacks.onBroadcast?.(phase2Result.needInput.message)
           userInputContext = await callbacks.onNeedInput(phase2Result.needInput.message)
           log.info('[Phase 2] ← 用户已提供输入，继续执行')
           // 清除错误状态，用新上下文重试
@@ -558,6 +560,8 @@ export class InputPipeline {
                 completed.push({ action: cmd.action, description: cmd.description })
                 completedKeys.add(cmdKey)
                 callbacks.onCommandResult('download', true, '数据提取完成')
+                // 播报"数据提取完成"
+                callbacks.onBroadcast?.('数据提取完成')
                 log.info('[Phase 2] ═══ download 完成 ═══')
 
                 // done:0 → 自动点击下一章，继续请求 AI
@@ -609,6 +613,8 @@ export class InputPipeline {
                 completed.push({ action: cmd.action, description: cmd.description })
                 completedKeys.add(cmdKey)
                 callbacks.onCommandResult('summarize', true, '分析完成')
+                // 播报分析结果
+                callbacks.onBroadcast?.(aiResult)
                 log.info('[Phase 2] ═══ summarize 完成 ═══')
               } catch (err) {
                 // 中止请求直接抛出，不当作执行失败
@@ -618,6 +624,83 @@ export class InputPipeline {
                 lastError = `[summarize] ${errMsg}`
                 log.error('[Phase 2] summarize 失败', err)
               }
+            }
+            totalExecutions++
+            if (cmd.done === 1) {
+              log.info('[Phase 2] ═══ done=1，任务完成 ═══')
+              batchStopped = true
+              break
+            }
+            continue
+          }
+
+          // ★ translate → 触发自动翻译功能
+          if (cmd.action === 'translate') {
+            log.info('[Phase 2] ── translate：触发自动翻译 ──')
+            try {
+              // 动态导入翻译服务
+              const { TranslateService } = await import('@/src/browser/translate-service')
+              const translateService = new TranslateService()
+              const settings = this.options.getSettings()
+              const targetLang = settings.translateTargetLang || '中文'
+              await translateService.translateVisible(targetLang, settings)
+              completed.push({ action: cmd.action, description: cmd.description })
+              completedKeys.add(cmdKey)
+              callbacks.onCommandResult('translate', true, '翻译完成')
+              // 播报"翻译完成"
+              callbacks.onBroadcast?.('翻译完成')
+              log.info('[Phase 2] ═══ translate 完成 ═══')
+            } catch (err) {
+              // 中止请求直接抛出，不当作执行失败
+              if (err instanceof DOMException && err.name === 'AbortError') throw err
+              const errMsg = err instanceof Error ? err.message : String(err)
+              callbacks.onCommandResult('translate', false, errMsg)
+              lastError = `[translate] ${errMsg}`
+              log.error('[Phase 2] translate 失败', err)
+            }
+            totalExecutions++
+            if (cmd.done === 1) {
+              log.info('[Phase 2] ═══ done=1，任务完成 ═══')
+              batchStopped = true
+              break
+            }
+            continue
+          }
+
+          // ★ note → 触发自动笔记功能
+          if (cmd.action === 'note') {
+            log.info('[Phase 2] ── note：触发自动笔记 ──')
+            try {
+              // 动态导入笔记服务
+              const { optimizeAsNoteStream } = await import('@/src/browser/note-service')
+              const settings = this.options.getSettings()
+              const pageText = extractPageText()
+              if (pageText.length < 100) {
+                callbacks.onCommandResult('note', false, '页面内容过少')
+                lastError = '页面内容过少'
+              } else {
+                // 流式输出：先 onChatStart，每个 chunk 调 onChatDelta
+                callbacks.onChatStart()
+                const signal = this.options.getSignal?.()
+                const result = await optimizeAsNoteStream(pageText, settings, (delta, full) => {
+                  callbacks.onChatDelta(delta)
+                }, undefined, signal)
+                log.info('[Phase 2] note AI 返回', { length: result.length, preview: result.slice(0, 100) })
+                callbacks.onChatEnd()
+                completed.push({ action: cmd.action, description: cmd.description })
+                completedKeys.add(cmdKey)
+                callbacks.onCommandResult('note', true, '笔记生成完成')
+                // 播报笔记内容
+                callbacks.onBroadcast?.(result)
+                log.info('[Phase 2] ═══ note 完成 ═══')
+              }
+            } catch (err) {
+              // 中止请求直接抛出，不当作执行失败
+              if (err instanceof DOMException && err.name === 'AbortError') throw err
+              const errMsg = err instanceof Error ? err.message : String(err)
+              callbacks.onCommandResult('note', false, errMsg)
+              lastError = `[note] ${errMsg}`
+              log.error('[Phase 2] note 失败', err)
             }
             totalExecutions++
             if (cmd.done === 1) {

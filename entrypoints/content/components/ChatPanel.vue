@@ -125,10 +125,14 @@ async function onSend(payload: { text: string; attachments: import('@/src/types'
 }
 
 async function onAbort() {
+  log.info('[停止] ─── onAbort 被调用 ───')
   convStore.abort();
+  log.info('[停止] convStore.abort 完成')
   await pipeline.abort();
+  log.info('[停止] pipeline.abort 完成')
   // 停止自动笔记
   window.dispatchEvent(new CustomEvent('aib-stop-auto-note'));
+  log.info('[停止] ─── onAbort 结束 ───')
 }
 
 async function onPick(text: string) {

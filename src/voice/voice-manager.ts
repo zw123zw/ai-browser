@@ -42,6 +42,8 @@ export interface VoiceManagerConfig {
   onError?: (error: string) => void
   /** 打断当前处理（abort pipeline） */
   onAbortProcess?: () => void
+  /** 获取播报条件：侧边栏抽屉打开且处于语音助手界面模式 */
+  getBroadcastCondition?: () => boolean
 }
 
 export class VoiceManager {
@@ -51,6 +53,7 @@ export class VoiceManager {
   private _state: VoiceManagerState = 'idle'
   private _isActive = false
   private config: Required<VoiceManagerConfig>
+  private handleBroadcastEvent: ((event: Event) => void) | null = null
 
   private speechBuffer: string[] = []
   private bufferTimer: ReturnType<typeof setTimeout> | null = null
@@ -78,6 +81,7 @@ export class VoiceManager {
       onAssistantMessage: config.onAssistantMessage ?? (() => {}),
       onError: config.onError ?? (() => {}),
       onAbortProcess: config.onAbortProcess ?? (() => {}),
+      getBroadcastCondition: config.getBroadcastCondition ?? (() => true),
     }
 
     this.broadcast = new VoiceBroadcast({
@@ -100,6 +104,15 @@ export class VoiceManager {
     this._isActive = true
     this.createEngine()
 
+    // 监听播报事件
+    this.handleBroadcastEvent = (event: Event) => {
+      const customEvent = event as CustomEvent<{ text: string }>
+      if (customEvent.detail?.text) {
+        this.speak(customEvent.detail.text)
+      }
+    }
+    window.addEventListener('aib-broadcast', this.handleBroadcastEvent)
+
     // 始终从 wake 状态开始，等待唤醒词
     this.setState('wake')
     this.engine?.start()
@@ -111,6 +124,11 @@ export class VoiceManager {
     this.clearTimers()
     this.broadcast.cancel()
     this.engine?.stop()
+    // 移除播报事件监听
+    if (this.handleBroadcastEvent) {
+      window.removeEventListener('aib-broadcast', this.handleBroadcastEvent)
+      this.handleBroadcastEvent = null
+    }
     this.setState('idle')
   }
 
@@ -145,7 +163,7 @@ export class VoiceManager {
 
   /** 播报文字。播报期间暂停引擎，防止 TTS 声音被识别。 */
   async speak(text: string): Promise<void> {
-    if (text && this.config.enableTts) {
+    if (text && this.config.enableTts && this.canBroadcast()) {
       this.setState('speaking')
       this.engine?.pause()
       await this.broadcast.speak(text)
@@ -159,6 +177,16 @@ export class VoiceManager {
       this.setState('command')
       this.startIdleTimer()
     }
+  }
+
+  /** 判断是否可以播报：侧边栏抽屉打开且处于语音助手界面模式 OR alwaysOnVoice 为 true */
+  private canBroadcast(): boolean {
+    // 如果设置了 getBroadcastCondition 回调，使用它来判断
+    if (this.config.getBroadcastCondition) {
+      return this.config.getBroadcastCondition()
+    }
+    // 默认允许播报（保持向后兼容）
+    return true
   }
 
   destroy(): void {
@@ -201,6 +229,8 @@ export class VoiceManager {
     this.engine.onError = (error) => {
       log.error('引擎错误:', error)
       this.config.onError?.(error)
+      // 播报错误信息
+      this.speak(`语音引擎错误：${error}`)
     }
     this.engine.onStatusChange = (status) => log.debug('引擎状态:', status)
   }

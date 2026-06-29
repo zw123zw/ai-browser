@@ -105,12 +105,15 @@ const currentModel = computed(
 
 /** 当前会话是否处于流式响应或指令执行中 */
 const isStreaming = computed(() => {
-  if (props.isProcessing && !props.waitingInputPrompt) return true;
+  if (props.isProcessing && !props.waitingInputPrompt) {
+    log.info('[停止] isStreaming: true (isProcessing=true)')
+    return true;
+  }
   const msgs = props.conversation?.messages;
   const last = msgs?.[msgs.length - 1];
   const result = last?.status === 'streaming';
   // 调试日志
-  log.debug('isStreaming check', {
+  log.info('[停止] isStreaming check', {
     isProcessing: props.isProcessing,
     msgCount: msgs?.length,
     lastMsgId: last?.id?.slice(-8),
@@ -133,6 +136,7 @@ function onSendOrAbort() {
     return;
   }
   if (isStreaming.value) {
+    log.info('[停止] onSendOrAbort: 触发 abort')
     emit('abort');
   } else {
     send();
@@ -404,6 +408,12 @@ function send() {
 }
 
 function onKeydown(e: KeyboardEvent) {
+  // 阻止普通输入字符冒泡到页面，防止触发页面快捷键（如 GitHub 的 s、/ 等）
+  // 只对特殊键保留原有行为，不影响页面正常输入
+  if (!e.ctrlKey && !e.metaKey && !e.altKey && e.key.length === 1) {
+    e.stopPropagation();
+  }
+
   // / 指令选择器键盘导航
   if (commandMenuOpen.value) {
     if (e.key === 'ArrowDown') {

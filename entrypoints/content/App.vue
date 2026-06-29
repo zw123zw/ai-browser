@@ -81,6 +81,18 @@ function startBgVoice() {
       }
     },
     onError: (error) => log.error('常驻语音错误', error),
+    // 播报条件：侧边栏抽屉打开且处于语音助手界面模式 OR alwaysOnVoice 为 true
+    getBroadcastCondition: () => {
+      // 条件1：alwaysOnVoice 为 true
+      if (voiceStore.settings.alwaysOnVoice) return true
+      // 条件2：侧边栏抽屉打开且处于语音助手界面模式
+      if (open.value) {
+        // 从 storage 读取当前模式
+        const mode = localStorage.getItem('aib-voice-mode')
+        return mode === 'voice'
+      }
+      return false
+    },
   })
   bgManager.onProcessText = async (text: string) => {
     try { await pipeline.processInput(text) } catch (e) { log.error('管线处理失败', e) }
@@ -366,6 +378,18 @@ function onAutoNoteAborted(e: Event) {
   }
 }
 
+// 处理自动发送命令请求（如自动笔记首次加载时发送 /note）
+function onAutoSendCommand(e: Event) {
+  const detail = (e as CustomEvent).detail;
+  if (!detail?.command) return;
+  log.info('[自动发送命令]', { command: detail.command });
+  // 打开抽屉并发送命令
+  open.value = true;
+  nextTick(() => {
+    pipeline.processInput(detail.command);
+  });
+}
+
 // 处理笔记收藏请求：打开收藏弹框
 function onBookmarkNote(e: Event) {
   const detail = (e as CustomEvent).detail;
@@ -408,6 +432,7 @@ onMounted(async () => {
   window.addEventListener('aib-bookmark-note', onBookmarkNote);
   window.addEventListener('aib-toggle-note-viewer', toggleNoteViewer);
   window.addEventListener('aib-close-drawer', closeDrawer);
+  window.addEventListener('aib-auto-send-command', onAutoSendCommand);
 });
 
 onUnmounted(() => {
@@ -422,6 +447,7 @@ onUnmounted(() => {
   window.removeEventListener('aib-bookmark-note', onBookmarkNote);
   window.removeEventListener('aib-toggle-note-viewer', toggleNoteViewer);
   window.removeEventListener('aib-close-drawer', closeDrawer);
+  window.removeEventListener('aib-auto-send-command', onAutoSendCommand);
 });
 </script>
 

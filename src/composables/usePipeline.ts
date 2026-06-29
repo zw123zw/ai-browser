@@ -265,20 +265,29 @@ export function usePipeline() {
             status: 'done',
           })
         },
+
+        // 语音播报
+        onBroadcast: (text) => {
+          log.info('[回调] onBroadcast', { text: text.slice(0, 50) })
+          // 通过全局事件触发播报，由 VoiceManager 监听
+          window.dispatchEvent(new CustomEvent('aib-broadcast', { detail: { text } }))
+        },
       }
 
       await getPipeline().process({ text, mode: 'text' }, callbacks)
     } catch (error) {
       if (ac.signal.aborted) {
-        log.info('═══ processInput 已中止 ═══')
+        log.info('[停止] ═══ processInput 已中止 ═══')
         addSystemMessage('⏹ 已停止')
       } else {
         log.error('═══ processInput 异常 ═══', error)
         addSystemMessage(`处理失败: ${error instanceof Error ? error.message : String(error)}`)
       }
     } finally {
+      log.info('[停止] ─── finally 块开始 ───', { isProcessing: isProcessing.value, hasCurrentStreamingMsg: !!currentStreamingMsg })
       // 确保流式消息状态正确
       if (currentStreamingMsg && currentStreamingMsg.status === 'streaming') {
+        log.info('[停止] 设置 currentStreamingMsg.status = done')
         currentStreamingMsg.status = 'done'
       }
       currentStreamingMsg = null
@@ -289,7 +298,9 @@ export function usePipeline() {
         waitingInputReject = null
         waitingInputPrompt.value = null
       }
+      log.info('[停止] 设置 isProcessing = false')
       isProcessing.value = false
+      log.info('[停止] 调用 stoppedResolve', { hasStoppedResolve: !!stoppedResolve })
       stoppedResolve?.()
       stoppedResolve = null
       const lastMsg = convStore.conversation?.messages[convStore.conversation.messages.length - 1]
@@ -409,6 +420,12 @@ export function usePipeline() {
             status: 'done',
           })
         },
+
+        // 语音播报
+        onBroadcast: (text) => {
+          log.info('[恢复] onBroadcast', { text: text.slice(0, 50) })
+          window.dispatchEvent(new CustomEvent('aib-broadcast', { detail: { text } }))
+        },
       }
 
       // 还原跨标签页的历史消息（如果有）
@@ -474,24 +491,27 @@ export function usePipeline() {
   }
 
   function abort(): Promise<void> {
-    log.debug('中止 pipeline 请求')
+    log.info('[停止] ─── abort 被调用 ───', { isProcessing: isProcessing.value, hasCurrentAborter: !!currentAborter })
     // 如果正在等待用户输入，reject Promise 让 pipeline 从 await 中退出
     if (waitingInputReject) {
+      log.info('[停止] reject waitingInput')
       waitingInputReject(new DOMException('The operation was aborted.', 'AbortError'))
       waitingInputResolve = null
       waitingInputReject = null
       waitingInputPrompt.value = null
     }
+    log.info('[停止] 调用 currentAborter.abort()')
     currentAborter?.abort()
     // 清除跨标签页排队任务，阻止后续标签页继续执行
     queuedTaskStorage.setValue(null).catch(() => {})
     // 如果 pipeline 正在运行，等它真正结束（超时 3 秒兜底，防止挂死）
     if (isProcessing.value) {
+      log.info('[停止] isProcessing 为 true，等待结束')
       return new Promise<void>(resolve => {
         stoppedResolve = resolve
         setTimeout(() => {
           if (isProcessing.value) {
-            log.warn('abort 超时，强制重置 isProcessing')
+            log.warn('[停止] abort 超时，强制重置 isProcessing')
             isProcessing.value = false
             stoppedResolve = null
             resolve()
@@ -499,6 +519,7 @@ export function usePipeline() {
         }, 3000)
       })
     }
+    log.info('[停止] isProcessing 为 false，直接返回')
     return Promise.resolve()
   }
 

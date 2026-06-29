@@ -37,6 +37,8 @@ export const CAPABILITY_DOMAIN_LIST: CapabilityItem[] = [
   { id: 'closeModal', title: '关闭弹窗',   desc: '关闭页面弹窗/对话框',                    needSkeleton: false },
   { id: 'download',   title: '提取数据',   desc: '提取页面数据并导出文件',                  needSkeleton: true },
   { id: 'summarize',  title: '分析总结',   desc: '提取页面全文并AI分析总结',                needSkeleton: true },
+  { id: 'translate',  title: '翻译页面',   desc: '翻译当前页面内容',                       needSkeleton: false },
+  { id: 'note',       title: '生成笔记',   desc: '对当前页面内容生成笔记',                  needSkeleton: false },
 ]
 
 // 完整能力域列表（Phase2 用）

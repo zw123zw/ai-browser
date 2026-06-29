@@ -53,4 +53,7 @@ export interface PipelineCallbacks {
 
   /** download 数据提取完成，返回 AI 生成的 [FILE] 内容 */
   onFileOutput?: (content: string) => void
+
+  /** 语音播报（用于播报操作结果） */
+  onBroadcast?: (text: string) => void
 }

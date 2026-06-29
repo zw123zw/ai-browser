@@ -558,9 +558,8 @@ export default defineContentScript({
       }
     }
 
-    // --- 自动笔记：页面加载/跳转后触发 ---
-    // 用 document 级别标志防重复（content script 可能被注入多次）
-    // 使用防抖计时器，避免 initAutoNote 和 contentObserver 同时触发
+    // --- 自动笔记：改为用户发送 /note 命令触发 ---
+    // 页面首次加载时，自动发送 /note 命令（统一触发方式）
     function scheduleAutoNote(delay: number) {
       if (autoNoteTimer) clearTimeout(autoNoteTimer)
       autoNoteTimer = setTimeout(() => runAutoNote(), delay)
@@ -570,7 +569,21 @@ export default defineContentScript({
       if ((document as any).__aibAutoNoteInited) return
       ;(document as any).__aibAutoNoteInited = true
       log.info('[自动笔记] 页面加载，检查是否开启')
-      scheduleAutoNote(1000) // 等页面稳定后触发
+
+      // 检查自动笔记是否开启
+      const settings = await getTranslateSettings()
+      if (settings?.noteMode !== 'auto') {
+        log.debug('[自动笔记] 未开启，跳过')
+        return
+      }
+
+      // 等页面稳定后，自动发送 /note 命令
+      setTimeout(() => {
+        log.info('[自动笔记] 自动发送 /note 命令')
+        window.dispatchEvent(new CustomEvent('aib-auto-send-command', {
+          detail: { command: '/note' },
+        }))
+      }, 1500)
     }
 
     if (document.readyState === 'complete') {
@@ -600,7 +613,7 @@ export default defineContentScript({
       const newUrl = location.href
       if (newUrl === currentUrl) return
       currentUrl = newUrl
-      log.info(`[自动翻译/笔记] URL 变化 (${source})`, { url: newUrl })
+      log.info(`[自动翻译] URL 变化 (${source})`, { url: newUrl })
 
       // 取消正在执行的自动笔记
       if (autoNoteAbort) {
@@ -614,7 +627,7 @@ export default defineContentScript({
       urlChangeTimer = setTimeout(async () => {
         translateService.reset()
         await runAutoTranslate()
-        scheduleAutoNote(0) // URL 变化后立即触发（无延迟）
+        // 自动笔记现在通过 /note 命令触发，不再在 URL 变化时自动触发
       }, 800)
     }
 
@@ -661,32 +674,9 @@ export default defineContentScript({
       characterData: true,
     })
 
-    // --- 自动笔记：MutationObserver 检测页面内容变化 ---
-    // 不依赖 URL 变化，适用于 Livewire/Turbo 等非标准 SPA 框架
-    // 使用 scheduleAutoNote 防抖，避免与 initAutoNote 同时触发
-    let lastContentLength = document.body.innerText.length
-
-    const contentObserver = new MutationObserver(() => {
-      const newLength = document.body.innerText.length
-      const delta = Math.abs(newLength - lastContentLength)
-
-      // 内容变化超过阈值 → 触发自动笔记
-      if (delta > 200) {
-        lastContentLength = newLength
-        // 取消正在执行的自动笔记
-        if (autoNoteAbort) {
-          autoNoteAbort.abort()
-          autoNoteAbort = null
-        }
-        autoNoteRunning = false
-        scheduleAutoNote(2000) // 使用统一的防抖函数
-      }
-    })
-
-    contentObserver.observe(document.body, {
-      childList: true,
-      subtree: true,
-    })
+    // --- 自动笔记：MutationObserver 已移除 ---
+    // 自动笔记现在通过 /note 命令触发（在 pipeline.ts 中处理）
+    // 不再通过 MutationObserver 检测页面内容变化
 
     // ═══════════════════════════════════════════════════════════════
     // Vue 应用挂载
