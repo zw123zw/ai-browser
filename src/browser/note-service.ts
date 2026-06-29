@@ -136,11 +136,13 @@ export async function optimizeAsNoteStream(
         }
       },
     );
+    log.info('笔记流式调用完成', { signalAborted: signal?.aborted });
   } catch (e: any) {
-    if (e?.name === 'AbortError' || signal?.aborted) {
-      log.info('笔记流式分析被取消');
-      throw e;
-    }
+    log.info('笔记流式调用异常', {
+      errorName: e?.name,
+      errorMessage: e?.message,
+      signalAborted: signal?.aborted,
+    });
     throw e;
   }
 

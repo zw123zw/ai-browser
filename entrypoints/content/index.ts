@@ -474,11 +474,15 @@ export default defineContentScript({
       }
       autoNoteRunning = true
       autoNoteAbort = new AbortController()
+      log.info('[自动笔记] 开始执行', { autoNoteRunning })
       const settings = await getTranslateSettings()
       if (settings?.noteMode !== 'auto') {
         log.debug('[自动笔记] 未开启，跳过')
         return
       }
+
+      // 一条消息：占位 → 流式替换 → 最终更新
+      const msgId = 'auto-note-' + Date.now()
 
       try {
         // 提取页面文本（精简格式，带来源信息）
@@ -493,8 +497,7 @@ export default defineContentScript({
           return
         }
 
-        // 一条消息：占位 → 流式替换 → 最终更新
-        const msgId = 'auto-note-' + Date.now()
+        log.info('[自动笔记] 创建消息', { msgId })
 
         // 插入占位消息
         window.dispatchEvent(new CustomEvent('aib-auto-note-start', {
@@ -531,16 +534,26 @@ export default defineContentScript({
           detail: { id: msgId, content: noteWithUrl },
         }))
       } catch (err: any) {
-        // 如果是用户主动停止，更新消息状态为 aborted
-        if (err?.name === 'AbortError' || autoNoteAbort?.signal.aborted) {
-          log.info('[自动笔记] 用户停止')
+        // 判断是否是用户主动停止
+        const isAbort = err?.name === 'AbortError' || err?.message?.includes('aborted')
+        log.info('[自动笔记] catch 块', {
+          errorName: err?.name,
+          errorMessage: err?.message,
+          isAbort,
+          msgId,
+          msgIdType: typeof msgId,
+        })
+        if (isAbort) {
+          log.info('[自动笔记] 用户停止，准备 dispatch 事件', { msgId })
           window.dispatchEvent(new CustomEvent('aib-auto-note-aborted', {
             detail: { id: msgId },
           }))
+          log.info('[自动笔记] 事件已 dispatch')
         } else {
           log.error('[自动笔记] 失败', err)
         }
       } finally {
+        log.info('[自动笔记] finally 块', { autoNoteRunning })
         autoNoteRunning = false
       }
     }
@@ -568,8 +581,12 @@ export default defineContentScript({
 
     // 监听停止自动笔记事件（用户点击停止按钮时触发）
     window.addEventListener('aib-stop-auto-note', () => {
+      log.info('[自动笔记] 收到停止事件', {
+        hasAutoNoteAbort: !!autoNoteAbort,
+        autoNoteRunning,
+      })
       if (autoNoteAbort) {
-        log.info('[自动笔记] 用户停止')
+        log.info('[自动笔记] 执行 abort()')
         autoNoteAbort.abort()
         autoNoteAbort = null
       }

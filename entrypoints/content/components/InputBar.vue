@@ -106,8 +106,18 @@ const currentModel = computed(
 /** 当前会话是否处于流式响应或指令执行中 */
 const isStreaming = computed(() => {
   if (props.isProcessing && !props.waitingInputPrompt) return true;
-  const last = props.conversation?.messages[props.conversation.messages.length - 1];
-  return last?.status === 'streaming';
+  const msgs = props.conversation?.messages;
+  const last = msgs?.[msgs.length - 1];
+  const result = last?.status === 'streaming';
+  // 调试日志
+  log.debug('isStreaming check', {
+    isProcessing: props.isProcessing,
+    msgCount: msgs?.length,
+    lastMsgId: last?.id?.slice(-8),
+    lastMsgStatus: last?.status,
+    result,
+  });
+  return result;
 });
 
 /** 输入框 placeholder */

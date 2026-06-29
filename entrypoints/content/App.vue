@@ -341,12 +341,28 @@ function onAutoNoteResult(e: Event) {
 // 处理自动笔记中止：更新消息状态为 aborted
 function onAutoNoteAborted(e: Event) {
   const detail = (e as CustomEvent).detail;
+  log.info('[自动笔记] onAutoNoteAborted 被调用', {
+    detailId: detail?.id,
+    hasConversation: !!convStore.conversation,
+  });
   if (!detail?.id || !convStore.conversation) return;
 
-  const existing = convStore.conversation.messages.find((m) => m.id === detail.id);
+  const msgs = convStore.conversation.messages;
+  const existing = msgs.find((m) => m.id === detail.id);
+  log.info('[自动笔记] 查找消息', {
+    targetId: detail.id,
+    found: !!existing,
+    currentStatus: existing?.status,
+    msgCount: msgs.length,
+    lastMsgId: msgs[msgs.length - 1]?.id?.slice(-8),
+    lastMsgStatus: msgs[msgs.length - 1]?.status,
+  });
+
   if (existing) {
     existing.status = 'aborted';
-    log.info('[自动笔记] 消息状态更新为 aborted', { id: detail.id });
+    log.info('[自动笔记] 消息状态已更新为 aborted', { id: detail.id });
+  } else {
+    log.warn('[自动笔记] 未找到消息', { targetId: detail.id });
   }
 }
 
