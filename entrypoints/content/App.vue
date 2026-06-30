@@ -278,14 +278,26 @@ function handleVisibilityChange() {
   if (document.hidden) {
     stopBgVoice()
   } else {
-    // 可见时：常驻语音 或 语音助手模式+抽屉打开 才启动
-    if (voiceStore.settings.alwaysOnVoice) {
+    startVoiceIfAllowed()
+  }
+}
+
+// 窗口焦点 → 失焦时停止引擎，获焦时恢复（与 visibilitychange 双保险）
+function handleFocus() {
+  startVoiceIfAllowed()
+}
+function handleBlur() {
+  stopBgVoice()
+}
+
+/** 仅在满足条件时启动引擎 */
+function startVoiceIfAllowed() {
+  if (voiceStore.settings.alwaysOnVoice) {
+    startBgVoice()
+  } else if (open.value) {
+    const mode = localStorage.getItem('aib-voice-mode')
+    if (mode !== 'chat') {
       startBgVoice()
-    } else if (open.value) {
-      const mode = localStorage.getItem('aib-voice-mode')
-      if (mode !== 'chat') {
-        startBgVoice()
-      }
     }
   }
 }
@@ -466,6 +478,8 @@ onMounted(async () => {
   document.addEventListener('keydown', onKeydown, true);
   document.addEventListener('mouseup', onMouseup, true);
   document.addEventListener('visibilitychange', handleVisibilityChange);
+  window.addEventListener('focus', handleFocus);
+  window.addEventListener('blur', handleBlur);
   window.addEventListener('aib-auto-note-start', onAutoNoteStart);
   window.addEventListener('aib-auto-note-delta', onAutoNoteDelta);
   window.addEventListener('aib-auto-note-result', onAutoNoteResult);
@@ -483,6 +497,8 @@ onUnmounted(() => {
   document.removeEventListener('keydown', onKeydown, true);
   document.removeEventListener('mouseup', onMouseup, true);
   document.removeEventListener('visibilitychange', handleVisibilityChange);
+  window.removeEventListener('focus', handleFocus);
+  window.removeEventListener('blur', handleBlur);
   window.removeEventListener('aib-auto-note-start', onAutoNoteStart);
   window.removeEventListener('aib-auto-note-delta', onAutoNoteDelta);
   window.removeEventListener('aib-auto-note-result', onAutoNoteResult);
