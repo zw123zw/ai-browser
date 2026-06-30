@@ -33,3 +33,4 @@ Thumbs.db
 
 # Local config (API keys, sensitive data)
 src/local-config.json
+src/voice-config.json

@@ -4,14 +4,24 @@ import rawModels from '@/src/local-config.json';
 import voiceConfig from '@/src/voice-config.json';
 
 /** 语音引擎类型 */
-type EngineType = 'web-speech' | 'iflytek'
+type EngineType = 'web-speech' | 'iflytek' | 'volcengine'
+
+/** 引擎配置项 */
+export interface EngineConf {
+  engineType: string
+  appId: string
+  apiKey: string
+  apiSecret: string
+}
 
 /** 语音设置 */
 export interface VoiceSettings {
   engineType: EngineType
-  iflytekAppId: string
-  iflytekApiKey: string
-  iflytekApiSecret: string
+  appId: string
+  apiKey: string
+  apiSecret: string
+  /** 所有引擎的默认配置（从 voice-config.json 合并） */
+  engineConfs: EngineConf[]
   recognitionLang: string
   wakeWord: string
   alwaysOnVoice: boolean
@@ -22,11 +32,20 @@ export interface VoiceSettings {
   idleTimeout: number
 }
 
+/** 从引擎配置数组中按类型查找配置项 */
+function findEngineConf(type: string): Record<string, string> {
+  if (!Array.isArray(voiceConfig)) return {}
+  return voiceConfig.find((c: any) => c.engineType === type) || {}
+}
+
+export { findEngineConf }
+
 export const DEFAULT_VOICE_SETTINGS: VoiceSettings = {
-  engineType: (voiceConfig.engineType as EngineType) || 'web-speech',
-  iflytekAppId: voiceConfig.iflytekAppId || '',
-  iflytekApiKey: voiceConfig.iflytekApiKey || '',
-  iflytekApiSecret: voiceConfig.iflytekApiSecret || '',
+  engineType: 'web-speech',
+  appId: '',
+  apiKey: '',
+  apiSecret: '',
+  engineConfs: [],
   recognitionLang: 'zh-CN',
   wakeWord: '你好，小灵',
   alwaysOnVoice: false,

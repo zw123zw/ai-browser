@@ -399,9 +399,9 @@ const generalForm = reactive({
 // 语音配置临时变量（点保存才写入 store）
 const voiceForm = reactive({
   engineType: voiceStore.settings.engineType,
-  iflytekAppId: voiceStore.settings.iflytekAppId,
-  iflytekApiKey: voiceStore.settings.iflytekApiKey,
-  iflytekApiSecret: voiceStore.settings.iflytekApiSecret,
+  appId: voiceStore.settings.appId,
+  apiKey: voiceStore.settings.apiKey,
+  apiSecret: voiceStore.settings.apiSecret,
   recognitionLang: voiceStore.settings.recognitionLang,
   wakeWord: voiceStore.settings.wakeWord,
   alwaysOnVoice: voiceStore.settings.alwaysOnVoice,
@@ -412,12 +412,26 @@ const voiceForm = reactive({
   idleTimeout: voiceStore.settings.idleTimeout,
 })
 
+// 切换引擎时，从 engineConfs 加载对应引擎的默认配置
+watch(() => voiceForm.engineType, (newType) => {
+  const conf = voiceStore.settings.engineConfs?.find(c => c.engineType === newType)
+  if (conf) {
+    voiceForm.appId = conf.appId
+    voiceForm.apiKey = conf.apiKey
+    voiceForm.apiSecret = conf.apiSecret
+  }
+})
+
+function openVoiceGuide() {
+  window.dispatchEvent(new Event('aib-show-voice-guide'))
+}
+
 function saveVoice() {
   voiceStore.updateSettings({
     engineType: voiceForm.engineType,
-    iflytekAppId: voiceForm.iflytekAppId,
-    iflytekApiKey: voiceForm.iflytekApiKey,
-    iflytekApiSecret: voiceForm.iflytekApiSecret,
+    appId: voiceForm.appId,
+    apiKey: voiceForm.apiKey,
+    apiSecret: voiceForm.apiSecret,
     recognitionLang: voiceForm.recognitionLang,
     wakeWord: voiceForm.wakeWord,
     alwaysOnVoice: voiceForm.alwaysOnVoice,
@@ -1157,7 +1171,12 @@ function importModels(e: Event) {
 
           <!-- ========== 语音设置 ========== -->
           <div v-show="tab === 'voice'" class="aib-modal-body">
-            <div class="aib-section-title">{{ t('settings.voice.title') }}</div>
+            <div class="aib-section-title aib-section-title-row">
+              <span>{{ t('settings.voice.title') }}</span>
+              <button class="aib-guide-link" @click="openVoiceGuide">
+                📖 {{ t('settings.voice.guideTitle') }}
+              </button>
+            </div>
 
             <!-- 🎤 语音识别 -->
             <div class="aib-form-row">
@@ -1179,34 +1198,37 @@ function importModels(e: Event) {
                 >
                   {{ t('settings.voice.engineIflytek') }}
                 </button>
+                <button
+                  :class="['aib-select-btn', { active: voiceForm.engineType === 'volcengine' }]"
+                  @click="voiceForm.engineType = 'volcengine'"
+                >
+                  {{ t('settings.voice.engineVolcengine') }}
+                </button>
               </div>
             </div>
 
-            <div v-if="voiceForm.engineType === 'iflytek'" class="aib-form-row">
-              <label>{{ t('settings.voice.iflytekAppId') }}</label>
+            <div v-if="voiceForm.engineType !== 'web-speech'" class="aib-form-row">
+              <label>{{ t('settings.voice.appId') }}</label>
               <input
-                :value="voiceForm.iflytekAppId"
-                @input="voiceForm.iflytekAppId = ($event.target as HTMLInputElement).value"
+                v-model="voiceForm.appId"
                 placeholder="xxxxxxxx"
                 class="aib-input"
               />
             </div>
 
-            <div v-if="voiceForm.engineType === 'iflytek'" class="aib-form-row">
-              <label>{{ t('settings.voice.iflytekApiKey') }}</label>
+            <div v-if="voiceForm.engineType !== 'web-speech'" class="aib-form-row">
+              <label>{{ voiceForm.engineType === 'iflytek' ? t('settings.voice.apiKey') : t('settings.voice.accessToken') }}</label>
               <input
-                :value="voiceForm.iflytekApiKey"
-                @input="voiceForm.iflytekApiKey = ($event.target as HTMLInputElement).value"
+                v-model="voiceForm.apiKey"
                 placeholder="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
                 class="aib-input"
               />
             </div>
 
             <div v-if="voiceForm.engineType === 'iflytek'" class="aib-form-row">
-              <label>{{ t('settings.voice.iflytekApiSecret') }}</label>
+              <label>{{ t('settings.voice.apiSecret') }}</label>
               <input
-                :value="voiceForm.iflytekApiSecret"
-                @input="voiceForm.iflytekApiSecret = ($event.target as HTMLInputElement).value"
+                v-model="voiceForm.apiSecret"
                 placeholder="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
                 class="aib-input"
               />
@@ -1414,6 +1436,12 @@ function importModels(e: Event) {
   padding-bottom: 12px;
   border-bottom: 1px solid var(--aib-border);
   margin-bottom: 4px;
+}
+
+.aib-section-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
 
 /* 模型选择（按钮式） */
@@ -2210,5 +2238,21 @@ label.aib-switch input:checked + .aib-switch-slider::before {
   font-size: 11px;
   color: var(--aib-text-faint);
   margin-top: 2px;
+}
+
+/* 语音指南链接按钮 */
+.aib-guide-link {
+  background: none;
+  border: none;
+  color: var(--aib-primary);
+  font-size: 13px;
+  cursor: pointer;
+  padding: 7px 0;
+  font-family: inherit;
+  transition: opacity 0.15s;
+}
+
+.aib-guide-link:hover {
+  opacity: 0.7;
 }
 </style>

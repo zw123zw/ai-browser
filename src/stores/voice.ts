@@ -11,6 +11,7 @@ import { Logger } from '@/src/utils/logger'
 import { defineStorageSync, plain } from '@/src/utils/storage-sync'
 import { voiceSettingsStorage, DEFAULT_VOICE_SETTINGS } from '@/src/storage'
 import type { VoiceSettings } from '@/src/storage'
+import voiceConfig from '@/src/voice-config.json'
 
 const log = new Logger('Store:Voice')
 
@@ -55,17 +56,36 @@ export const useVoiceStore = defineStore('voice', () => {
   async function initSettings() {
     try {
       const stored = await voiceSettingsStorage.getValue()
-      if (stored) {
-        settings.value = { ...DEFAULT_SETTINGS, ...stored }
-        log.info('initSettings 从 storage 加载', {
-          engineType: settings.value.engineType,
-          ttsRate: settings.value.ttsRate,
-        })
-      } else {
-        settings.value = { ...DEFAULT_SETTINGS }
+      const merged = { ...DEFAULT_SETTINGS, ...stored }
+
+      // 首次加载：把 voice-config.json 整个数组写入 engineConfs
+      if (!merged.engineConfs || merged.engineConfs.length === 0) {
+        merged.engineConfs = Array.isArray(voiceConfig)
+          ? voiceConfig.map((c: any) => ({
+              engineType: c.engineType || '',
+              appId: c.appId || '',
+              apiKey: c.apiKey || '',
+              apiSecret: c.apiSecret || '',
+            }))
+          : []
+      }
+
+      // 从 engineConfs 中取当前引擎的默认值补全空字段
+      const conf = merged.engineConfs.find(c => c.engineType === merged.engineType)
+      if (conf) {
+        if (!merged.appId) merged.appId = conf.appId
+        if (!merged.apiKey) merged.apiKey = conf.apiKey
+        if (!merged.apiSecret) merged.apiSecret = conf.apiSecret
+      }
+
+      settings.value = merged
+
+      if (!stored) {
         sync.markSelfWrite()
         await voiceSettingsStorage.setValue(plain(settings.value) as VoiceSettings)
-        log.info('initSettings 无存储，写入默认值')
+        log.info('initSettings 首次写入默认值', { engineType: merged.engineType })
+      } else {
+        log.info('initSettings 从 storage 加载', { engineType: merged.engineType })
       }
       ready.value = true
     } catch (error) {

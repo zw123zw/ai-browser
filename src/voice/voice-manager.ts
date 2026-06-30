@@ -25,8 +25,9 @@ const WAKE_COOLDOWN = 3000
 export type VoiceManagerState = 'idle' | 'wake' | 'command' | 'processing' | 'speaking'
 
 export interface VoiceManagerConfig {
-  engineType: 'web-speech' | 'iflytek'
+  engineType: 'web-speech' | 'iflytek' | 'volcengine'
   iflytekConfig: { appId: string; apiKey: string; apiSecret?: string } | undefined
+  volcengineConfig: { appId: string; accessToken: string } | undefined
   lang?: string
   wakeWord?: string
   enableTts?: boolean
@@ -68,6 +69,7 @@ export class VoiceManager {
     this.config = {
       engineType: config.engineType,
       iflytekConfig: config.iflytekConfig,
+      volcengineConfig: config.volcengineConfig,
       lang: config.lang ?? 'zh-CN',
       wakeWord: config.wakeWord ?? '你好，小灵',
       enableTts: config.enableTts ?? true,
@@ -152,6 +154,7 @@ export class VoiceManager {
     if (config.engineType !== undefined) this.config.engineType = config.engineType
     if (config.lang !== undefined) this.config.lang = config.lang
     if (config.iflytekConfig !== undefined) this.config.iflytekConfig = config.iflytekConfig
+    if (config.volcengineConfig !== undefined) this.config.volcengineConfig = config.volcengineConfig
     if ((engineChanged || langChanged) && this._isActive) {
       log.info('引擎配置变更，重建引擎', { engineChanged, langChanged })
       this.engine?.stop()
@@ -216,6 +219,18 @@ export class VoiceManager {
       }).catch((error) => {
         log.error('加载讯飞引擎失败:', error)
         this.config.onError?.('加载讯飞引擎失败')
+      })
+    } else if (this.config.engineType === 'volcengine' && this.config.volcengineConfig) {
+      import('./engines/volcengine-engine').then(({ VolcengineEngine }) => {
+        this.engine = new VolcengineEngine(
+          this.config.volcengineConfig!,
+          { lang: this.config.lang, continuous: true, interimResults: true },
+        )
+        this.setupEngineCallbacks()
+        if (this._isActive) this.engine.start()
+      }).catch((error) => {
+        log.error('加载火山引擎失败:', error)
+        this.config.onError?.('加载火山引擎失败')
       })
     } else {
       this.engine = new WebSpeechEngine({

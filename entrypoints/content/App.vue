@@ -6,6 +6,7 @@ import SettingsModal from './components/SettingsModal.vue';
 import NoteBookmarkDialog from './components/NoteBookmarkDialog.vue';
 import NoteViewerDialog from './components/NoteViewerDialog.vue';
 import ToastContainer from './components/ToastContainer.vue';
+import VoiceGuideModal from './components/VoiceGuideModal.vue';
 import { useSettingsStore } from '@/src/stores/settings';
 import { useConversationsStore } from '@/src/stores/conversations';
 import { useVoiceStore } from '@/src/stores/voice';
@@ -60,7 +61,8 @@ function startBgVoice() {
   log.info('常驻语音启动')
   bgManager = new VoiceManager({
     engineType: s.engineType,
-    iflytekConfig: s.engineType === 'iflytek' ? { appId: s.iflytekAppId, apiKey: s.iflytekApiKey, apiSecret: s.iflytekApiSecret } : undefined,
+    iflytekConfig: s.engineType === 'iflytek' ? { appId: s.appId, apiKey: s.apiKey, apiSecret: s.apiSecret } : undefined,
+    volcengineConfig: s.engineType === 'volcengine' ? { appId: s.appId, accessToken: s.apiKey } : undefined,
     lang: s.recognitionLang,
     wakeWord: s.wakeWord,
     enableTts: s.enableTts,
@@ -165,6 +167,9 @@ watch(open, (isOpen) => {
     stopBgVoice()
   }
 })
+
+// 语音指南弹框状态
+const showVoiceGuide = ref(false);
 
 // 笔记收藏弹框状态
 const showBookmarkDialog = ref(false);
@@ -395,6 +400,11 @@ function onAutoSendCommand(e: Event) {
   });
 }
 
+// 处理显示语音指南事件
+function onShowVoiceGuide() {
+  showVoiceGuide.value = true
+}
+
 // 处理模式切换事件：管理麦克风启停
 function onModeChanged(e: Event) {
   const detail = (e as CustomEvent).detail;
@@ -452,6 +462,7 @@ onMounted(async () => {
   window.addEventListener('aib-close-drawer', closeDrawer);
   window.addEventListener('aib-auto-send-command', onAutoSendCommand);
   window.addEventListener('aib-mode-changed', onModeChanged);
+  window.addEventListener('aib-show-voice-guide', onShowVoiceGuide);
 });
 
 onUnmounted(() => {
@@ -468,6 +479,7 @@ onUnmounted(() => {
   window.removeEventListener('aib-close-drawer', closeDrawer);
   window.removeEventListener('aib-auto-send-command', onAutoSendCommand);
   window.removeEventListener('aib-mode-changed', onModeChanged);
+  window.removeEventListener('aib-show-voice-guide', onShowVoiceGuide);
 });
 </script>
 
@@ -489,6 +501,7 @@ onUnmounted(() => {
       v-if="showNoteViewer"
       @close="showNoteViewer = false"
     />
+    <VoiceGuideModal v-if="showVoiceGuide" @close="showVoiceGuide = false" />
     <ToastContainer />
   </div>
 </template>
