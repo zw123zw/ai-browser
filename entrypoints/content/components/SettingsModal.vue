@@ -1791,6 +1791,7 @@ function importModels(e: Event) {
 .aib-btn-footer-primary:hover {
   filter: brightness(1.1);
   box-shadow: 0 4px 12px var(--aib-primary-glow);
+  color: var(--aib-text-on-primary);
 }
 
 .aib-btn-footer-danger {
@@ -1849,6 +1850,7 @@ function importModels(e: Event) {
   filter: brightness(1.1);
   box-shadow: 0 4px 12px var(--aib-primary-glow);
   transform: translateY(-1px);
+  color: var(--aib-text-on-primary);
 }
 
 /* 供应商预设 */

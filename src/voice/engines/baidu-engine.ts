@@ -173,11 +173,17 @@ export class BaiduEngine implements VoiceEngine {
 
   /** 发送开始参数帧（JSON Text opcode） */
   private sendStartFrame(): void {
+    const appkey = this.baiduConfig.apiKey
+    log.info('百度配置', {
+      appId: this.baiduConfig.appId,
+      appkey: appkey ? appkey.slice(0, 8) + '...' : '(空)',
+      apiSecret: this.baiduConfig.apiSecret ? this.baiduConfig.apiSecret.slice(0, 8) + '...' : '(空)',
+    })
     const frame = {
       type: 'START',
       data: {
         appid: parseInt(this.baiduConfig.appId) || 0,
-        appkey: this.baiduConfig.apiKey,
+        appkey,
         dev_pid: this.config.lang === 'en-US' ? 17372 : 15372,
         cuid: crypto.randomUUID().replace(/-/g, '').slice(0, 16),
         format: 'pcm',
@@ -185,7 +191,7 @@ export class BaiduEngine implements VoiceEngine {
       },
     }
     this.ws?.send(JSON.stringify(frame))
-    log.info('百度开始帧已发送', { appid: frame.data.appid, dev_pid: frame.data.dev_pid })
+    log.info('百度开始帧已发送', { appid: frame.data.appid, appkey: appkey?.slice(0, 8) + '...', dev_pid: frame.data.dev_pid })
   }
 
   /** 发送结束帧（JSON Text opcode） */
