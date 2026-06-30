@@ -1,5 +1,6 @@
 import MarkdownIt from 'markdown-it';
 import hljs from 'highlight.js';
+import DOMPurify from 'dompurify';
 // @ts-ignore - markdown-it-katex 没有 TS 声明
 import mk from 'markdown-it-katex';
 
@@ -34,9 +35,37 @@ md.renderer.rules.table_open = () => '<div class="aib-table-wrapper"><table>';
 md.renderer.rules.table_close = (tokens, idx, options, env, self) =>
   `</table><button class="aib-table-download-btn" title="下载 Excel">${DOWNLOAD_SVG}</button></div>`;
 
+/** DOMPurify 白名单配置：保留 markdown-it / highlight.js / KaTeX 所需标签和属性 */
+const PURIFY_CONFIG = {
+  ADD_TAGS: ['svg', 'path', 'line', 'polyline', 'rect', 'circle', 'pre', 'code', 'span',
+    'table', 'thead', 'tbody', 'tr', 'th', 'td', 'button', 'div', 'details', 'summary',
+    // KaTeX 所需标签
+    'math', 'semantics', 'mrow', 'mi', 'mo', 'mn', 'msup', 'msub', 'mfrac',
+    'msubsup', 'mover', 'munder', 'munderover', 'msqrt', 'mroot', 'mtable',
+    'mtr', 'mtd', 'maction', 'menclose', 'mpadded', 'mphantom', 'mglyph',
+    'annotation', 'annotation-xml',
+  ],
+  ADD_ATTR: [
+    // SVG 属性
+    'viewBox', 'fill', 'stroke', 'stroke-width', 'stroke-linecap', 'stroke-linejoin',
+    'd', 'x', 'y', 'x1', 'y1', 'x2', 'y2', 'rx', 'ry', 'cx', 'cy', 'r', 'points',
+    'width', 'height',
+    // 通用属性
+    'class', 'id', 'title', 'style', 'colspan', 'rowspan',
+    // KaTeX 属性
+    'aria-hidden', 'mathvariant', 'mathsize', 'mathcolor', 'mathbackground',
+    'stretchy', 'symmetric', 'largeop', 'movablelimits', 'accent',
+    'fence', 'separator', 'lspace', 'rspace', 'minsize', 'maxsize',
+    'depth', 'height', 'valign', 'rowalign', 'columnalign', 'groupalign',
+    'columnlines', 'rowlines', 'columnspan', 'rowspan', 'frame',
+    'framespacing', 'data-*',
+  ],
+  ALLOW_DATA_ATTR: true,
+};
+
 export function renderMarkdown(text: string): string {
   if (!text) return '';
-  return md.render(text);
+  return DOMPurify.sanitize(md.render(text), PURIFY_CONFIG);
 }
 
 /** 纯净版 markdown 渲染（无复制按钮、无下载按钮） */
@@ -61,5 +90,5 @@ const mdPlain: MarkdownIt = new MarkdownIt({
 
 export function renderMarkdownPlain(text: string): string {
   if (!text) return '';
-  return mdPlain.render(text);
+  return DOMPurify.sanitize(mdPlain.render(text), PURIFY_CONFIG);
 }

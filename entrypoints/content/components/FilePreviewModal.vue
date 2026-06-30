@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted } from 'vue';
+import DOMPurify from 'dompurify';
 import type { Attachment } from '@/src/types';
 import { getFileTypeIcon, formatFileSize, getExtension } from '@/src/utils/file-type';
 import { renderMarkdownPlain } from '@/src/utils/markdown';
@@ -28,11 +29,11 @@ const highlightedContent = computed(() => {
   if (props.attachment.lang) {
     try {
       const result = hljs.highlight(content, { language: props.attachment.lang });
-      return `<pre class="hljs"><code>${result.value}</code></pre>`;
+      return DOMPurify.sanitize(`<pre class="hljs"><code>${result.value}</code></pre>`);
     } catch {
       try {
         const result = hljs.highlightAuto(content);
-        return `<pre class="hljs"><code>${result.value}</code></pre>`;
+        return DOMPurify.sanitize(`<pre class="hljs"><code>${result.value}</code></pre>`);
       } catch {
         return `<pre><code>${escapeHtml(content)}</code></pre>`;
       }
