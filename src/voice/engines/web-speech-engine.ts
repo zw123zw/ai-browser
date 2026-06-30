@@ -163,7 +163,7 @@ export class WebSpeechEngine implements VoiceEngine {
       if (event.error === 'network') {
         log.warn('网络错误，语音识别需要联网')
         this.onError?.('网络错误，语音识别需要联网')
-        this.scheduleRestart(3000)
+        this._isActive = false
         return
       }
 

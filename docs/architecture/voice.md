@@ -206,7 +206,7 @@ VoiceSession.processCommand()
     │       │ 播报完成
     │       ▼ 回到 IDLE -> LISTENING
     │
-    └─ type='error' -> 显示在聊天中（不播报）
+    └─ type='error' -> broadcast.speak(errorMessage)
             ▼ 回到 IDLE -> LISTENING
 ```
 

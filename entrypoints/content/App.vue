@@ -85,11 +85,11 @@ function startBgVoice() {
     },
     onError: (error) => {
       log.error('常驻语音错误', error)
-      // 错误显示在聊天中，但不播报（system 角色不会触发 TTS）
+      // 错误显示在聊天中，但不播报
       if (convStore.conversation) {
         convStore.conversation.messages.push({
           id: Date.now().toString(),
-          role: 'system',
+          role: 'assistant',
           content: `❌ 语音引擎错误：${error}`,
           timestamp: Date.now(),
           status: 'done',

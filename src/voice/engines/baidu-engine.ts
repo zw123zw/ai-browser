@@ -3,10 +3,12 @@
  *
  * 免费额度：3000 分钟/月 + 5 万次短语音
  *
- * 协议流程：
- * 1. HTTP 请求获取临时 access_token
- * 2. WebSocket 连接 wss://vop.baidu.com/realtime_asr
- * 3. 发送 JSON 配置帧 → 二进制音频帧 → 结束帧
+ * 协议流程（基于官方文档）：
+ * 1. WebSocket 连接 wss://vop.baidu.com/realtime_asr?sn=UUID
+ * 2. 发送 JSON 开始帧（含 appid + appkey + dev_pid）
+ * 3. 发送二进制音频帧（PCM 16kHz 16bit）
+ * 4. 接收 JSON 识别结果（MID_TEXT 临时 / FIN_TEXT 最终）
+ * 5. 发送 JSON 结束帧
  *
  * 文档：https://ai.baidu.com/ai-doc/SPEECH/qlc0h61h7
  */
@@ -22,20 +24,8 @@ export interface BaiduConfig {
   appId: string
   /** API Key */
   apiKey: string
-  /** Secret Key */
+  /** Secret Key（实时 ASR 不需要，保留用于其他 API） */
   apiSecret: string
-}
-
-/** 百度实时 ASR 配置帧 */
-interface BaiduStartFrame {
-  type: 'START'
-  data: {
-    appid: number
-    dev_pid: number
-    cuid: string
-    format: 'pcm'
-    sample: number
-  }
 }
 
 export class BaiduEngine implements VoiceEngine {
@@ -49,10 +39,6 @@ export class BaiduEngine implements VoiceEngine {
   private audioContext: AudioContext | null = null
   private mediaStream: MediaStream | null = null
   private scriptProcessor: ScriptProcessorNode | null = null
-  private isFirstFrame = true
-  private finalText = ''
-  private accessToken = ''
-  /** 静音帧计数 */
   private silenceFrames = 0
   private static readonly SILENCE_THRESHOLD = 10
   private static readonly SILENCE_ENERGY = 0.01
@@ -78,28 +64,22 @@ export class BaiduEngine implements VoiceEngine {
     if (this._isActive) return
 
     try {
-      // 1. 获取 access_token
-      await this.fetchAccessToken()
-
-      // 2. 获取麦克风
+      // 1. 获取麦克风
       this.mediaStream = await navigator.mediaDevices.getUserMedia({
         audio: { sampleRate: 16000, channelCount: 1, echoCancellation: true, noiseSuppression: true },
       })
 
-      // 3. 连接 WebSocket
+      // 2. 连接 WebSocket
       await this.connectWebSocket()
 
-      // 4. 发送配置帧
+      // 3. 发送开始参数帧
       this.sendStartFrame()
 
-      // 5. 创建音频管道
+      // 4. 创建音频管道
       this.audioContext = new AudioContext({ sampleRate: 16000 })
       await this.audioContext.resume()
       const source = this.audioContext.createMediaStreamSource(this.mediaStream)
       this.scriptProcessor = this.audioContext.createScriptProcessor(4096, 1, 1)
-
-      this.isFirstFrame = false
-      this.finalText = ''
 
       this.scriptProcessor.onaudioprocess = (event) => {
         if (!this._isActive || !this.ws || this.ws.readyState !== WebSocket.OPEN) return
@@ -123,7 +103,7 @@ export class BaiduEngine implements VoiceEngine {
           this.silenceFrames = 0
         }
 
-        // 发送二进制音频帧
+        // 发送二进制音频帧（Binary opcode）
         this.ws.send(pcmData.buffer)
       }
 
@@ -132,7 +112,7 @@ export class BaiduEngine implements VoiceEngine {
 
       this._isActive = true
       this.updateStatus('listening')
-      log.info('百度引擎已启动')
+      log.info('百度引擎已启动', { appId: this.baiduConfig.appId })
 
     } catch (error) {
       log.error('启动失败:', error)
@@ -164,25 +144,15 @@ export class BaiduEngine implements VoiceEngine {
 
   destroy(): void { this.stop() }
 
-  /** 获取百度 access_token */
-  private async fetchAccessToken(): Promise<void> {
-    const url = `https://aip.baidubce.com/oauth/2.0/token?grant_type=client_credentials&client_id=${this.baiduConfig.apiKey}&client_secret=${this.baiduConfig.apiSecret}`
-    const resp = await fetch(url)
-    if (!resp.ok) throw new Error(`百度鉴权失败: ${resp.status}`)
-    const data = await resp.json()
-    if (!data.access_token) throw new Error('百度鉴权返回无 access_token')
-    this.accessToken = data.access_token
-    log.info('百度 access_token 获取成功')
-  }
-
   /** 连接 WebSocket */
   private connectWebSocket(): Promise<void> {
-    const url = `wss://vop.baidu.com/realtime_asr?sn=${crypto.randomUUID()}`
+    const sn = crypto.randomUUID()
+    const url = `wss://vop.baidu.com/realtime_asr?sn=${sn}`
     return new Promise((resolve, reject) => {
       this.ws = new WebSocket(url)
 
       this.ws.onopen = () => {
-        log.info('百度 WebSocket 连接成功')
+        log.info('百度 WebSocket 连接成功', { sn })
         resolve()
       }
 
@@ -196,31 +166,33 @@ export class BaiduEngine implements VoiceEngine {
       }
 
       this.ws.onclose = (event) => {
-        log.info('百度 WebSocket 关闭', { code: event.code })
+        log.info('百度 WebSocket 关闭', { code: event.code, reason: event.reason })
       }
     })
   }
 
-  /** 发送配置帧 */
+  /** 发送开始参数帧（JSON Text opcode） */
   private sendStartFrame(): void {
     const frame = {
       type: 'START',
       data: {
         appid: parseInt(this.baiduConfig.appId) || 0,
-        devpid: this.config.lang === 'en-US' ? 1737 : 15372,
+        appkey: this.baiduConfig.apiKey,
+        dev_pid: this.config.lang === 'en-US' ? 17372 : 15372,
         cuid: crypto.randomUUID().replace(/-/g, '').slice(0, 16),
         format: 'pcm',
         sample: 16000,
       },
     }
     this.ws?.send(JSON.stringify(frame))
-    log.info('百度配置帧已发送')
+    log.info('百度开始帧已发送', { appid: frame.data.appid, dev_pid: frame.data.dev_pid })
   }
 
-  /** 发送结束帧 */
+  /** 发送结束帧（JSON Text opcode） */
   private sendFinishFrame(): void {
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify({ type: 'FINISH' }))
+      log.info('百度结束帧已发送')
     }
   }
 
@@ -229,33 +201,46 @@ export class BaiduEngine implements VoiceEngine {
     try {
       const result = JSON.parse(data)
 
-      if (result.type === 'MID_TEXT' || result.type === 'FIN_TEXT') {
-        const text = result.data?.result || ''
-        const isFinal = result.type === 'FIN_TEXT'
+      // 心跳帧，忽略
+      if (result.type === 'HEARTBEAT') return
 
-        if (!text) return
-
-        this.finalText = text
-        const confidence = result.data?.confidence ?? 0
-
-        log.info('百度识别结果', { text, isFinal, confidence })
-        this.onResult?.(this.finalText, isFinal, confidence)
-
-        if (isFinal) {
-          this.finalText = ''
-          // 重连继续监听
-          this.reconnect()
-        }
-      } else if (result.type === 'ERR') {
-        log.error('百度错误:', result.err_msg)
-        this.onError?.(`百度错误: ${result.err_msg}`)
+      // 错误
+      if (result.err_no !== 0) {
+        log.error('百度错误:', result.err_no, result.err_msg)
+        this.onError?.(`百度错误(${result.err_no}): ${result.err_msg}`)
+        return
       }
+
+      // 临时识别结果
+      if (result.type === 'MID_TEXT') {
+        const text = result.result || ''
+        if (!text) return
+        log.debug('百度临时结果', { text })
+        this.onResult?.(text, false, 0)
+        return
+      }
+
+      // 最终识别结果
+      if (result.type === 'FIN_TEXT') {
+        const text = result.result || ''
+        if (!text) {
+          // 空的 FIN_TEXT 可能是错误句，重连继续
+          this.reconnect()
+          return
+        }
+        log.info('百度最终结果', { text, start_time: result.start_time, end_time: result.end_time })
+        this.onResult?.(text, true, 1)
+        // 重连继续监听
+        this.reconnect()
+        return
+      }
+
     } catch (error) {
       log.error('解析百度消息失败:', error)
     }
   }
 
-  /** 重连 */
+  /** 重连（final 结果后继续监听） */
   private async reconnect(): Promise<void> {
     try {
       if (this.ws) {
