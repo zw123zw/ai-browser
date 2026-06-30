@@ -1524,13 +1524,13 @@ function importModels(e: Event) {
 .aib-chip-active {
   background: var(--aib-primary);
   border-color: var(--aib-primary);
-  color: #fff;
+  color: var(--aib-text-on-primary);
   font-weight: 500;
 }
 
 .aib-chip-active:hover {
   background: var(--aib-primary);
-  color: #fff;
+  color: var(--aib-text-on-primary);
 }
 
 .aib-chip-new {
@@ -1602,7 +1602,7 @@ function importModels(e: Event) {
   border: none;
   border-radius: 0 10px 10px 0;
   background: var(--aib-primary);
-  color: #fff;
+  color: var(--aib-text-on-primary);
   flex-shrink: 0;
   font-size: 13px;
   font-weight: 600;
@@ -1658,11 +1658,11 @@ function importModels(e: Event) {
 }
 
 .aib-cache-bar--warn {
-  background: #f59e0b;
+  background: var(--aib-warning);
 }
 
 .aib-cache-bar--danger {
-  background: #ef4444;
+  background: var(--aib-danger);
 }
 
 .aib-btn-icon {
@@ -1689,15 +1689,15 @@ function importModels(e: Event) {
 }
 
 .aib-btn-icon.aib-btn-danger {
-  color: #ef4444;
-  border: 1px solid rgba(239,68,68,0.3);
-  background: rgba(239,68,68,0.06);
+  color: var(--aib-danger);
+  border: 1px solid var(--aib-danger-border);
+  background: var(--aib-danger-bg);
 }
 
 .aib-btn-icon.aib-btn-danger:hover {
-  background: rgba(239,68,68,0.12);
-  border-color: rgba(239,68,68,0.5);
-  color: #dc2626;
+  background: var(--aib-danger-bg);
+  border-color: var(--aib-danger-border);
+  color: var(--aib-danger);
 }
 
 /* Tab 底部保存按钮 */
@@ -1775,7 +1775,7 @@ function importModels(e: Event) {
   font-weight: 600;
   border: none;
   background: var(--aib-primary);
-  color: #fff;
+  color: var(--aib-text-on-primary);
   cursor: pointer;
   font-family: inherit;
   transition: all 0.15s;
@@ -1792,23 +1792,23 @@ function importModels(e: Event) {
   border-radius: 8px;
   font-size: 13px;
   font-weight: 500;
-  border: 1px solid rgba(239,68,68,0.3);
-  background: rgba(239,68,68,0.06);
-  color: #ef4444;
+  border: 1px solid var(--aib-danger-border);
+  background: var(--aib-danger-bg);
+  color: var(--aib-danger);
   cursor: pointer;
   font-family: inherit;
   transition: all 0.15s;
 }
 
 .aib-btn-footer-danger:hover {
-  background: rgba(239,68,68,0.12);
-  border-color: rgba(239,68,68,0.5);
+  background: var(--aib-danger-bg);
+  border-color: var(--aib-danger-border);
 }
 
 .aib-btn-danger {
-  color: #ef4444;
-  border: 1px solid rgba(239,68,68,0.3);
-  background: rgba(239,68,68,0.06);
+  color: var(--aib-danger);
+  border: 1px solid var(--aib-danger-border);
+  background: var(--aib-danger-bg);
   padding: 7px 16px;
   border-radius: 8px;
   cursor: pointer;
@@ -1818,9 +1818,9 @@ function importModels(e: Event) {
 }
 
 .aib-btn-danger:hover {
-  background: rgba(239,68,68,0.12);
-  border-color: rgba(239,68,68,0.5);
-  color: #dc2626;
+  background: var(--aib-danger-bg);
+  border-color: var(--aib-danger-border);
+  color: var(--aib-danger);
 }
 
 .aib-tab-footer .aib-btn {
@@ -1834,7 +1834,7 @@ function importModels(e: Event) {
 .aib-tab-footer .aib-btn-primary {
   background: var(--aib-primary);
   border: 1px solid var(--aib-primary);
-  color: #fff;
+  color: var(--aib-text-on-primary);
   box-shadow: 0 2px 8px var(--aib-primary-glow);
 }
 
@@ -1972,7 +1972,7 @@ function importModels(e: Event) {
   height: 22px;
   border-radius: 11px;
   border: none;
-  background: var(--aib-border-strong, #3a3a4a);
+  background: var(--aib-border-strong);
   cursor: pointer;
   transition: background 0.25s ease;
   flex-shrink: 0;
@@ -1990,7 +1990,7 @@ function importModels(e: Event) {
   width: 18px;
   height: 18px;
   border-radius: 50%;
-  background: #fff;
+  background: var(--aib-bg-card);
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
   transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
@@ -2261,7 +2261,7 @@ function importModels(e: Event) {
 .aib-docs-content hr { border: none; border-top: 1px solid var(--aib-border); margin: 32px 0; }
 .aib-docs-content strong { font-weight: 600; }
 .aib-docs-content code { background: var(--aib-bg-soft); padding: 1px 5px; border-radius: 4px; font-size: 13px; font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace; }
-.aib-docs-content pre { background: #1e293b; color: #e2e8f0; padding: 16px; border-radius: 8px; overflow-x: auto; margin: 12px 0 20px; }
+.aib-docs-content pre { background: var(--aib-md-code-bg); color: var(--aib-md-code-color); padding: 16px; border-radius: 8px; overflow-x: auto; margin: 12px 0 20px; }
 .aib-docs-content pre code { background: none; padding: 0; color: inherit; font-size: 13px; }
 .aib-docs-content table { width: 100%; border-collapse: collapse; margin: 12px 0 20px; font-size: 14px; }
 .aib-docs-content th { background: var(--aib-bg-soft); font-weight: 600; text-align: left; padding: 10px 12px; border: 1px solid var(--aib-border); }
@@ -2370,7 +2370,7 @@ label.aib-switch input {
   left: 0;
   right: 0;
   bottom: 0;
-  background: var(--aib-border-strong, #3a3a4a);
+  background: var(--aib-border-strong);
   border-radius: 11px;
   transition: background 0.25s;
 }
@@ -2382,7 +2382,7 @@ label.aib-switch input {
   width: 18px;
   left: 2px;
   bottom: 2px;
-  background: white;
+  background: var(--aib-bg-card);
   border-radius: 50%;
   transition: transform 0.25s;
 }

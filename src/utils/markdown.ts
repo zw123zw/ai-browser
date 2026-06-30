@@ -26,7 +26,7 @@ const md: MarkdownIt = new MarkdownIt({
   },
 });
 
-md.use(mk, { throwOnError: false, errorColor: '#cc0000' });
+md.use(mk, { throwOnError: false, errorColor: 'var(--aib-danger, #cc0000)' });
 
 // 自定义表格渲染：包裹一层容器 + 下载按钮
 const DOWNLOAD_SVG = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`;

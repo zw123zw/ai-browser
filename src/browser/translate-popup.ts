@@ -17,6 +17,7 @@
 
 import { renderMarkdown } from '@/src/utils/markdown'
 import { Logger } from '@/src/utils/logger'
+import { getThemeVar } from '@/src/utils/theme-reader'
 
 const log = new Logger('TranslatePopup')
 
@@ -62,6 +63,21 @@ const OFFSET = 8
 export function showTranslateLoading(x: number, y: number, original: string): void {
   hideTranslatePopup()
 
+  // 读取主题变量
+  const bgCard = getThemeVar('--aib-bg-card')
+  const text = getThemeVar('--aib-text')
+  const textSoft = getThemeVar('--aib-text-soft')
+  const textOnPrimary = getThemeVar('--aib-text-on-primary')
+  const border = getThemeVar('--aib-border')
+  const primary = getThemeVar('--aib-primary')
+  const primarySoft = getThemeVar('--aib-primary-soft')
+  const primaryGlow = getThemeVar('--aib-primary-glow')
+  const bgHover = getThemeVar('--aib-bg-hover')
+  const overlay = getThemeVar('--aib-overlay')
+  const highlight = getThemeVar('--aib-highlight')
+  const mdCodeBg = getThemeVar('--aib-md-code-bg')
+  const mdCodeColor = getThemeVar('--aib-md-code-color')
+
   const popup = document.createElement('div')
   popup.className = 'aib-translate-popup'
   popup.setAttribute('translate', 'no')
@@ -77,10 +93,10 @@ export function showTranslateLoading(x: number, y: number, original: string): vo
     flexDirection: 'column',
     overflow: 'hidden',
     padding: '0',
-    background: '#1a1a2e',
-    color: '#e0e0e0',
+    background: bgCard,
+    color: text,
     borderRadius: '10px',
-    boxShadow: '0 8px 32px rgba(0,0,0,0.35)',
+    boxShadow: `0 8px 32px ${overlay}`,
     fontSize: '14px',
     lineHeight: '1.6',
     wordBreak: 'break-word',
@@ -100,14 +116,14 @@ export function showTranslateLoading(x: number, y: number, original: string): vo
     justifyContent: 'center',
     padding: '0 36px 0 10px',
     userSelect: 'none',
-    borderBottom: '1px solid rgba(255,255,255,0.06)',
+    borderBottom: `1px solid ${border}`,
     flexShrink: '0',
   })
   // 拖拽指示器（三个小点）
   const gripDots = document.createElement('div')
   Object.assign(gripDots.style, {
     width: '24px', height: '3px', borderRadius: '2px',
-    background: 'rgba(255,255,255,0.15)', margin: '0 auto',
+    background: `${primary}40`, margin: '0 auto',
   })
   dragHandle.appendChild(gripDots)
 
@@ -127,12 +143,12 @@ export function showTranslateLoading(x: number, y: number, original: string): vo
   Object.assign(closeBtn.style, {
     position: 'absolute', top: '4px', right: '6px',
     width: '22px', height: '22px', border: 'none', borderRadius: '4px',
-    background: 'transparent', color: '#888', fontSize: '13px',
+    background: 'transparent', color: textSoft, fontSize: '13px',
     cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
     padding: '0', lineHeight: '1', zIndex: '1',
   })
-  closeBtn.addEventListener('mouseenter', () => { closeBtn.style.color = '#fff'; closeBtn.style.background = 'rgba(255,255,255,0.1)' })
-  closeBtn.addEventListener('mouseleave', () => { closeBtn.style.color = '#888'; closeBtn.style.background = 'transparent' })
+  closeBtn.addEventListener('mouseenter', () => { closeBtn.style.color = textOnPrimary; closeBtn.style.background = bgHover })
+  closeBtn.addEventListener('mouseleave', () => { closeBtn.style.color = textSoft; closeBtn.style.background = 'transparent' })
   closeBtn.addEventListener('click', (e) => { e.stopPropagation(); hideTranslatePopup() })
   popup.appendChild(closeBtn)
 
@@ -157,8 +173,8 @@ export function showTranslateLoading(x: number, y: number, original: string): vo
   // 原文
   const origEl = document.createElement('div')
   Object.assign(origEl.style, {
-    fontSize: '12px', color: '#888',
-    borderTop: '1px solid rgba(255,255,255,0.1)',
+    fontSize: '12px', color: textSoft,
+    borderTop: `1px solid ${border}`,
     paddingTop: '6px', marginTop: '4px',
   })
   origEl.textContent = original
@@ -168,12 +184,12 @@ export function showTranslateLoading(x: number, y: number, original: string): vo
   const noteSection = document.createElement('div')
   Object.assign(noteSection.style, {
     display: 'none', marginTop: '8px', paddingTop: '8px',
-    borderTop: '1px solid rgba(255,255,255,0.15)',
+    borderTop: `1px solid ${border}`,
   })
   const noteLabel = document.createElement('div')
   noteLabel.textContent = '📝 AI 笔记'
   Object.assign(noteLabel.style, {
-    fontSize: '11px', color: '#8b5cf6', marginBottom: '4px', fontWeight: '600',
+    fontSize: '11px', color: primary, marginBottom: '4px', fontWeight: '600',
   })
   noteSection.appendChild(noteLabel)
   const noteContent = document.createElement('div')
@@ -188,8 +204,8 @@ export function showTranslateLoading(x: number, y: number, original: string): vo
   Object.assign(loading.style, {
     display: 'flex', alignItems: 'center', gap: '6px',
     marginTop: '8px', paddingTop: '6px',
-    borderTop: '1px solid rgba(255,255,255,0.1)',
-    fontSize: '12px', color: '#888',
+    borderTop: `1px solid ${border}`,
+    fontSize: '12px', color: textSoft,
   })
   const dots = document.createElement('span')
   dots.textContent = '处理中'
@@ -210,9 +226,9 @@ export function showTranslateLoading(x: number, y: number, original: string): vo
   Object.assign(toolbar.style, {
     display: 'none', justifyContent: 'flex-end', gap: '8px',
     padding: '8px 16px',
-    borderTop: '1px solid rgba(255,255,255,0.1)',
+    borderTop: `1px solid ${border}`,
     flexShrink: '0',
-    background: '#1a1a2e',
+    background: bgCard,
     borderRadius: '0 0 10px 10px',
   })
   toolbarEl = toolbar
@@ -257,35 +273,35 @@ export function showTranslateLoading(x: number, y: number, original: string): vo
     .aib-translate-popup::-webkit-scrollbar { width:0; }
     .aib-popup-body::-webkit-scrollbar { width:4px; }
     .aib-popup-body::-webkit-scrollbar-track { background:transparent; }
-    .aib-popup-body::-webkit-scrollbar-thumb { background:rgba(255,255,255,0.15); border-radius:2px; }
-    .aib-popup-body::-webkit-scrollbar-thumb:hover { background:rgba(255,255,255,0.25); }
+    .aib-popup-body::-webkit-scrollbar-thumb { background:${primary}40; border-radius:2px; }
+    .aib-popup-body::-webkit-scrollbar-thumb:hover { background:${primary}66; }
     .aib-msg-text p { margin:6px 0; }
     .aib-msg-text p:only-child,.aib-msg-text p:last-child { margin-bottom:0; }
-    .aib-msg-text h1,.aib-msg-text h2,.aib-msg-text h3,.aib-msg-text h4 { margin:12px 0 6px; font-weight:600; color:#f4f4f5; }
-    .aib-msg-text h1 { font-size:16px; color:#a78bfa; border-bottom:1px solid rgba(167,139,250,0.2); padding-bottom:6px; }
-    .aib-msg-text h2 { font-size:15px; color:#c4b5fd; }
-    .aib-msg-text h3 { font-size:14px; color:#ddd6fe; }
+    .aib-msg-text h1,.aib-msg-text h2,.aib-msg-text h3,.aib-msg-text h4 { margin:12px 0 6px; font-weight:600; color:${text}; }
+    .aib-msg-text h1 { font-size:16px; color:${primary}; border-bottom:1px solid ${primary}33; padding-bottom:6px; }
+    .aib-msg-text h2 { font-size:15px; color:${primary}; }
+    .aib-msg-text h3 { font-size:14px; color:${textSoft}; }
     .aib-msg-text ul,.aib-msg-text ol { margin:6px 0; padding-left:20px; }
     .aib-msg-text li { margin:3px 0; }
-    .aib-msg-text li::marker { color:#a78bfa; }
+    .aib-msg-text li::marker { color:${primary}; }
     .aib-msg-text li > ul,.aib-msg-text li > ol { margin:2px 0; }
-    .aib-msg-text strong { color:#fbbf24; font-weight:600; }
-    .aib-msg-text em { color:#93c5fd; }
-    .aib-msg-text a { color:#60a5fa; text-decoration:none; }
+    .aib-msg-text strong { color:${getThemeVar('--aib-warning')}; font-weight:600; }
+    .aib-msg-text em { color:${textSoft}; }
+    .aib-msg-text a { color:${primary}; text-decoration:none; }
     .aib-msg-text a:hover { text-decoration:underline; }
-    .aib-msg-text code:not(.hljs) { background:rgba(139,92,246,0.15); color:#c4b5fd; padding:2px 6px; border-radius:4px; font-size:12px; }
-    .aib-msg-text pre { background:rgba(0,0,0,0.4); padding:10px 12px; border-radius:8px; overflow-x:auto; margin:8px 0; border:1px solid rgba(255,255,255,0.06); }
-    .aib-msg-text pre code { background:none; color:#d4d4d8; padding:0; }
-    .aib-msg-text blockquote { border-left:3px solid #a78bfa; margin:8px 0; padding:6px 12px; color:#a1a1aa; background:rgba(139,92,246,0.06); border-radius:0 6px 6px 0; }
+    .aib-msg-text code:not(.hljs) { background:${primarySoft}; color:${textSoft}; padding:2px 6px; border-radius:4px; font-size:12px; }
+    .aib-msg-text pre { background:${mdCodeBg}; padding:10px 12px; border-radius:8px; overflow-x:auto; margin:8px 0; border:1px solid ${border}; }
+    .aib-msg-text pre code { background:none; color:${mdCodeColor}; padding:0; }
+    .aib-msg-text blockquote { border-left:3px solid ${primary}; margin:8px 0; padding:6px 12px; color:${textSoft}; background:${primarySoft}; border-radius:0 6px 6px 0; }
     .aib-msg-text table { border-collapse:collapse; width:100%; margin:8px 0; }
-    .aib-msg-text th { background:rgba(139,92,246,0.12); color:#c4b5fd; font-weight:600; border:1px solid rgba(139,92,246,0.2); padding:8px 12px; font-size:13px; text-align:left; }
-    .aib-msg-text td { border:1px solid rgba(255,255,255,0.08); padding:6px 12px; font-size:13px; }
-    .aib-msg-text tr:nth-child(even) { background:rgba(255,255,255,0.02); }
-    .aib-msg-text hr { border:none; border-top:1px solid rgba(139,92,246,0.2); margin:12px 0; }
+    .aib-msg-text th { background:${primarySoft}; color:${textSoft}; font-weight:600; border:1px solid ${border}; padding:8px 12px; font-size:13px; text-align:left; }
+    .aib-msg-text td { border:1px solid ${border}; padding:6px 12px; font-size:13px; }
+    .aib-msg-text tr:nth-child(even) { background:${bgHover}; }
+    .aib-msg-text hr { border:none; border-top:1px solid ${border}; margin:12px 0; }
     .aib-msg-text img { max-width:100%; border-radius:6px; }
-    .aib-msg-text del,.aib-msg-text s { color:#888; }
-    .aib-msg-text mark { background:rgba(251,191,36,0.2); color:#fbbf24; border-radius:2px; padding:0 2px; }
-    .aib-msg-text kbd { background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.15); border-radius:4px; padding:1px 5px; font-size:12px; }
+    .aib-msg-text del,.aib-msg-text s { color:${textSoft}; }
+    .aib-msg-text mark { background:${highlight}; color:${getThemeVar('--aib-warning')}; border-radius:2px; padding:0 2px; }
+    .aib-msg-text kbd { background:${bgHover}; border:1px solid ${border}; border-radius:4px; padding:1px 5px; font-size:12px; }
   `
   popup.appendChild(styleEl)
 
@@ -410,7 +426,7 @@ export function updateTranslateError(message: string, onRetry?: () => void): voi
 
   if (contentEl) {
     contentEl.textContent = message
-    contentEl.style.color = '#888'
+    contentEl.style.color = getThemeVar('--aib-text-soft')
     contentEl.style.fontSize = '13px'
   }
   if (loadingEl) loadingEl.style.display = 'none'
@@ -508,7 +524,7 @@ function showToolbar(onBookmark?: (content: string) => void): void {
       onBookmark(currentNoteContent)
       bookmarkBtn.textContent = '已收藏'
       setTimeout(() => { bookmarkBtn.textContent = '⭐ 收藏笔记' }, 1500)
-    }, '#8b5cf6')
+    }, getThemeVar('--aib-primary'))
     toolbarEl.appendChild(bookmarkBtn)
   }
 }
@@ -535,21 +551,24 @@ function positionPopup(popup: HTMLElement, x: number, y: number): void {
 
 /** 创建工具栏按钮 */
 function createToolButton(text: string, onClick: () => void, color?: string): HTMLButtonElement {
+  const btnColor = color || getThemeVar('--aib-text-soft')
+  const btnBg = color ? `${color}22` : `${getThemeVar('--aib-primary')}15`
+  const btnBgHover = color ? `${color}44` : `${getThemeVar('--aib-primary')}30`
   const btn = document.createElement('button')
   btn.textContent = text
   Object.assign(btn.style, {
-    padding: '2px 10px', border: '1px solid rgba(255,255,255,0.2)',
-    borderRadius: '6px', background: color ? `${color}22` : 'rgba(255,255,255,0.08)',
-    color: color || '#ccc', fontSize: '12px', cursor: 'pointer',
+    padding: '2px 10px', border: `1px solid ${getThemeVar('--aib-border')}`,
+    borderRadius: '6px', background: btnBg,
+    color: btnColor, fontSize: '12px', cursor: 'pointer',
     fontFamily: 'inherit', transition: 'all 0.15s ease',
   })
   btn.addEventListener('mouseenter', () => {
-    btn.style.background = color ? `${color}44` : 'rgba(255,255,255,0.15)'
-    btn.style.color = '#fff'
+    btn.style.background = btnBgHover
+    btn.style.color = getThemeVar('--aib-text-on-primary')
   })
   btn.addEventListener('mouseleave', () => {
-    btn.style.background = color ? `${color}22` : 'rgba(255,255,255,0.08)'
-    btn.style.color = color || '#ccc'
+    btn.style.background = btnBg
+    btn.style.color = btnColor
   })
   btn.addEventListener('click', onClick)
   return btn

@@ -112,14 +112,14 @@ function getStatusText(state: SessionState): string {
 }
 
 .aib-status-dot.wake {
-  background: #34d399;
-  box-shadow: 0 0 8px rgba(52,211,153,0.5);
+  background: var(--aib-success);
+  box-shadow: 0 0 8px var(--aib-success-border);
   animation: pulse 2s infinite;
 }
 
 .aib-status-dot.command {
-  background: #34d399;
-  box-shadow: 0 0 8px rgba(52,211,153,0.5);
+  background: var(--aib-success);
+  box-shadow: 0 0 8px var(--aib-success-border);
   animation: pulse 1.5s infinite;
 }
 
@@ -130,8 +130,8 @@ function getStatusText(state: SessionState): string {
 }
 
 .aib-status-dot.speaking {
-  background: #8b5cf6;
-  box-shadow: 0 0 8px rgba(139,92,246,0.5);
+  background: var(--aib-primary);
+  box-shadow: 0 0 8px var(--aib-primary-glow);
   animation: pulse 1.2s infinite;
 }
 
@@ -220,7 +220,7 @@ function getStatusText(state: SessionState): string {
 .aib-mic-indicator.active {
   background: var(--aib-primary);
   border-color: var(--aib-primary);
-  color: #000;
+  color: var(--aib-text-on-primary);
   box-shadow: 0 0 24px var(--aib-primary-glow);
 }
 

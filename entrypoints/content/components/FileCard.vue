@@ -259,8 +259,8 @@ function handleDownloadConfig(e: MouseEvent) {
   flex-direction: column;
   width: 350px;
   max-width: 100%;
-  background: var(--aib-bg-card, #ffffff);
-  border: 1px solid var(--aib-border, rgba(0, 0, 0, 0.08));
+  background: var(--aib-bg-card);
+  border: 1px solid var(--aib-border);
   border-radius: 12px;
   overflow: hidden;
   transition: all 0.2s ease;
@@ -270,12 +270,12 @@ function handleDownloadConfig(e: MouseEvent) {
 .aib-file-card--chart {
   max-width: 100%;
   width: 100%;
-  border-color: var(--aib-primary, #4A90D9);
+  border-color: var(--aib-primary);
   border-width: 1.5px;
 }
 
 .aib-file-card:hover {
-  border-color: var(--aib-primary, #4A90D9);
+  border-color: var(--aib-primary);
   box-shadow: 0 2px 12px rgba(74, 144, 217, 0.1);
 }
 
@@ -284,8 +284,8 @@ function handleDownloadConfig(e: MouseEvent) {
   width: 100%;
   min-height: 200px;
   max-height: 400px;
-  background: var(--aib-bg-card, #ffffff);
-  border-bottom: 1px solid var(--aib-border, rgba(0, 0, 0, 0.06));
+  background: var(--aib-bg-card);
+  border-bottom: 1px solid var(--aib-border);
   overflow: hidden;
 }
 
@@ -296,7 +296,7 @@ function handleDownloadConfig(e: MouseEvent) {
   justify-content: center;
   min-height: 100px;
   padding: 16px;
-  color: var(--aib-text-secondary, #6c757d);
+  color: var(--aib-text-soft);
   font-size: 13px;
   text-align: center;
 }
@@ -318,7 +318,7 @@ function handleDownloadConfig(e: MouseEvent) {
   align-items: center;
   justify-content: center;
   font-size: 22px;
-  background: var(--aib-primary-soft, rgba(74, 144, 217, 0.1));
+  background: var(--aib-primary-soft);
   border-radius: 10px;
   flex-shrink: 0;
 }
@@ -331,7 +331,7 @@ function handleDownloadConfig(e: MouseEvent) {
 .aib-file-card-name {
   font-weight: 600;
   font-size: 14px;
-  color: var(--aib-text-primary, #1a1a2e);
+  color: var(--aib-text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -347,20 +347,20 @@ function handleDownloadConfig(e: MouseEvent) {
 
 .aib-file-card-size {
   font-size: 12px;
-  color: var(--aib-text-secondary, #8e8ea0);
+  color: var(--aib-text-soft);
 }
 
 .aib-file-card-truncated {
   font-size: 12px;
-  color: #f59e0b;
+  color: var(--aib-warning);
 }
 
 .aib-file-card-actions {
   display: flex;
   gap: 8px;
   padding: 10px 16px;
-  background: var(--aib-bg-card-hover, #f8f9fb);
-  border-top: 1px solid var(--aib-border, rgba(0, 0, 0, 0.06));
+  background: var(--aib-bg-hover);
+  border-top: 1px solid var(--aib-border);
 }
 
 .aib-file-card-btn {
@@ -386,23 +386,23 @@ function handleDownloadConfig(e: MouseEvent) {
 }
 
 .aib-file-card-btn--secondary {
-  background: var(--aib-bg-card, #ffffff);
-  color: var(--aib-text-primary, #1a1a2e);
-  border: 1.5px solid var(--aib-border, rgba(0, 0, 0, 0.12));
+  background: var(--aib-bg-card);
+  color: var(--aib-text);
+  border: 1.5px solid var(--aib-border);
 }
 
 .aib-file-card-btn--secondary:hover {
-  background: var(--aib-bg-card-hover, #f0f2f5);
-  border-color: var(--aib-primary, #4A90D9);
-  color: var(--aib-primary, #4A90D9);
+  background: var(--aib-bg-hover);
+  border-color: var(--aib-primary);
+  color: var(--aib-primary);
 }
 
 .aib-file-card-btn--primary {
-  background: var(--aib-primary, #4A90D9);
-  color: #fff;
+  background: var(--aib-primary);
+  color: var(--aib-text-on-primary);
 }
 
 .aib-file-card-btn--primary:hover {
-  background: var(--aib-primary-hover, #357ABD);
+  background: color-mix(in srgb, var(--aib-primary) 85%, #000);
 }
 </style>

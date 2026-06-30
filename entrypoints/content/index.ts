@@ -171,7 +171,7 @@ export default defineContentScript({
         const mark = document.createElement('mark')
         mark.setAttribute('translate', 'no')
         Object.assign(mark.style, {
-          background: 'rgba(139, 92, 246, 0.4)',
+          background: 'var(--aib-primary-glow, rgba(139, 92, 246, 0.4))',
           borderRadius: '2px',
           padding: '1px 0',
           transition: 'background 0.3s ease',
@@ -186,8 +186,8 @@ export default defineContentScript({
           let count = 0
           const flash = setInterval(() => {
             mark.style.background = count % 2 === 0
-              ? 'rgba(139, 92, 246, 0.1)'
-              : 'rgba(139, 92, 246, 0.4)'
+              ? 'var(--aib-primary-soft, rgba(139, 92, 246, 0.1))'
+              : 'var(--aib-primary-glow, rgba(139, 92, 246, 0.4))'
             count++
             if (count >= 4) {
               clearInterval(flash)

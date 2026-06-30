@@ -423,7 +423,7 @@ function onBackdrop(e: MouseEvent) {
   position: fixed;
   inset: 0;
   z-index: 2147483647;
-  background: rgba(0, 0, 0, 0.6);
+  background: var(--aib-overlay-heavy);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -432,10 +432,10 @@ function onBackdrop(e: MouseEvent) {
 .aib-viewer-dialog {
   width: 80%;
   height: 80vh;
-  background: var(--aib-bg-card, #1e1e2e);
-  border: 1px solid var(--aib-border, rgba(255,255,255,0.08));
+  background: var(--aib-bg-card);
+  border: 1px solid var(--aib-border);
   border-radius: 12px;
-  box-shadow: 0 16px 48px rgba(0,0,0,0.5);
+  box-shadow: 0 16px 48px var(--aib-overlay);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -447,13 +447,13 @@ function onBackdrop(e: MouseEvent) {
   align-items: center;
   justify-content: space-between;
   padding: 12px 18px;
-  border-bottom: 1px solid var(--aib-border, rgba(255,255,255,0.08));
+  border-bottom: 1px solid var(--aib-border);
   flex-shrink: 0;
 }
 .aib-viewer-title {
   font-size: 16px;
   font-weight: 600;
-  color: var(--aib-text, #e0e0e0);
+  color: var(--aib-text);
 }
 .aib-viewer-header-actions {
   display: flex;
@@ -462,18 +462,18 @@ function onBackdrop(e: MouseEvent) {
 }
 .aib-viewer-header-btn {
   padding: 4px 12px;
-  border: 1px solid var(--aib-border, rgba(255,255,255,0.12));
+  border: 1px solid var(--aib-border);
   border-radius: 6px;
   background: transparent;
-  color: var(--aib-text-soft, #aaa);
+  color: var(--aib-text-soft);
   font-size: 12px;
   cursor: pointer;
   font-family: inherit;
   transition: all 0.15s ease;
 }
 .aib-viewer-header-btn:hover {
-  background: var(--aib-bg-hover, rgba(255,255,255,0.08));
-  color: var(--aib-text, #fff);
+  background: var(--aib-bg-hover);
+  color: var(--aib-text);
 }
 .aib-viewer-close {
   width: 24px;
@@ -481,7 +481,7 @@ function onBackdrop(e: MouseEvent) {
   border: none;
   border-radius: 4px;
   background: transparent;
-  color: var(--aib-text-soft, #888);
+  color: var(--aib-text-soft);
   font-size: 14px;
   cursor: pointer;
   display: flex;
@@ -490,8 +490,8 @@ function onBackdrop(e: MouseEvent) {
   transition: all 0.15s ease;
 }
 .aib-viewer-close:hover {
-  background: rgba(255,255,255,0.1);
-  color: var(--aib-text, #fff);
+  background: var(--aib-bg-hover);
+  color: var(--aib-text);
 }
 
 /* 三栏 */
@@ -505,7 +505,7 @@ function onBackdrop(e: MouseEvent) {
 .aib-viewer-sidebar {
   width: 20%;
   min-width: 140px;
-  border-right: 1px solid var(--aib-border, rgba(255,255,255,0.08));
+  border-right: 1px solid var(--aib-border);
   overflow-y: auto;
   padding: 8px 0;
 }
@@ -519,16 +519,16 @@ function onBackdrop(e: MouseEvent) {
   gap: 4px;
 }
 .aib-viewer-title-item:hover {
-  background: var(--aib-bg-hover, rgba(255,255,255,0.04));
+  background: var(--aib-bg-hover);
 }
 .aib-viewer-title-active {
-  background: var(--aib-bg-hover, rgba(255,255,255,0.08));
+  background: var(--aib-bg-hover);
   border-right: 2px solid var(--aib-primary, #8b5cf6);
 }
 .aib-viewer-title-text {
   flex: 1;
   font-size: 13px;
-  color: var(--aib-text, #e0e0e0);
+  color: var(--aib-text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -557,10 +557,10 @@ function onBackdrop(e: MouseEvent) {
   transition: background 0.15s ease;
 }
 .aib-viewer-title-export:hover {
-  background: rgba(255,255,255,0.1);
+  background: var(--aib-bg-hover);
 }
 .aib-viewer-title-delete:hover {
-  background: rgba(239, 68, 68, 0.2);
+  background: var(--aib-danger-bg);
 }
 
 /* 中间内容区 */
@@ -575,7 +575,7 @@ function onBackdrop(e: MouseEvent) {
   gap: 16px;
 }
 .aib-viewer-entry {
-  border: 1px solid var(--aib-border, rgba(255,255,255,0.06));
+  border: 1px solid var(--aib-border);
   border-radius: 8px;
   overflow: hidden;
 }
@@ -583,7 +583,7 @@ function onBackdrop(e: MouseEvent) {
   padding: 12px 16px;
   font-size: 14px;
   line-height: 1.7;
-  color: var(--aib-text, #e0e0e0);
+  color: var(--aib-text);
   cursor: default;
   user-select: text;
 }
@@ -592,17 +592,17 @@ function onBackdrop(e: MouseEvent) {
   align-items: center;
   justify-content: space-between;
   padding: 6px 16px;
-  border-top: 1px solid var(--aib-border, rgba(255,255,255,0.04));
-  background: rgba(255,255,255,0.02);
+  border-top: 1px solid var(--aib-border);
+  background: var(--aib-bg-soft);
 }
 .aib-viewer-entry-time {
   font-size: 11px;
-  color: var(--aib-text-soft, #666);
+  color: var(--aib-text-soft);
 }
 .aib-viewer-entry-delete {
   border: none;
   background: transparent;
-  color: var(--aib-text-soft, #888);
+  color: var(--aib-text-soft);
   font-size: 11px;
   cursor: pointer;
   padding: 2px 6px;
@@ -610,8 +610,8 @@ function onBackdrop(e: MouseEvent) {
   transition: all 0.1s ease;
 }
 .aib-viewer-entry-delete:hover {
-  background: rgba(239, 68, 68, 0.15);
-  color: #ef4444;
+  background: var(--aib-danger-bg);
+  color: var(--aib-danger);
 }
 
 /* 编辑态 */
@@ -624,8 +624,8 @@ function onBackdrop(e: MouseEvent) {
   padding: 10px 12px;
   border: 1px solid var(--aib-primary, #8b5cf6);
   border-radius: 6px;
-  background: rgba(0,0,0,0.2);
-  color: var(--aib-text, #e0e0e0);
+  background: var(--aib-bg-soft);
+  color: var(--aib-text);
   font-size: 13px;
   font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
   line-height: 1.6;
@@ -641,28 +641,28 @@ function onBackdrop(e: MouseEvent) {
 }
 .aib-viewer-edit-btn {
   padding: 4px 12px;
-  border: 1px solid var(--aib-border, rgba(255,255,255,0.12));
+  border: 1px solid var(--aib-border);
   border-radius: 6px;
   background: transparent;
-  color: var(--aib-text-soft, #aaa);
+  color: var(--aib-text-soft);
   font-size: 12px;
   cursor: pointer;
   font-family: inherit;
   transition: all 0.15s ease;
 }
 .aib-viewer-edit-btn:hover {
-  background: var(--aib-bg-hover, rgba(255,255,255,0.08));
-  color: var(--aib-text, #fff);
+  background: var(--aib-bg-hover);
+  color: var(--aib-text);
 }
 .aib-viewer-edit-btn-primary {
-  background: var(--aib-primary, #8b5cf6);
-  border-color: var(--aib-primary, #8b5cf6);
-  color: #fff;
+  background: var(--aib-primary);
+  border-color: var(--aib-primary);
+  color: var(--aib-text-on-primary);
 }
 .aib-viewer-edit-btn-primary:hover {
   opacity: 0.9;
-  background: var(--aib-primary, #8b5cf6);
-  color: #fff;
+  background: var(--aib-primary);
+  color: var(--aib-text-on-primary);
 }
 
 /* 右侧时间线 */
@@ -670,7 +670,7 @@ function onBackdrop(e: MouseEvent) {
   width: 20%;
   min-width: 120px;
   max-width: 180px;
-  border-left: 1px solid var(--aib-border, rgba(255,255,255,0.08));
+  border-left: 1px solid var(--aib-border);
   overflow-y: auto;
   padding: 12px 8px;
 }
@@ -694,8 +694,8 @@ function onBackdrop(e: MouseEvent) {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: var(--aib-primary, #8b5cf6);
-  box-shadow: 0 0 0 2px var(--aib-bg-card, #1e1e2e);
+  background: var(--aib-primary);
+  box-shadow: 0 0 0 2px var(--aib-bg-card);
 }
 .aib-viewer-timeline-line {
   position: absolute;
@@ -703,7 +703,7 @@ function onBackdrop(e: MouseEvent) {
   top: 14px;
   bottom: 0;
   width: 2px;
-  background: var(--aib-border, rgba(255,255,255,0.1));
+  background: var(--aib-border);
 }
 .aib-viewer-timeline-info {
   display: flex;
@@ -712,7 +712,7 @@ function onBackdrop(e: MouseEvent) {
 }
 .aib-viewer-timeline-time {
   font-size: 11px;
-  color: var(--aib-text-soft, #888);
+  color: var(--aib-text-soft);
   font-weight: 500;
 }
 .aib-viewer-timeline-url {
@@ -731,7 +731,7 @@ function onBackdrop(e: MouseEvent) {
 }
 .aib-viewer-timeline-scroll {
   font-size: 10px;
-  color: var(--aib-text-soft, #666);
+  color: var(--aib-text-soft);
 }
 
 /* 空状态 */
@@ -739,7 +739,7 @@ function onBackdrop(e: MouseEvent) {
   padding: 24px;
   text-align: center;
   font-size: 13px;
-  color: var(--aib-text-soft, #666);
+  color: var(--aib-text-soft);
 }
 .aib-viewer-empty-timeline {
   padding: 12px;

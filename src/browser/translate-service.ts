@@ -517,7 +517,7 @@ export class TranslateService {
           display: inline-block;
           width: 12px;
           height: 12px;
-          border: 2px solid #409eff;
+          border: 2px solid var(--aib-primary, #409eff);
           border-top-color: transparent;
           border-radius: 50%;
           animation: aib-tl-spin 0.6s linear infinite;

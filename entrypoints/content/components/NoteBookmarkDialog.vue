@@ -126,7 +126,7 @@ onMounted(() => {
   position: fixed;
   inset: 0;
   z-index: 2147483647;
-  background: rgba(0, 0, 0, 0.5);
+  background: var(--aib-overlay);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -135,8 +135,8 @@ onMounted(() => {
 .aib-bookmark-dialog {
   width: 420px;
   max-width: 90vw;
-  background: var(--aib-bg-card, #1e1e2e);
-  border: 1px solid var(--aib-border, rgba(255,255,255,0.08));
+  background: var(--aib-bg-card);
+  border: 1px solid var(--aib-border);
   border-radius: 12px;
   box-shadow: 0 16px 48px rgba(0,0,0,0.4);
   overflow: hidden;
@@ -149,7 +149,7 @@ onMounted(() => {
   border-bottom: 1px solid var(--aib-border, rgba(255,255,255,0.08));
   font-size: 15px;
   font-weight: 600;
-  color: var(--aib-text, #e0e0e0);
+  color: var(--aib-text);
 }
 .aib-bookmark-close {
   width: 24px;
@@ -157,7 +157,7 @@ onMounted(() => {
   border: none;
   border-radius: 4px;
   background: transparent;
-  color: var(--aib-text-soft, #888);
+  color: var(--aib-text-soft);
   font-size: 14px;
   cursor: pointer;
   display: flex;
@@ -166,8 +166,8 @@ onMounted(() => {
   transition: all 0.15s ease;
 }
 .aib-bookmark-close:hover {
-  background: rgba(255,255,255,0.1);
-  color: var(--aib-text, #fff);
+  background: var(--aib-bg-hover);
+  color: var(--aib-text);
 }
 .aib-bookmark-body {
   padding: 16px 18px;
@@ -175,7 +175,7 @@ onMounted(() => {
 .aib-bookmark-label {
   display: block;
   font-size: 13px;
-  color: var(--aib-text-soft, #aaa);
+  color: var(--aib-text-soft);
   margin-bottom: 6px;
 }
 .aib-bookmark-input-wrap {
@@ -184,10 +184,10 @@ onMounted(() => {
 .aib-bookmark-input {
   width: 100%;
   padding: 8px 12px;
-  border: 1px solid var(--aib-border, rgba(255,255,255,0.12));
+  border: 1px solid var(--aib-border);
   border-radius: 8px;
-  background: var(--aib-bg-hover, rgba(255,255,255,0.04));
-  color: var(--aib-text, #e0e0e0);
+  background: var(--aib-bg-hover);
+  color: var(--aib-text);
   font-size: 14px;
   font-family: inherit;
   outline: none;
@@ -195,10 +195,10 @@ onMounted(() => {
   box-sizing: border-box;
 }
 .aib-bookmark-input:focus {
-  border-color: var(--aib-primary, #8b5cf6);
+  border-color: var(--aib-primary);
 }
 .aib-bookmark-input::placeholder {
-  color: var(--aib-text-soft, #666);
+  color: var(--aib-text-soft);
 }
 .aib-bookmark-suggestions {
   position: absolute;
@@ -206,8 +206,8 @@ onMounted(() => {
   left: 0;
   right: 0;
   margin-top: 4px;
-  background: var(--aib-bg-card, #1e1e2e);
-  border: 1px solid var(--aib-border, rgba(255,255,255,0.12));
+  background: var(--aib-bg-card);
+  border: 1px solid var(--aib-border);
   border-radius: 8px;
   max-height: 150px;
   overflow-y: auto;
@@ -217,12 +217,12 @@ onMounted(() => {
 .aib-bookmark-suggestion {
   padding: 8px 12px;
   font-size: 13px;
-  color: var(--aib-text, #e0e0e0);
+  color: var(--aib-text);
   cursor: pointer;
   transition: background 0.1s ease;
 }
 .aib-bookmark-suggestion:hover {
-  background: var(--aib-bg-hover, rgba(255,255,255,0.08));
+  background: var(--aib-bg-hover);
 }
 .aib-bookmark-footer {
   display: flex;
@@ -233,27 +233,27 @@ onMounted(() => {
 }
 .aib-bookmark-btn {
   padding: 6px 16px;
-  border: 1px solid var(--aib-border, rgba(255,255,255,0.12));
+  border: 1px solid var(--aib-border);
   border-radius: 8px;
   background: transparent;
-  color: var(--aib-text-soft, #aaa);
+  color: var(--aib-text-soft);
   font-size: 13px;
   cursor: pointer;
   font-family: inherit;
   transition: all 0.15s ease;
 }
 .aib-bookmark-btn:hover {
-  background: var(--aib-bg-hover, rgba(255,255,255,0.08));
-  color: var(--aib-text, #fff);
+  background: var(--aib-bg-hover);
+  color: var(--aib-text);
 }
 .aib-bookmark-btn-primary {
-  background: var(--aib-primary, #8b5cf6);
-  border-color: var(--aib-primary, #8b5cf6);
-  color: #fff;
+  background: var(--aib-primary);
+  border-color: var(--aib-primary);
+  color: var(--aib-text-on-primary);
 }
 .aib-bookmark-btn-primary:hover {
   opacity: 0.9;
-  background: var(--aib-primary, #8b5cf6);
-  color: #fff;
+  background: var(--aib-primary);
+  color: var(--aib-text-on-primary);
 }
 </style>

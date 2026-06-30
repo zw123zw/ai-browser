@@ -64,7 +64,7 @@ function ensureStyles(): void {
     }
     .aib-click-result::-webkit-scrollbar { width: 4px; }
     .aib-click-result::-webkit-scrollbar-track { background: transparent; }
-    .aib-click-result::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 2px; }
+    .aib-click-result::-webkit-scrollbar-thumb { background: var(--aib-primary-soft, rgba(255,255,255,0.15)); border-radius: 2px; }
     .aib-click-result-close {
       position: absolute;
       top: 8px;
@@ -83,7 +83,7 @@ function ensureStyles(): void {
       transition: all 0.15s ease;
     }
     .aib-click-result-close:hover {
-      background: rgba(255,255,255,0.1);
+      background: var(--aib-bg-hover, rgba(255,255,255,0.1));
       color: var(--aib-text, #fff);
     }
     @keyframes aib-click-in {
@@ -156,7 +156,7 @@ function ensureStyles(): void {
     }
     .aib-click-result-note-label {
       font-size: 11px;
-      color: #8b5cf6;
+      color: var(--aib-primary, #8b5cf6);
       margin-bottom: 4px;
       font-weight: 600;
     }
@@ -166,13 +166,13 @@ function ensureStyles(): void {
       color: var(--aib-text, #d0d0d0);
     }
     .aib-click-result-btn-bookmark {
-      background: rgba(139, 92, 246, 0.12);
-      border-color: rgba(139, 92, 246, 0.3);
-      color: #a78bfa;
+      background: var(--aib-primary-soft, rgba(139,92,246,0.12));
+      border-color: var(--aib-primary-glow, rgba(139,92,246,0.3));
+      color: var(--aib-primary, #a78bfa);
     }
     .aib-click-result-btn-bookmark:hover {
-      background: rgba(139, 92, 246, 0.25);
-      color: #c4b5fd;
+      background: var(--aib-primary-glow, rgba(139,92,246,0.25));
+      color: var(--aib-primary, #c4b5fd);
     }
   `
   document.head.appendChild(style)

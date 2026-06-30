@@ -254,7 +254,7 @@ const faqItems = [
   position: fixed;
   inset: 0;
   z-index: 2147483647;
-  background: rgba(0, 0, 0, 0.5);
+  background: var(--aib-overlay);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -270,7 +270,7 @@ const faqItems = [
   background: var(--aib-bg);
   border-radius: 16px;
   overflow: hidden;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 20px 60px var(--aib-overlay);
 }
 
 /* 标题 + Tab 合并行 */
@@ -408,7 +408,7 @@ const faqItems = [
 }
 
 .aib-vgm-warn {
-  color: #f59e0b;
+  color: var(--aib-warning);
   font-size: 13px;
 }
 
@@ -432,7 +432,7 @@ const faqItems = [
   height: 24px;
   border-radius: 50%;
   background: var(--aib-primary);
-  color: #fff;
+  color: var(--aib-text-on-primary);
   display: flex;
   align-items: center;
   justify-content: center;

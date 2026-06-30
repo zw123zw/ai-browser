@@ -7,6 +7,47 @@ export interface ThemeConfig {
   vars: Record<string, string>;
 }
 
+/** 语义色变量 — 亮/暗色主题共用不同的值 */
+const SEMANTIC_DARK = {
+  '--aib-danger': '#ef4444',
+  '--aib-danger-bg': 'rgba(239,68,68,0.12)',
+  '--aib-danger-border': 'rgba(239,68,68,0.3)',
+  '--aib-danger-text': '#fca5a5',
+  '--aib-warning': '#f59e0b',
+  '--aib-warning-bg': 'rgba(245,158,11,0.12)',
+  '--aib-warning-border': 'rgba(245,158,11,0.3)',
+  '--aib-success': '#22c55e',
+  '--aib-success-bg': 'rgba(34,197,94,0.12)',
+  '--aib-success-border': 'rgba(34,197,94,0.3)',
+  '--aib-info': '#3b82f6',
+  '--aib-text-on-primary': '#ffffff',
+  '--aib-overlay': 'rgba(0,0,0,0.5)',
+  '--aib-overlay-heavy': 'rgba(0,0,0,0.65)',
+  '--aib-highlight': 'rgba(255,213,0,0.3)',
+  '--aib-md-code-bg': '#1e1e2e',
+  '--aib-md-code-color': '#cdd6f4',
+};
+
+const SEMANTIC_LIGHT = {
+  '--aib-danger': '#dc2626',
+  '--aib-danger-bg': 'rgba(220,38,38,0.08)',
+  '--aib-danger-border': 'rgba(220,38,38,0.25)',
+  '--aib-danger-text': '#991b1b',
+  '--aib-warning': '#d97706',
+  '--aib-warning-bg': 'rgba(217,119,6,0.08)',
+  '--aib-warning-border': 'rgba(217,119,6,0.25)',
+  '--aib-success': '#16a34a',
+  '--aib-success-bg': 'rgba(22,163,74,0.08)',
+  '--aib-success-border': 'rgba(22,163,74,0.25)',
+  '--aib-info': '#2563eb',
+  '--aib-text-on-primary': '#ffffff',
+  '--aib-overlay': 'rgba(0,0,0,0.35)',
+  '--aib-overlay-heavy': 'rgba(0,0,0,0.5)',
+  '--aib-highlight': 'rgba(255,213,0,0.2)',
+  '--aib-md-code-bg': '#f1f5f9',
+  '--aib-md-code-color': '#1e293b',
+};
+
 export const THEMES: ThemeConfig[] = [
   // ===== 暗色主题 =====
   {
@@ -27,6 +68,7 @@ export const THEMES: ThemeConfig[] = [
       '--aib-text': '#e2e8f0',
       '--aib-text-soft': '#94a3b8',
       '--aib-text-faint': '#475569',
+      ...SEMANTIC_DARK,
     },
   },
   {
@@ -47,6 +89,7 @@ export const THEMES: ThemeConfig[] = [
       '--aib-text': '#fef3c7',
       '--aib-text-soft': '#d4a853',
       '--aib-text-faint': '#92742e',
+      ...SEMANTIC_DARK,
     },
   },
   {
@@ -67,6 +110,7 @@ export const THEMES: ThemeConfig[] = [
       '--aib-text': '#f3e8ff',
       '--aib-text-soft': '#c084fc',
       '--aib-text-faint': '#7c3aed',
+      ...SEMANTIC_DARK,
     },
   },
   {
@@ -87,6 +131,7 @@ export const THEMES: ThemeConfig[] = [
       '--aib-text': '#e8f4ff',
       '--aib-text-soft': '#7eb8e0',
       '--aib-text-faint': '#3d7aa8',
+      ...SEMANTIC_DARK,
     },
   },
   {
@@ -107,6 +152,7 @@ export const THEMES: ThemeConfig[] = [
       '--aib-text': '#d1fae5',
       '--aib-text-soft': '#34d399',
       '--aib-text-faint': '#059669',
+      ...SEMANTIC_DARK,
     },
   },
   // ===== 亮色主题 =====
@@ -128,6 +174,7 @@ export const THEMES: ThemeConfig[] = [
       '--aib-text': '#3d2428',
       '--aib-text-soft': '#8b5e65',
       '--aib-text-faint': '#c49da4',
+      ...SEMANTIC_LIGHT,
     },
   },
   {
@@ -148,6 +195,7 @@ export const THEMES: ThemeConfig[] = [
       '--aib-text': '#1e1b4b',
       '--aib-text-soft': '#4338ca',
       '--aib-text-faint': '#a5b4fc',
+      ...SEMANTIC_LIGHT,
     },
   },
   {
@@ -168,6 +216,7 @@ export const THEMES: ThemeConfig[] = [
       '--aib-text': '#831843',
       '--aib-text-soft': '#be185d',
       '--aib-text-faint': '#ec4899',
+      ...SEMANTIC_LIGHT,
     },
   },
   {
@@ -188,6 +237,7 @@ export const THEMES: ThemeConfig[] = [
       '--aib-text': '#3d2e0a',
       '--aib-text-soft': '#8b6914',
       '--aib-text-faint': '#c9a84c',
+      ...SEMANTIC_LIGHT,
     },
   },
   {
@@ -208,6 +258,7 @@ export const THEMES: ThemeConfig[] = [
       '--aib-text': '#0c4a6e',
       '--aib-text-soft': '#0369a1',
       '--aib-text-faint': '#38bdf8',
+      ...SEMANTIC_LIGHT,
     },
   },
 ];
