@@ -155,7 +155,7 @@ export async function proxyFetchStream(
           cleanup();
           if (settled) return
           settled = true
-          if (aborted) {
+          if (aborted || options.signal?.aborted) {
             log.info(`⊘ [stream] ${url} 已中止 ${duration}ms`)
             reject(new DOMException('The operation was aborted.', 'AbortError'));
           } else {

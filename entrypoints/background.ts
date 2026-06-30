@@ -4,7 +4,7 @@ const log = new Logger('Background');
 
 export default defineBackground(() => {
   // 存储进行中的流式请求，便于中止
-  const activeStreams = new Map<string, { reader: ReadableStreamDefaultReader; tabId: number }>();
+  const activeStreams = new Map<string, { reader: ReadableStreamDefaultReader; tabId: number; abortController: AbortController }>();
 
   // 工具栏图标点击
   chrome.action.onClicked.addListener(async (tab) => {

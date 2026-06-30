@@ -457,6 +457,17 @@ export default defineContentScript({
         log.info('[自动翻译] 用户关闭，还原文字')
         translateService.restoreAll()
       }
+
+      // --- 自动笔记：noteMode 变化时，从非 auto 切到 auto 立即触发一次 ---
+      const oldNote = (oldValue as any).noteMode
+      const newNote = (newValue as any).noteMode
+      if (oldNote !== newNote && newNote === 'auto') {
+        log.info('[自动笔记] 用户开启，立即触发')
+        // 重置防重复标记，允许当前页面触发
+        ;(document as any).__aibAutoNoteInited = false
+        lastNotedUrl = ''
+        scheduleAutoNote(500)
+      }
     })
 
     // --- 自动笔记：页面加载时 AI 提炼笔记 ---

@@ -337,7 +337,13 @@ export class InputPipeline {
     callbacks.onChatStart()
     let phase1StreamedContent = ''
     let phase1ActionTagDetected = false
+    let phase1Aborted = false
     const p1 = await this.detector.detectPhase1(ctx.text, (delta, reasoningDelta) => {
+      // 流式过程中检查 abort 信号，立即停止向 UI 推送
+      if (this.options.getSignal?.()?.aborted) {
+        phase1Aborted = true
+        return
+      }
       if (reasoningDelta) callbacks.onChatDelta('', reasoningDelta)
       if (delta) {
         phase1StreamedContent += delta
@@ -352,6 +358,11 @@ export class InputPipeline {
         }
       }
     })
+
+    // Phase 1 流式结束后检查 abort
+    if (phase1Aborted || this.options.getSignal?.()?.aborted) {
+      throw new DOMException('The operation was aborted.', 'AbortError')
+    }
 
     if (p1.isChat && p1.responseText) {
       log.info('[流程] Phase 1 → 聊天回复 → 结束')
@@ -968,6 +979,8 @@ export class InputPipeline {
         signal: this.options.getSignal?.(),
       },
       (chunk) => {
+        // 检查 abort 信号，停止向 UI 推送
+        if (this.options.getSignal?.()?.aborted) return
         if (chunk.delta) {
           fullResponse += chunk.delta
           onChunk?.(chunk.delta)
