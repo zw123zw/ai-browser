@@ -37,7 +37,25 @@ const { setLocale } = useI18n();
 
 // ========== 统一语音管理（App.vue 持有，VoicePanel 只显示） ==========
 let bgManager: VoiceManager | null = null
+let myTabId: number | null = null
 const spokenMsgIds = new Set<string>()
+
+// ========== 跨标签页麦克风锁（同一时刻只有一个标签页持有麦克风） ==========
+const MIC_LOCK_KEY = 'aib-mic-lock' as const
+
+/** 同步声明本标签页持有麦克风，同时异步通知其他标签页 */
+function claimMic() {
+  chrome.storage.local.set({ [MIC_LOCK_KEY]: myTabId }).catch(() => {})
+}
+
+/** 同步释放麦克风声明，同时异步通知其他标签页 */
+function unclaimMic() {
+  chrome.storage.local.get(MIC_LOCK_KEY).then(stored => {
+    if (stored[MIC_LOCK_KEY] === myTabId) {
+      chrome.storage.local.remove(MIC_LOCK_KEY).catch(() => {})
+    }
+  }).catch(() => {})
+}
 
 function stripMarkdown(text: string): string {
   return text.replace(/\*\*(.+?)\*\*/g, '$1').replace(/`(.+?)`/g, '$1').replace(/[#*_~>|]/g, '').trim()
@@ -59,6 +77,7 @@ function startBgVoice() {
   if (bgManager) return
   const s = voiceStore.settings
   log.info('常驻语音启动')
+  claimMic()
   bgManager = new VoiceManager({
     engineType: s.engineType,
     iflytekConfig: s.engineType === 'iflytek' ? { appId: s.appId, apiKey: s.apiKey, apiSecret: s.apiSecret } : undefined,
@@ -112,6 +131,7 @@ function stopBgVoice() {
   log.info('常驻语音停止')
   bgManager.destroy()
   bgManager = null
+  unclaimMic()
 }
 
 // TTS：watch assistant 消息（常驻模式）
@@ -474,12 +494,30 @@ onMounted(async () => {
     log.error('读取抽屉状态失败:', error);
   }
 
+  // 获取当前标签页 ID（用于跨标签页麦克风锁）
+  try {
+    const resp = await chrome.runtime.sendMessage({ type: 'get-tab-id' })
+    myTabId = resp?.tabId ?? null
+    log.info('当前标签页 ID', { tabId: myTabId })
+  } catch { /* ignore */ }
+
+  // 监听麦克风锁变化：其他标签页抢走锁时，停止本页引擎
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area !== 'local' || !changes[MIC_LOCK_KEY]) return
+    const newOwner = changes[MIC_LOCK_KEY].newValue as number | undefined
+    if (newOwner && newOwner !== myTabId && bgManager) {
+      log.info('其他标签页接管麦克风，停止本页引擎', { newOwner, myTabId })
+      stopBgVoice()
+    }
+  })
+
   chrome.runtime?.onMessage?.addListener(onMessage);
   document.addEventListener('keydown', onKeydown, true);
   document.addEventListener('mouseup', onMouseup, true);
   document.addEventListener('visibilitychange', handleVisibilityChange);
   window.addEventListener('focus', handleFocus);
   window.addEventListener('blur', handleBlur);
+  window.addEventListener('beforeunload', () => unclaimMic());
   window.addEventListener('aib-auto-note-start', onAutoNoteStart);
   window.addEventListener('aib-auto-note-delta', onAutoNoteDelta);
   window.addEventListener('aib-auto-note-result', onAutoNoteResult);
