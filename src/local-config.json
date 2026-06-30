@@ -1,0 +1,38 @@
+[
+  {
+    "id": "mimo-v2.5-pro",
+    "label": "mimo-v2.5-pro",
+    "modelName": "mimo-v2.5-pro",
+    "provider": "anthropic",
+    "apiKey": "tp-sax2y9em37p1hida6j071vi64xgqyjwz74r55scp0a47683v",
+    "baseUrl": "https://token-plan-sgp.xiaomimimo.com/anthropic",
+    "website": "https://platform.xiaomimimo.com"
+  },
+  {
+    "id": "glm-4.7-flash",
+    "label": "智谱 GLM-4.7 Flash",
+    "modelName": "glm-4.7-flash",
+    "provider": "zhipu",
+    "apiKey": "47b9388dfc724dd7a4393744e2a44866.ftIIIvuoKtdlNE3U",
+    "baseUrl": "https://open.bigmodel.cn/api/paas/v4/chat/completions",
+    "website": "https://open.bigmodel.cn/"
+  },
+  {
+    "id": "glm-4-flash",
+    "label": "智谱 GLM-4 Flash",
+    "modelName": "glm-4-flash",
+    "provider": "zhipu",
+    "apiKey": "47b9388dfc724dd7a4393744e2a44866.ftIIIvuoKtdlNE3U",
+    "baseUrl": "https://open.bigmodel.cn/api/paas/v4/chat/completions",
+    "website": "https://open.bigmodel.cn/"
+  },
+  {
+    "id": "doubao-seed-2.0-code",
+    "label": "豆包 Seed 2.0 Code",
+    "modelName": "ark-code-latest",
+    "provider": "doubao",
+    "apiKey": "ark-0936f708-6fe8-4c2d-8fee-ea44c71aa813-067a2",
+    "baseUrl": "https://ark.cn-beijing.volces.com/api/coding/v3",
+    "website": "https://console.volcengine.com/ark"
+  }
+]

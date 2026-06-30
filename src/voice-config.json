@@ -1,0 +1,14 @@
+[
+  {
+    "engineType": "iflytek",
+    "appId": "409873f8",
+    "apiKey": "fc9f3cf011bca6fc037b5c362f54babb",
+    "apiSecret": "MWViYTdkN2E5YzVkOTk2NjRjMjEyZDhk"
+  },
+  {
+    "engineType": "volcengine",
+    "appId": "",
+    "apiKey": "",
+    "apiSecret": ""
+  }
+]
