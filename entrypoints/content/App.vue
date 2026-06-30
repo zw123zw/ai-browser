@@ -123,8 +123,8 @@ watch(
     return `${last.role}:${last.status}:${last.content}`
   },
   (val) => {
-    log.info('[TTS] watch 触发', { hasBgManager: !!bgManager, isActive: bgManager?.isActive, val: val?.slice(0, 50) })
-    if (!bgManager?.isActive || !val) return
+    log.info('[TTS] watch 触发', { hasBgManager: !!bgManager, isActive: bgManager?.isActive, enableTts: voiceStore.settings.enableTts, val: val?.slice(0, 50) })
+    if (!voiceStore.settings.enableTts || !val) return
     const msgs = convStore.conversation?.messages
     if (!msgs?.length) return
     const lastMsg = msgs[msgs.length - 1]
@@ -135,8 +135,19 @@ watch(
         const arr = [...spokenMsgIds]; arr.slice(0, 50).forEach(id => spokenMsgIds.delete(id))
       }
       const speakText = getSpeakText(lastMsg)
-      log.info('[TTS] 准备播报', { speakText: speakText?.slice(0, 50), content: lastMsg.content?.slice(0, 50) })
-      if (speakText) bgManager.speak(speakText)
+      log.info('[TTS] 准备播报', { speakText: speakText?.slice(0, 50), content: lastMsg.content?.slice(0, 50), hasBgManager: !!bgManager })
+      if (speakText) {
+        if (bgManager) {
+          bgManager.speak(speakText)
+        } else {
+          // bgManager 已销毁（用户关闭了侧边栏），直接用浏览器 TTS
+          const utter = new SpeechSynthesisUtterance(speakText)
+          utter.lang = 'zh-CN'
+          utter.rate = voiceStore.settings.ttsRate || 1
+          utter.volume = voiceStore.settings.ttsVolume || 1
+          speechSynthesis.speak(utter)
+        }
+      }
     }
   },
 )

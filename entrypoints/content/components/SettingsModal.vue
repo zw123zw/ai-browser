@@ -1789,7 +1789,7 @@ function importModels(e: Event) {
 }
 
 .aib-btn-footer-primary:hover {
-  filter: brightness(1.1);
+  background: color-mix(in srgb, var(--aib-primary) 85%, #000);
   box-shadow: 0 4px 12px var(--aib-primary-glow);
   color: var(--aib-text-on-primary);
 }
@@ -1846,8 +1846,7 @@ function importModels(e: Event) {
 }
 
 .aib-tab-footer .aib-btn-primary:hover {
-  background: var(--aib-primary);
-  filter: brightness(1.1);
+  background: color-mix(in srgb, var(--aib-primary) 85%, #000);
   box-shadow: 0 4px 12px var(--aib-primary-glow);
   transform: translateY(-1px);
   color: var(--aib-text-on-primary);
