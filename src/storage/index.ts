@@ -4,7 +4,7 @@ import rawModels from '@/src/local-config.json';
 import voiceConfig from '@/src/voice-config.json';
 
 /** 语音引擎类型 */
-type EngineType = 'web-speech' | 'iflytek' | 'volcengine'
+type EngineType = 'web-speech' | 'iflytek' | 'baidu' | 'tencent'
 
 /** 引擎配置项 */
 export interface EngineConf {

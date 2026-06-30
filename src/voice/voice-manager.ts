@@ -25,9 +25,10 @@ const WAKE_COOLDOWN = 3000
 export type VoiceManagerState = 'idle' | 'wake' | 'command' | 'processing' | 'speaking'
 
 export interface VoiceManagerConfig {
-  engineType: 'web-speech' | 'iflytek' | 'volcengine'
+  engineType: 'web-speech' | 'iflytek' | 'baidu' | 'tencent'
   iflytekConfig: { appId: string; apiKey: string; apiSecret?: string } | undefined
-  volcengineConfig: { appId: string; accessToken: string } | undefined
+  baiduConfig: { appId: string; apiKey: string; apiSecret: string } | undefined
+  tencentConfig: { appId: string; apiKey: string; apiSecret: string } | undefined
   lang?: string
   wakeWord?: string
   enableTts?: boolean
@@ -69,7 +70,8 @@ export class VoiceManager {
     this.config = {
       engineType: config.engineType,
       iflytekConfig: config.iflytekConfig,
-      volcengineConfig: config.volcengineConfig,
+      baiduConfig: config.baiduConfig,
+      tencentConfig: config.tencentConfig,
       lang: config.lang ?? 'zh-CN',
       wakeWord: config.wakeWord ?? '你好，小灵',
       enableTts: config.enableTts ?? true,
@@ -154,7 +156,8 @@ export class VoiceManager {
     if (config.engineType !== undefined) this.config.engineType = config.engineType
     if (config.lang !== undefined) this.config.lang = config.lang
     if (config.iflytekConfig !== undefined) this.config.iflytekConfig = config.iflytekConfig
-    if (config.volcengineConfig !== undefined) this.config.volcengineConfig = config.volcengineConfig
+    if (config.baiduConfig !== undefined) this.config.baiduConfig = config.baiduConfig
+    if (config.tencentConfig !== undefined) this.config.tencentConfig = config.tencentConfig
     if ((engineChanged || langChanged) && this._isActive) {
       log.info('引擎配置变更，重建引擎', { engineChanged, langChanged })
       this.engine?.stop()
@@ -220,17 +223,29 @@ export class VoiceManager {
         log.error('加载讯飞引擎失败:', error)
         this.config.onError?.('加载讯飞引擎失败')
       })
-    } else if (this.config.engineType === 'volcengine' && this.config.volcengineConfig) {
-      import('./engines/volcengine-engine').then(({ VolcengineEngine }) => {
-        this.engine = new VolcengineEngine(
-          this.config.volcengineConfig!,
+    } else if (this.config.engineType === 'baidu' && this.config.baiduConfig) {
+      import('./engines/baidu-engine').then(({ BaiduEngine }) => {
+        this.engine = new BaiduEngine(
+          this.config.baiduConfig!,
           { lang: this.config.lang, continuous: true, interimResults: true },
         )
         this.setupEngineCallbacks()
         if (this._isActive) this.engine.start()
       }).catch((error) => {
-        log.error('加载火山引擎失败:', error)
-        this.config.onError?.('加载火山引擎失败')
+        log.error('加载百度引擎失败:', error)
+        this.config.onError?.('加载百度引擎失败')
+      })
+    } else if (this.config.engineType === 'tencent' && this.config.tencentConfig) {
+      import('./engines/tencent-engine').then(({ TencentEngine }) => {
+        this.engine = new TencentEngine(
+          this.config.tencentConfig!,
+          { lang: this.config.lang, continuous: true, interimResults: true },
+        )
+        this.setupEngineCallbacks()
+        if (this._isActive) this.engine.start()
+      }).catch((error) => {
+        log.error('加载腾讯引擎失败:', error)
+        this.config.onError?.('加载腾讯引擎失败')
       })
     } else {
       this.engine = new WebSpeechEngine({
@@ -248,8 +263,6 @@ export class VoiceManager {
     this.engine.onError = (error) => {
       log.error('引擎错误:', error)
       this.config.onError?.(error)
-      // 播报错误信息
-      this.speak(`语音引擎错误：${error}`)
     }
     this.engine.onStatusChange = (status) => log.debug('引擎状态:', status)
   }

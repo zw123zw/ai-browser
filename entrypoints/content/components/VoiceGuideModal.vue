@@ -17,13 +17,14 @@ const tabs = [
 
 const faqItems = [
   { q: '提示"麦克风权限被拒绝"怎么办？', a: '点击浏览器地址栏左侧的 🔒 图标 → 找到"麦克风" → 改为"允许"。然后刷新页面重试。' },
-  { q: 'Web Speech API 提示"网络错误"？', a: 'Web Speech API 依赖 Google 服务，国内网络无法直接使用。请切换到讯飞或火山引擎。' },
+  { q: 'Web Speech API 提示"网络错误"？', a: 'Web Speech API 依赖 Google 服务，国内网络无法直接使用。请切换到讯飞、百度或腾讯引擎。' },
   { q: '讯飞提示"鉴权失败"？', a: '检查 App ID、API Key、API Secret 是否都正确填入，确认已在讯飞控制台开通"语音听写"服务。' },
-  { q: '火山引擎连接失败？', a: '检查 App ID 和 API Key（Access Token）是否正确复制，没有多余空格。在火山控制台确认 Token 未过期。' },
+  { q: '百度引擎连接失败？', a: '检查 App ID、API Key、Secret Key 是否正确。确认已在百度智能云控制台开通"实时语音识别"服务。' },
+  { q: '腾讯引擎连接失败？', a: '检查 App ID、Secret ID、Secret Key 是否正确。确认已在腾讯云控制台开通"实时语音识别"服务。' },
   { q: '识别不准确怎么办？', a: '确保环境安静、麦克风距离嘴巴 20-50cm、语速适中吐字清晰。如果某个引擎效果差，尝试切换到另一个引擎。' },
   { q: '说唤醒词没反应？', a: '确认语音面板已打开、麦克风权限已授权。检查唤醒词是否被修改过（设置 → 语音配置 → 唤醒词）。' },
   { q: '切换引擎后需要重新配置吗？', a: '是的，每个引擎需要独立配置 Key。切换后之前的 Key 配置会保留，不需要重新填入。' },
-  { q: '免费额度用完了怎么办？', a: '讯飞：等待下一年重置或购买付费套餐。火山：购买付费套餐。或者切换到另一个引擎继续使用。' },
+  { q: '免费额度用完了怎么办？', a: '讯飞：等待下一年重置。百度：每月 3000 分钟自动重置。腾讯：每月 1000 分钟自动重置。或者切换到另一个引擎继续使用。' },
   { q: '麦克风被其他应用占用怎么办？', a: '关闭其他使用麦克风的应用（如微信语音、Teams、Zoom 等），然后重新打开语音面板。' },
 ];
 </script>
@@ -66,13 +67,13 @@ const faqItems = [
               <span class="aib-vgm-step-num">①</span>
               <div>
                 <strong>选择识别引擎</strong>
-                <p>海外用户 → 选 <b>Web Speech API</b>（零配置，直接用）<br>国内用户 → 选 <b>讯飞语音</b> 或 <b>火山引擎</b>（需注册获取 Key）</p>
+                <p>海外用户 → 选 <b>Web Speech API</b>（零配置，直接用）<br>国内用户 → 选 <b>讯飞语音</b>、<b>百度智能云</b> 或 <b>腾讯云</b>（需注册获取 Key）</p>
               </div>
             </div>
             <div class="aib-vgm-step">
               <span class="aib-vgm-step-num">②</span>
               <div>
-                <strong>填入 API Key（仅讯飞/火山需要）</strong>
+                <strong>填入 API Key（仅云端引擎需要）</strong>
                 <p>按照"引擎配置" tab 的步骤获取 Key，填入对应输入框，点击保存</p>
               </div>
             </div>
@@ -89,17 +90,16 @@ const faqItems = [
           <div class="aib-vgm-table-wrap">
             <table class="aib-vgm-table">
               <thead>
-                <tr><th></th><th>Web Speech API</th><th>讯飞语音</th><th>火山引擎</th></tr>
+                <tr><th></th><th>Web Speech API</th><th>讯飞语音</th><th>百度智能云</th><th>腾讯云</th></tr>
               </thead>
               <tbody>
-                <tr><td>适用场景</td><td>海外用户、快速体验</td><td>国内用户、方言识别</td><td>国内用户、大额需求</td></tr>
-                <tr><td>免费额度</td><td>无限（浏览器内置）</td><td>50 万次/年</td><td>50 万分钟</td></tr>
-                <tr><td>配置难度</td><td>⭐ 零配置</td><td>⭐⭐ 中等</td><td>⭐⭐ 简单</td></tr>
-                <tr><td>需要填写</td><td>无</td><td>App ID + API Key + API Secret</td><td>App ID + API Key</td></tr>
-                <tr><td>中文识别</td><td>一般</td><td>⭐⭐⭐ 顶级</td><td>⭐⭐⭐ 优秀</td></tr>
-                <tr><td>方言支持</td><td>有限</td><td>20+ 方言</td><td>一般</td></tr>
-                <tr><td>嘈杂环境</td><td>一般</td><td>⭐⭐⭐ 降噪强</td><td>⭐⭐ 较好</td></tr>
-                <tr><td>网络要求</td><td>需访问 Google</td><td>国内直连</td><td>国内直连</td></tr>
+                <tr><td>适用场景</td><td>海外用户、快速体验</td><td>国内用户、方言识别</td><td>国内用户、高额度</td><td>国内用户、轻度使用</td></tr>
+                <tr><td>免费额度</td><td>无限（浏览器内置）</td><td>50 万次/年</td><td>3000 分钟/月</td><td>1000 分钟/月</td></tr>
+                <tr><td>配置难度</td><td>⭐ 零配置</td><td>⭐⭐ 中等</td><td>⭐⭐ 中等</td><td>⭐⭐ 中等</td></tr>
+                <tr><td>需要填写</td><td>无</td><td>App ID + API Key + API Secret</td><td>App ID + API Key + Secret Key</td><td>App ID + Secret ID + Secret Key</td></tr>
+                <tr><td>中文识别</td><td>一般</td><td>⭐⭐⭐ 顶级</td><td>⭐⭐⭐⭐ 优秀</td><td>⭐⭐⭐⭐ 优秀</td></tr>
+                <tr><td>方言支持</td><td>有限</td><td>20+ 方言</td><td>粤川沪等</td><td>粤语等</td></tr>
+                <tr><td>网络要求</td><td>需访问 Google</td><td>国内直连</td><td>国内直连</td><td>国内直连</td></tr>
               </tbody>
             </table>
           </div>
@@ -114,7 +114,7 @@ const faqItems = [
             <li>❌ 限制：需要能访问 Google 服务（国内网络无法直接使用）</li>
             <li>💡 适用：海外用户、快速体验语音功能</li>
           </ul>
-          <p>如果提示"网络错误"，说明无法连接 Google 服务。请切换到讯飞或火山引擎。</p>
+          <p>如果提示"网络错误"，说明无法连接 Google 服务。请切换到讯飞、百度或腾讯引擎。</p>
 
           <hr>
 
@@ -143,14 +143,15 @@ const faqItems = [
 
           <hr>
 
-          <h3>▎火山引擎语音识别</h3>
+          <h3>▎百度智能云实时语音识别</h3>
+          <p><strong>免费额度：</strong>每月 3000 分钟 + 5 万次短语音，个人使用完全够用。</p>
           <p><strong>申请步骤：</strong></p>
           <div class="aib-vgm-steps">
-            <div class="aib-vgm-step"><span class="aib-vgm-step-num">1</span><div><strong>注册火山引擎账号</strong><p>访问 <a href="https://console.volcengine.com/" target="_blank">https://console.volcengine.com/</a>，点击"注册"。<br>⚠️ <b>建议完成实名认证</b>。</p></div></div>
-            <div class="aib-vgm-step"><span class="aib-vgm-step-num">2</span><div><strong>开通语音识别服务</strong><p>登录控制台 → 搜索"语音技术" → "语音识别" → "开通服务"。<br>选择"一句话识别"或"实时语音识别"。</p></div></div>
-            <div class="aib-vgm-step"><span class="aib-vgm-step-num">3</span><div><strong>创建应用</strong><p>在语音识别页面点击"创建应用" → 填写名称 → 平台选择 <b>"Web"</b>。<br>创建成功后获得 <b>App ID</b>。</p></div></div>
-            <div class="aib-vgm-step"><span class="aib-vgm-step-num">4</span><div><strong>获取 Access Token</strong><p>在应用详情页 → "鉴权管理" → 获取 <b>Access Token</b>（填入 API Key 字段）。</p></div></div>
-            <div class="aib-vgm-step"><span class="aib-vgm-step-num">5</span><div><strong>填入小灵设置</strong><p>回到小灵设置 → 语音配置 → 引擎选择"火山引擎" → 填入 App ID 和 API Key → 保存。</p></div></div>
+            <div class="aib-vgm-step"><span class="aib-vgm-step-num">1</span><div><strong>注册百度智能云账号</strong><p>访问 <a href="https://cloud.baidu.com/" target="_blank">https://cloud.baidu.com/</a>，点击"注册"。<br>⚠️ <b>必须完成实名认证</b>。</p></div></div>
+            <div class="aib-vgm-step"><span class="aib-vgm-step-num">2</span><div><strong>开通实时语音识别</strong><p>登录控制台 → 搜索"语音技术" → "实时语音识别" → "开通服务"。</p></div></div>
+            <div class="aib-vgm-step"><span class="aib-vgm-step-num">3</span><div><strong>创建应用</strong><p>在语音技术页面点击"创建应用" → 填写名称 → 创建成功后获得 <b>App ID</b>。</p></div></div>
+            <div class="aib-vgm-step"><span class="aib-vgm-step-num">4</span><div><strong>获取 API Key 和 Secret Key</strong><p>在应用详情页 → "管理" → "接口鉴权" → 复制 <b>API Key</b> 和 <b>Secret Key</b>。</p></div></div>
+            <div class="aib-vgm-step"><span class="aib-vgm-step-num">5</span><div><strong>填入小灵设置</strong><p>回到小灵设置 → 语音配置 → 引擎选择"百度智能云" → 填入 App ID、API Key、Secret Key → 保存。</p></div></div>
           </div>
 
           <h4>各字段含义：</h4>
@@ -158,8 +159,34 @@ const faqItems = [
             <table class="aib-vgm-table">
               <thead><tr><th>字段</th><th>说明</th><th>在哪里找</th></tr></thead>
               <tbody>
-                <tr><td>App ID</td><td>火山应用的唯一标识</td><td>应用详情页</td></tr>
-                <tr><td>API Key</td><td>即 Access Token，接口调用凭证</td><td>鉴权管理页</td></tr>
+                <tr><td>App ID</td><td>应用唯一标识（纯数字）</td><td>应用详情页</td></tr>
+                <tr><td>API Key</td><td>接口调用凭证</td><td>接口鉴权页</td></tr>
+                <tr><td>Secret Key</td><td>签名密钥</td><td>接口鉴权页</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <hr>
+
+          <h3>▎腾讯云实时语音识别</h3>
+          <p><strong>免费额度：</strong>每月 1000 分钟流式识别。</p>
+          <p><strong>申请步骤：</strong></p>
+          <div class="aib-vgm-steps">
+            <div class="aib-vgm-step"><span class="aib-vgm-step-num">1</span><div><strong>注册腾讯云账号</strong><p>访问 <a href="https://cloud.tencent.com/" target="_blank">https://cloud.tencent.com/</a>，点击"注册"。<br>⚠️ <b>必须完成实名认证</b>。</p></div></div>
+            <div class="aib-vgm-step"><span class="aib-vgm-step-num">2</span><div><strong>开通语音识别</strong><p>登录控制台 → 搜索"语音识别" → "实时语音识别" → "免费试用"。</p></div></div>
+            <div class="aib-vgm-step"><span class="aib-vgm-step-num">3</span><div><strong>创建应用</strong><p>在语音识别页面 → "应用管理" → "创建应用" → 填写名称 → 创建成功后获得 <b>App ID</b>。</p></div></div>
+            <div class="aib-vgm-step"><span class="aib-vgm-step-num">4</span><div><strong>获取 Secret ID 和 Secret Key</strong><p>进入"访问管理" → "API 密钥管理" → 复制 <b>Secret ID</b>（填入 API Key）和 <b>Secret Key</b>。</p></div></div>
+            <div class="aib-vgm-step"><span class="aib-vgm-step-num">5</span><div><strong>填入小灵设置</strong><p>回到小灵设置 → 语音配置 → 引擎选择"腾讯云" → 填入 App ID、API Key（Secret ID）、Secret Key → 保存。</p></div></div>
+          </div>
+
+          <h4>各字段含义：</h4>
+          <div class="aib-vgm-table-wrap">
+            <table class="aib-vgm-table">
+              <thead><tr><th>字段</th><th>说明</th><th>在哪里找</th></tr></thead>
+              <tbody>
+                <tr><td>App ID</td><td>应用唯一标识（纯数字）</td><td>应用管理页</td></tr>
+                <tr><td>API Key</td><td>即 Secret ID，接口调用凭证</td><td>API 密钥管理</td></tr>
+                <tr><td>Secret Key</td><td>签名密钥</td><td>API 密钥管理</td></tr>
               </tbody>
             </table>
           </div>
@@ -185,7 +212,8 @@ const faqItems = [
               <tbody>
                 <tr><td>Web Speech API</td><td>需访问 Google 服务（国内无法直连）</td></tr>
                 <tr><td>讯飞语音</td><td>国内直连</td></tr>
-                <tr><td>火山引擎</td><td>国内直连</td></tr>
+                <tr><td>百度智能云</td><td>国内直连</td></tr>
+                <tr><td>腾讯云</td><td>国内直连</td></tr>
               </tbody>
             </table>
           </div>
@@ -225,13 +253,14 @@ const faqItems = [
           <ul>
             <li><b>Web Speech API</b>：国内网络无法使用，长时间无输入会自动断开</li>
             <li><b>讯飞语音</b>：需实名认证，免费 50 万次/年</li>
-            <li><b>火山引擎</b>：免费 50 万分钟，方言识别弱于讯飞</li>
+            <li><b>百度智能云</b>：需实名认证，每月 3000 分钟免费</li>
+            <li><b>腾讯云</b>：需实名认证，每月 1000 分钟免费</li>
             <li><b>通用</b>：嘈杂环境识别率下降，专业术语可能不准确</li>
           </ul>
 
           <h3>💡 最佳实践</h3>
           <ol>
-            <li>海外用户 → Web Speech API；需方言 → 讯飞；大额使用 → 火山</li>
+            <li>海外用户 → Web Speech API；需方言 → 讯飞；高额度 → 百度；轻度使用 → 腾讯</li>
             <li>不要分享 API Key，定期在控制台查看使用量</li>
             <li>确保网络稳定，Wi-Fi 环境最佳</li>
           </ol>

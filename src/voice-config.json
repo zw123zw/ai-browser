@@ -6,7 +6,13 @@
     "apiSecret": "MWViYTdkN2E5YzVkOTk2NjRjMjEyZDhk"
   },
   {
-    "engineType": "volcengine",
+    "engineType": "baidu",
+    "appId": "",
+    "apiKey": "",
+    "apiSecret": ""
+  },
+  {
+    "engineType": "tencent",
     "appId": "",
     "apiKey": "",
     "apiSecret": ""

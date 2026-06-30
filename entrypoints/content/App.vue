@@ -49,7 +49,7 @@ function getSpeakText(msg: { role: string; content: string }): string | null {
   if (c.startsWith('已执行：')) return '好的'
   if (c.includes('[FILE:') || c.includes('[FILE：')) return '文件已下载'
   if (c === '正在执行操作...') return null
-  if (c.startsWith('❌')) return stripMarkdown(c)
+  if (c.startsWith('❌')) return null
   if (c.startsWith('💬')) return stripMarkdown(c)
   if (c.startsWith('🔧') || c.startsWith('🔄') || c.startsWith('📝') || c.startsWith('⏹') || c.startsWith('✅')) return null
   return stripMarkdown(c)
@@ -62,7 +62,8 @@ function startBgVoice() {
   bgManager = new VoiceManager({
     engineType: s.engineType,
     iflytekConfig: s.engineType === 'iflytek' ? { appId: s.appId, apiKey: s.apiKey, apiSecret: s.apiSecret } : undefined,
-    volcengineConfig: s.engineType === 'volcengine' ? { appId: s.appId, accessToken: s.apiKey } : undefined,
+    baiduConfig: s.engineType === 'baidu' ? { appId: s.appId, apiKey: s.apiKey, apiSecret: s.apiSecret } : undefined,
+    tencentConfig: s.engineType === 'tencent' ? { appId: s.appId, apiKey: s.apiKey, apiSecret: s.apiSecret } : undefined,
     lang: s.recognitionLang,
     wakeWord: s.wakeWord,
     enableTts: s.enableTts,
@@ -82,7 +83,19 @@ function startBgVoice() {
         })
       }
     },
-    onError: (error) => log.error('常驻语音错误', error),
+    onError: (error) => {
+      log.error('常驻语音错误', error)
+      // 错误显示在聊天中，但不播报（system 角色不会触发 TTS）
+      if (convStore.conversation) {
+        convStore.conversation.messages.push({
+          id: Date.now().toString(),
+          role: 'system',
+          content: `❌ 语音引擎错误：${error}`,
+          timestamp: Date.now(),
+          status: 'done',
+        })
+      }
+    },
     // 播报条件：麦克风打开就播报（bgManager 存在且 active）
     getBroadcastCondition: () => {
       return bgManager?.isActive || false

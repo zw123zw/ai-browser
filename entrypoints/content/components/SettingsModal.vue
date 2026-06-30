@@ -1245,10 +1245,16 @@ function importModels(e: Event) {
                   {{ t('settings.voice.engineIflytek') }}
                 </button>
                 <button
-                  :class="['aib-select-btn', { active: voiceForm.engineType === 'volcengine' }]"
-                  @click="voiceForm.engineType = 'volcengine'"
+                  :class="['aib-select-btn', { active: voiceForm.engineType === 'baidu' }]"
+                  @click="voiceForm.engineType = 'baidu'"
                 >
-                  {{ t('settings.voice.engineVolcengine') }}
+                  {{ t('settings.voice.engineBaidu') }}
+                </button>
+                <button
+                  :class="['aib-select-btn', { active: voiceForm.engineType === 'tencent' }]"
+                  @click="voiceForm.engineType = 'tencent'"
+                >
+                  {{ t('settings.voice.engineTencent') }}
                 </button>
               </div>
             </div>
@@ -1263,7 +1269,7 @@ function importModels(e: Event) {
             </div>
 
             <div v-if="voiceForm.engineType !== 'web-speech'" class="aib-form-row">
-              <label>{{ voiceForm.engineType === 'iflytek' ? t('settings.voice.apiKey') : t('settings.voice.accessToken') }}</label>
+              <label>{{ t('settings.voice.apiKey') }}</label>
               <input
                 v-model="voiceForm.apiKey"
                 placeholder="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
@@ -1271,7 +1277,7 @@ function importModels(e: Event) {
               />
             </div>
 
-            <div v-if="voiceForm.engineType === 'iflytek'" class="aib-form-row">
+            <div v-if="voiceForm.engineType !== 'web-speech'" class="aib-form-row">
               <label>{{ t('settings.voice.apiSecret') }}</label>
               <input
                 v-model="voiceForm.apiSecret"
