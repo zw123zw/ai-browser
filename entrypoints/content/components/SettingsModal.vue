@@ -87,9 +87,12 @@ const tab = ref<'ai' | 'general' | 'user' | 'voice'>('ai');
 // ========== 使用文档 ==========
 const showDocs = ref(false);
 const docsHtml = ref('');
+const docsToc = ref<Array<{ id: string; text: string; level: number }>>([]);
+const docsActiveId = ref('');
+const docsContentEl = ref<HTMLElement | null>(null);
+
 const md = new MarkdownIt({ html: false, linkify: true, typographer: true });
 
-// 使用 Vite raw 导入 md 文件
 import guideZh from '@/docs/site/guide-zh.md?raw';
 import guideEn from '@/docs/site/guide-en.md?raw';
 
@@ -97,6 +100,53 @@ function openDocs() {
   showDocs.value = true;
   const content = locale.value === 'en-US' ? guideEn : guideZh;
   docsHtml.value = md.render(content);
+  nextTick(() => buildDocsSidebar());
+}
+
+/** 照搬 guide.html buildSidebar：从 h2/h3 提取导航 */
+function buildDocsSidebar() {
+  const el = docsContentEl.value;
+  if (!el) return;
+  // 先移除 markdown 内自带的"目录"段落
+  const tocH2 = Array.from(el.querySelectorAll('h2')).find(h => h.textContent?.trim() === '目录');
+  if (tocH2) {
+    const rm: Element[] = [tocH2];
+    let s = tocH2.nextElementSibling;
+    while (s && s.tagName === 'OL') { rm.push(s); s = s.nextElementSibling; }
+    rm.forEach(n => n.remove());
+  }
+  // 给没有 ID 的 heading 补 ID，构建 TOC
+  const headings = el.querySelectorAll('h2, h3');
+  headings.forEach((h, i) => { if (!h.id) h.id = 'heading-' + i; });
+  docsToc.value = Array.from(headings).map((h) => ({
+    id: h.id,
+    text: (h.textContent || '').replace(/\*\*/g, '').trim(),
+    level: h.tagName === 'H3' ? 3 : 2,
+  }));
+  if (docsToc.value.length > 0) docsActiveId.value = docsToc.value[0].id;
+}
+
+/** 照搬 guide.html：原生 scrollIntoView */
+function scrollToHeading(id: string) {
+  const el = docsContentEl.value?.querySelector('#' + id);
+  if (!el) return;
+  el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  docsActiveId.value = id;
+}
+
+/** 滚动时高亮当前章节 */
+function onDocsScroll() {
+  const container = docsContentEl.value?.parentElement;
+  if (!container) return;
+  const headings = docsContentEl.value?.querySelectorAll('h2, h3');
+  if (!headings) return;
+  let currentId = '';
+  for (const h of headings) {
+    const rect = h.getBoundingClientRect();
+    const cRect = container.getBoundingClientRect();
+    if (rect.top - cRect.top <= 80) currentId = h.id;
+  }
+  if (currentId) docsActiveId.value = currentId;
 }
 
 function closeDocs() {
@@ -665,13 +715,23 @@ function importModels(e: Event) {
     <div class="aib-modal aib-modal-settings">
       <div class="aib-modal-header">
         <span>{{ t('settings.title') }}</span>
-        <button class="aib-modal-close aib-modal-close-inline" @click="emit('close')">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <line x1="18" y1="6" x2="6" y2="18" />
-            <line x1="6" y1="6" x2="18" y2="18" />
-          </svg>
-        </button>
+        <div class="aib-header-right">
+          <button class="aib-header-docs-btn" @click="openDocs" :title="t('settings.user.docs')">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/>
+              <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>
+            </svg>
+            {{ t('settings.user.docs') }}
+          </button>
+          <button class="aib-modal-close aib-modal-close-inline" @click="emit('close')">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+        </div>
       </div>
 
       <div class="aib-settings-body">
@@ -880,20 +940,14 @@ function importModels(e: Event) {
               />
             </div>
 
-            <!-- 保存/删除按钮 -->
+            <!-- 操作按钮 -->
             <div class="aib-tab-footer">
-              <button
-                v-if="!isNewMode"
-                class="aib-btn aib-btn-danger"
-                @click="deleteModel"
-              >
+              <button v-if="!isNewMode" class="aib-btn aib-btn-footer-danger" @click="deleteModel">
                 {{ t('settings.ai.delete') }}
               </button>
-              <div style="flex:1" />
-              <button class="aib-btn" @click="emit('close')">{{ t('settings.ai.cancel') }}</button>
-              <button class="aib-btn aib-btn-primary" @click="saveModel">
-                {{ t('settings.ai.save') }}
-              </button>
+              <div class="aib-footer-spacer" />
+              <button class="aib-btn aib-btn-footer" @click="emit('close')">{{ t('settings.ai.cancel') }}</button>
+              <button class="aib-btn aib-btn-footer-primary" @click="saveModel">{{ t('settings.ai.save') }}</button>
             </div>
           </div>
 
@@ -1037,10 +1091,11 @@ function importModels(e: Event) {
               </div>
             </div>
 
+            <!-- 操作按钮 -->
             <div class="aib-tab-footer">
-              <div style="flex:1" />
-              <button class="aib-btn" @click="emit('close')">{{ t('settings.general.cancel') }}</button>
-              <button class="aib-btn aib-btn-primary" @click="saveGeneral">{{ t('settings.general.save') }}</button>
+              <div class="aib-footer-spacer" />
+              <button class="aib-btn aib-btn-footer" @click="emit('close')">{{ t('settings.general.cancel') }}</button>
+              <button class="aib-btn aib-btn-footer-primary" @click="saveGeneral">{{ t('settings.general.save') }}</button>
             </div>
           </div>
 
@@ -1150,22 +1205,13 @@ function importModels(e: Event) {
               </div>
             </div>
 
-            <!-- 使用文档 -->
-            <div class="aib-form-row">
-              <label>{{ t('settings.user.docs') }}</label>
-              <button class="aib-docs-link" @click="openDocs">
-                {{ t('settings.user.docsHint') }}
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
-                  <polyline points="15 3 21 3 21 9"/>
-                  <line x1="10" y1="14" x2="21" y2="3"/>
-                </svg>
-              </button>
-            </div>
-
-            <!-- 版本号 -->
+            <!-- 版本号 + 链接 -->
             <div class="aib-version-footer">
               v{{ appVersion }}
+              <span class="aib-version-sep">·</span>
+              <a href="https://github.com/zw123zw/ai-browser" target="_blank" class="aib-version-link">官网</a>
+              <span class="aib-version-sep">·</span>
+              <a href="mailto:xiaoling6668882026@outlook.com" class="aib-version-link">联系邮箱（xiaoling6668882026@outlook.com）</a>
             </div>
           </div>
 
@@ -1347,10 +1393,11 @@ function importModels(e: Event) {
               />
             </div>
 
+            <!-- 操作按钮 -->
             <div class="aib-tab-footer">
-              <div style="flex:1" />
-              <button class="aib-btn" @click="emit('close')">{{ t('settings.general.cancel') }}</button>
-              <button class="aib-btn aib-btn-primary" @click="saveVoice">{{ t('settings.general.save') }}</button>
+              <div class="aib-footer-spacer" />
+              <button class="aib-btn aib-btn-footer" @click="emit('close')">{{ t('settings.general.cancel') }}</button>
+              <button class="aib-btn aib-btn-footer-primary" @click="saveVoice">{{ t('settings.general.save') }}</button>
             </div>
           </div>
         </div>
@@ -1358,16 +1405,10 @@ function importModels(e: Event) {
     </div>
   </div>
 
-  <!-- 使用文档查看器（替代设置弹框） -->
+  <!-- 使用文档查看器 -->
   <div v-if="showDocs" class="aib-modal-mask" @click.self="closeDocs">
     <div class="aib-modal aib-docs-modal">
       <div class="aib-modal-header">
-        <button class="aib-back-btn" @click="closeDocs">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M19 12H5M12 19l-7-7 7-7" />
-          </svg>
-          {{ t('common.close') }}
-        </button>
         <span>{{ t('settings.user.docs') }}</span>
         <button class="aib-modal-close aib-modal-close-inline" @click="closeDocs">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -1377,8 +1418,19 @@ function importModels(e: Event) {
           </svg>
         </button>
       </div>
-      <div class="aib-docs-body">
-        <div class="aib-docs-content" v-html="docsHtml" />
+      <div class="aib-docs-layout">
+        <nav class="aib-docs-sidebar">
+          <a
+            v-for="(item, i) in docsToc"
+            :key="i"
+            :class="['aib-docs-nav', { 'aib-docs-nav-active': docsActiveId === item.id, 'aib-docs-nav-h3': item.level === 3 }]"
+            :href="'#' + item.id"
+            @click.prevent="scrollToHeading(item.id)"
+          >{{ item.text }}</a>
+        </nav>
+        <div class="aib-docs-body" @scroll="onDocsScroll">
+          <div class="aib-docs-content" ref="docsContentEl" v-html="docsHtml" />
+        </div>
       </div>
     </div>
   </div>
@@ -1517,6 +1569,7 @@ function importModels(e: Event) {
 .aib-input-with-btn {
   border-top-right-radius: 0;
   border-bottom-right-radius: 0;
+  border-right: none;
   flex: 1;
 }
 
@@ -1544,25 +1597,26 @@ function importModels(e: Event) {
 
 /* 激活按钮 — 与 chip/preset 统一风格 */
 .aib-btn-activate {
-  padding: 10px 20px;
-  border: 1px solid var(--aib-border-strong);
-  border-left: none;
-  border-top-left-radius: 0;
-  border-bottom-left-radius: 0;
-  background: var(--aib-bg-card);
-  color: var(--aib-text-soft);
+  padding: 0 18px;
+  height: 36px;
+  border: none;
+  border-radius: 0 10px 10px 0;
+  background: var(--aib-primary);
+  color: #fff;
   flex-shrink: 0;
-  font-size: 14px;
-  font-weight: 500;
+  font-size: 13px;
+  font-weight: 600;
   cursor: pointer;
   transition: all 0.15s ease;
   font-family: inherit;
+  display: flex;
+  align-items: center;
+  white-space: nowrap;
 }
 
 .aib-btn-activate:hover {
-  border-color: var(--aib-primary);
-  color: var(--aib-primary);
-  background: var(--aib-primary-soft);
+  filter: brightness(1.15);
+  box-shadow: 0 2px 8px var(--aib-primary-glow);
 }
 
 /* 缓存管理按钮组 */
@@ -1661,6 +1715,94 @@ function importModels(e: Event) {
   background: var(--aib-bg);
   z-index: 1;
   width: calc(100% + 32px);
+}
+
+/* Header 右侧按钮组 */
+.aib-header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.aib-header-docs-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 12px;
+  border: 1px solid var(--aib-border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--aib-text-soft);
+  font-size: 12px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.15s;
+}
+
+.aib-header-docs-btn:hover {
+  border-color: var(--aib-primary);
+  color: var(--aib-primary);
+  background: var(--aib-primary-soft);
+}
+
+/* Tab 底部操作栏 */
+.aib-footer-spacer {
+  flex: 1;
+}
+
+.aib-btn-footer {
+  padding: 7px 20px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  border: 1px solid var(--aib-border);
+  background: var(--aib-bg-card);
+  color: var(--aib-text);
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.15s;
+}
+
+.aib-btn-footer:hover {
+  background: var(--aib-bg-hover);
+  border-color: var(--aib-primary);
+}
+
+.aib-btn-footer-primary {
+  padding: 7px 20px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  border: none;
+  background: var(--aib-primary);
+  color: #fff;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.15s;
+  box-shadow: 0 2px 8px var(--aib-primary-glow);
+}
+
+.aib-btn-footer-primary:hover {
+  filter: brightness(1.1);
+  box-shadow: 0 4px 12px var(--aib-primary-glow);
+}
+
+.aib-btn-footer-danger {
+  padding: 7px 20px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  border: 1px solid rgba(239,68,68,0.3);
+  background: rgba(239,68,68,0.06);
+  color: #ef4444;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.15s;
+}
+
+.aib-btn-footer-danger:hover {
+  background: rgba(239,68,68,0.12);
+  border-color: rgba(239,68,68,0.5);
 }
 
 .aib-btn-danger {
@@ -2041,9 +2183,9 @@ function importModels(e: Event) {
 
 /* 文档查看器 */
 .aib-docs-modal {
-  width: 90vw;
-  max-width: 860px;
-  height: 85vh;
+  width: 94vw;
+  max-width: 1100px;
+  height: 88vh;
   display: flex;
   flex-direction: column;
   border-radius: 16px;
@@ -2052,25 +2194,46 @@ function importModels(e: Event) {
 .aib-docs-modal .aib-modal-header {
   display: flex;
   align-items: center;
-  gap: 12px;
+  justify-content: space-between;
 }
-.aib-back-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  background: none;
-  border: none;
-  color: var(--aib-text-soft);
+.aib-docs-layout {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+.aib-docs-sidebar {
+  width: 220px;
+  flex-shrink: 0;
+  border-right: 1px solid var(--aib-border);
+  overflow-y: auto;
+  padding: 12px 0;
+  background: var(--aib-bg-card);
+}
+.aib-docs-sidebar::-webkit-scrollbar { width: 3px; }
+.aib-docs-sidebar::-webkit-scrollbar-thumb { background: var(--aib-border); border-radius: 2px; }
+.aib-docs-nav {
+  display: block;
+  padding: 5px 16px;
   font-size: 13px;
-  cursor: pointer;
-  padding: 4px 8px;
-  border-radius: 6px;
-  font-family: inherit;
+  color: var(--aib-text-soft);
+  text-decoration: none;
+  border-radius: 0;
   transition: all 0.15s;
+  line-height: 1.5;
 }
-.aib-back-btn:hover {
+.aib-docs-nav:hover {
   background: var(--aib-bg-hover);
+  color: var(--aib-text);
+  text-decoration: none;
+}
+.aib-docs-nav-active {
   color: var(--aib-primary);
+  background: var(--aib-primary-soft);
+  font-weight: 600;
+}
+.aib-docs-nav-h3 {
+  padding-left: 32px;
+  font-size: 12px;
 }
 .aib-docs-body {
   flex: 1;
@@ -2083,30 +2246,33 @@ function importModels(e: Event) {
   padding: 60px 0;
 }
 .aib-docs-content {
-  font-size: 14px;
-  line-height: 1.8;
+  font-size: 15px;
+  line-height: 1.7;
   color: var(--aib-text);
 }
-.aib-docs-content h1 { font-size: 22px; margin: 28px 0 14px; font-weight: 700; color: var(--aib-text); }
+.aib-docs-content h1 { font-size: 32px; font-weight: 800; margin: 0 0 8px; line-height: 1.2; }
 .aib-docs-content h1:first-child { margin-top: 0; }
-.aib-docs-content h2 { font-size: 17px; margin: 24px 0 10px; font-weight: 600; color: var(--aib-text); border-bottom: 1px solid var(--aib-border); padding-bottom: 8px; }
-.aib-docs-content h3 { font-size: 15px; margin: 18px 0 8px; font-weight: 600; color: var(--aib-text); }
-.aib-docs-content p { margin: 8px 0; }
-.aib-docs-content ul, .aib-docs-content ol { padding-left: 24px; margin: 8px 0; }
-.aib-docs-content li { margin: 4px 0; }
-.aib-docs-content code { background: var(--aib-bg-card); padding: 2px 6px; border-radius: 4px; font-size: 13px; font-family: 'SF Mono', 'Fira Code', monospace; }
-.aib-docs-content pre { background: var(--aib-bg-card); padding: 14px 18px; border-radius: 10px; overflow-x: auto; margin: 14px 0; border: 1px solid var(--aib-border); }
-.aib-docs-content pre code { background: none; padding: 0; border: none; }
-.aib-docs-content table { width: 100%; border-collapse: collapse; margin: 14px 0; font-size: 13px; }
-.aib-docs-content th, .aib-docs-content td { border: 1px solid var(--aib-border); padding: 10px 14px; text-align: left; }
-.aib-docs-content th { background: var(--aib-bg-card); font-weight: 600; }
+.aib-docs-content h2 { font-size: 24px; font-weight: 700; margin: 48px 0 16px; padding-bottom: 8px; border-bottom: 2px solid var(--aib-border); }
+.aib-docs-content h3 { font-size: 18px; font-weight: 600; margin: 32px 0 12px; }
+.aib-docs-content h4 { font-size: 15px; font-weight: 600; margin: 24px 0 8px; }
+.aib-docs-content p { margin: 0 0 12px; }
+.aib-docs-content ul, .aib-docs-content ol { margin: 0 0 12px; padding-left: 24px; }
+.aib-docs-content li { margin-bottom: 4px; }
+.aib-docs-content hr { border: none; border-top: 1px solid var(--aib-border); margin: 32px 0; }
+.aib-docs-content strong { font-weight: 600; }
+.aib-docs-content code { background: var(--aib-bg-soft); padding: 1px 5px; border-radius: 4px; font-size: 13px; font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace; }
+.aib-docs-content pre { background: #1e293b; color: #e2e8f0; padding: 16px; border-radius: 8px; overflow-x: auto; margin: 12px 0 20px; }
+.aib-docs-content pre code { background: none; padding: 0; color: inherit; font-size: 13px; }
+.aib-docs-content table { width: 100%; border-collapse: collapse; margin: 12px 0 20px; font-size: 14px; }
+.aib-docs-content th { background: var(--aib-bg-soft); font-weight: 600; text-align: left; padding: 10px 12px; border: 1px solid var(--aib-border); }
+.aib-docs-content td { padding: 8px 12px; border: 1px solid var(--aib-border); vertical-align: top; }
+.aib-docs-content tr:nth-child(even) td { background: var(--aib-bg-soft); }
 .aib-docs-content a { color: var(--aib-primary); text-decoration: none; }
 .aib-docs-content a:hover { text-decoration: underline; }
-.aib-docs-content blockquote { border-left: 3px solid var(--aib-primary); padding: 8px 14px; margin: 14px 0; color: var(--aib-text-soft); background: var(--aib-bg-card); border-radius: 0 8px 8px 0; }
-.aib-docs-content hr { border: none; border-top: 1px solid var(--aib-border); margin: 20px 0; }
+.aib-docs-content blockquote { border-left: 4px solid var(--aib-primary-soft); padding: 10px 16px; margin: 8px 0 16px; background: var(--aib-primary-glow); border-radius: 0 8px 8px 0; font-size: 14px; color: var(--aib-text-soft); }
 .aib-docs-content img { max-width: 100%; border-radius: 8px; margin: 10px 0; }
 
-/* 版本号 */
+/* 版本号 + 链接 */
 .aib-version-footer {
   padding-top: 16px;
   margin-top: 8px;
@@ -2115,6 +2281,21 @@ function importModels(e: Event) {
   color: var(--aib-text-soft);
   text-align: center;
   opacity: 0.7;
+}
+
+.aib-version-sep {
+  margin: 0 4px;
+  opacity: 0.5;
+}
+
+.aib-version-link {
+  color: var(--aib-text-soft);
+  text-decoration: none;
+  transition: color 0.15s;
+}
+
+.aib-version-link:hover {
+  color: var(--aib-primary);
 }
 
 /* ========== 语音设置 ========== */
