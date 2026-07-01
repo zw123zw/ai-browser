@@ -120,7 +120,7 @@ export const useLicenseStore = defineStore('aib-license', () => {
       if (result.valid) {
         status.value = result.status || 'active';
         daysLeft.value = result.daysLeft || 0;
-        expired.value = result.expired || false;
+        expired.value = false;
         log.info('License activated', { daysLeft: result.daysLeft });
         return { success: true };
       } else {

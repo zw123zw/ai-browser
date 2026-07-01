@@ -13,6 +13,7 @@ import { useVoiceStore } from '@/src/stores/voice';
 import { usePipeline } from '@/src/composables/usePipeline';
 import { VoiceManager } from '@/src/voice/voice-manager';
 import { useNotesStore } from '@/src/stores/notes';
+import { useLicenseStore } from '@/src/stores/license';
 import { matchShortcut } from '@/src/utils/shortcut';
 import { getThemeById } from '@/src/themes';
 import { drawerOpenStorage } from '@/src/storage';
@@ -32,6 +33,7 @@ const settingsStore = useSettingsStore();
 const convStore = useConversationsStore();
 const notesStore = useNotesStore();
 const voiceStore = useVoiceStore();
+const licenseStore = useLicenseStore();
 const pipeline = usePipeline();
 const { setLocale } = useI18n();
 
@@ -477,6 +479,15 @@ onMounted(async () => {
   } catch (error) {
     log.error('Store 初始化失败:', error);
   }
+
+  // 初始化授权系统（Wasm 加载 + 试用期/有效期检查）
+  try {
+    await licenseStore.init();
+    log.info('授权系统初始化完成', { status: licenseStore.status, daysLeft: licenseStore.daysLeft });
+  } catch (error) {
+    log.error('授权系统初始化失败:', error);
+  }
+
   initI18n(settingsStore.settings.locale || 'zh-CN');
   applyTheme();
 
@@ -564,5 +575,17 @@ onUnmounted(() => {
     />
     <VoiceGuideModal v-if="showVoiceGuide" @close="showVoiceGuide = false" />
     <ToastContainer />
+
+    <!-- 授权过期提示 -->
+    <div v-if="licenseStore.isExpired" class="aib-expired-overlay">
+      <div class="aib-expired-card">
+        <div class="aib-expired-icon">⏰</div>
+        <h3>试用期已过</h3>
+        <p>请激活以继续使用全部功能</p>
+        <button class="aib-expired-btn" @click="showSettings = true">
+          输入激活码
+        </button>
+      </div>
+    </div>
   </div>
 </template>

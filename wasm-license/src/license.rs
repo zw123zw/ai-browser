@@ -41,7 +41,6 @@ fn verify_blob_signature(blob: &LicenseBlob) -> bool {
         "{}|{}|{}|{}",
         blob.status, blob.fingerprint, blob.expire_ts, blob.degrade_level
     );
-    let expected = crypto::hmac_sign(&key, data.as_bytes());
     match hex_decode(&blob.signature) {
         Some(sig) => crypto::hmac_verify(&key, data.as_bytes(), &sig),
         None => false,

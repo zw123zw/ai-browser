@@ -12,7 +12,7 @@ pub struct UsageBlob {
 }
 
 /// Track usage and determine if stealth check should trigger
-pub fn track_usage(blob: &str, action: &str, ts: u64) -> String {
+pub fn track_usage(blob: &str, _action: &str, ts: u64) -> String {
     // Parse usage data from blob (simplified - in production this reads from encrypted storage)
     // For now, return a basic response
     let should_check = should_trigger_check(blob, ts);

@@ -32,7 +32,6 @@
     "dev": "bash -c \"cp docs/site/guide-zh.md public/guide-zh.md && cp docs/site/guide-en.md public/guide-en.md && wxt\"",
     "build": "bash -c \"D=$(date +%Y%m%d-%H%M%S) && cp docs/site/guide-zh.md public/guide-zh.md && cp docs/site/guide-en.md public/guide-en.md && bash scripts/build-check.sh && rm -rf .output && wxt build && mv .output/chrome-mv3 .output/ai-browser-prod-$D && cross-env VITE_LOG_ENABLED=true wxt build && mv .output/chrome-mv3 .output/ai-browser-test-$D\"",
     "build:store": "bash scripts/build-store.sh",
-    "build:wasm": "cd wasm-license && wasm-pack build --target web --release --out-dir ../public/wasm",
     "compile": "vue-tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",

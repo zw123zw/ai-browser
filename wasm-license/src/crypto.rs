@@ -30,16 +30,26 @@ pub fn derive_iv(key: &[u8; 32], context: &[u8]) -> [u8; 16] {
 pub fn encrypt(data: &[u8], key: &[u8; 32]) -> Vec<u8> {
     let iv = derive_iv(key, b"encrypt-iv");
     let encryptor = Aes256CbcEnc::new(key.into(), &iv.into());
-    encryptor.encrypt_padded_vec_mut::<Pkcs7>(data)
+    let mut buf = data.to_vec();
+    // Pad to block size
+    let block_size = 16;
+    let pad_len = block_size - (buf.len() % block_size);
+    buf.extend(std::iter::repeat(pad_len as u8).take(pad_len));
+    let msg_len = data.len();
+    encryptor.encrypt_padded_mut::<Pkcs7>(&mut buf, msg_len)
+        .expect("encryption failed")
+        .to_vec()
 }
 
 /// AES-256-CBC decrypt with PKCS7 padding
 pub fn decrypt(data: &[u8], key: &[u8; 32]) -> Result<Vec<u8>, &'static str> {
     let iv = derive_iv(key, b"encrypt-iv");
     let decryptor = Aes256CbcDec::new(key.into(), &iv.into());
+    let mut buf = data.to_vec();
     decryptor
-        .decrypt_padded_vec_mut::<Pkcs7>(data)
+        .decrypt_padded_mut::<Pkcs7>(&mut buf)
         .map_err(|_| "decryption failed")
+        .map(|p| p.to_vec())
 }
 
 /// HMAC-SHA256 sign

@@ -43,7 +43,7 @@ let licenseStatus: {
 export async function initWasm(): Promise<void> {
   try {
     // Dynamic import of wasm-bindgen generated JS glue
-    const wasm = await import('../../public/wasm/license.js');
+    const wasm = await import('../../public/wasm/wasm_license.js');
     await wasm.default(); // Initialize wasm module
     wasmModule = wasm;
     log.info('Wasm module initialized');
