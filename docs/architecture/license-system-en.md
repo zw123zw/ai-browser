@@ -4,13 +4,13 @@
 
 ## Module Overview
 
-The license system is the commercialization core of the AI Browser extension, responsible for trial period management, activation code verification, feature gating, and anti-piracy protection. The system uses a **full Wasm hardening** architecture — all license logic is compiled into a Rust → Wasm binary, with the JS layer serving only as a thin calling shell containing no decision logic.
+The license system is the commercialization core of the AI Browser extension, responsible for trial period management, activation code verification, validity period control, and anti-piracy protection. The system uses a **full Wasm hardening** architecture — all license logic is compiled into a Rust → Wasm binary, with the JS layer serving only as a thin calling shell containing no decision logic.
 
 The system handles five core responsibilities:
 
 1. **Trial Period Management**: Auto-activates a 7-day trial on first install, based on stable device fingerprint to prevent uninstall-reinstall bypass
 2. **Activation Code Verification**: Ed25519 asymmetric signature verification, private key stored offline, public key embedded in wasm (can be public)
-3. **Feature Gating**: Controls feature availability based on license status (trial/active/expired)
+3. **Validity Period Control**: Only controls validity period, not features. All features available within validity period, all disabled after expiration
 4. **Stealth Secondary Verification**: Randomly triggers silent checks; pirated versions gradually degrade (manifests as "bugs")
 5. **Local Storage Encryption**: License data in chrome.storage encrypted with AES-256-CBC + HMAC tamper detection
 
@@ -20,16 +20,15 @@ The system handles five core responsibilities:
 |------|----------------|
 | `wasm-license/src/lib.rs` | Wasm entry point, exports all functions |
 | `wasm-license/src/crypto.rs` | AES-256-CBC encryption + Ed25519 signatures + PBKDF2 key derivation |
-| `wasm-license/src/license.rs` | Activation code verification + trial period initialization + license state management |
+| `wasm-license/src/license.rs` | Activation code verification + trial period initialization + validity period control |
 | `wasm-license/src/stealth.rs` | Stealth check trigger + gradual degradation state machine |
 | `wasm-license/src/usage.rs` | Usage hours/actions statistics (encrypted storage) |
-| `wasm-license/src/gate.rs` | Feature gating (final decision combining all factors) |
 | `wasm-license/src/fingerprint.rs` | Device fingerprint generation and verification |
 | `src/license/wasm-loader.ts` | JS thin shell: loads wasm, calls functions, exposes state |
 | `src/license/fingerprint.ts` | stableFingerprint device fingerprint generation |
 | `src/stores/license.ts` | Pinia license store (state management) |
 
-**Position in Architecture**: The license system sits between the Vue application layer and core feature modules, serving as the sole gateway for all paid features. The Pinia licenseStore interacts with the Wasm module through wasm-loader; Vue components only read licenseStore state and do not directly manipulate license logic.
+**Position in Architecture**: The license system sits between the Vue application layer and core feature modules, serving as the sole validity gateway for all features. The Pinia licenseStore interacts with the Wasm module through wasm-loader; Vue components only read licenseStore state and do not directly manipulate license logic.
 
 ---
 
@@ -45,7 +44,7 @@ graph TB
     end
 
     subgraph Store["State Management Layer (Pinia)"]
-        LS["useLicenseStore<br/>status / daysLeft / features / degraded"]
+        LS["useLicenseStore<br/>status / daysLeft / degraded"]
     end
 
     subgraph Loader["JS Thin Shell Layer"]
@@ -56,10 +55,9 @@ graph TB
     subgraph Wasm["Wasm Core Module (Rust compiled)"]
         LIB["lib.rs<br/>Export function entry"]
         CRYPTO["crypto.rs<br/>AES-256-CBC + Ed25519 + PBKDF2"]
-        LICENSE["license.rs<br/>Activation verification + trial"]
+        LICENSE["license.rs<br/>Activation verification + validity control"]
         STEALTH["stealth.rs<br/>Stealth verification + degradation"]
         USAGE["usage.rs<br/>Usage statistics"]
-        GATE["gate.rs<br/>Feature gating"]
         FPWASM["fingerprint.rs<br/>Fingerprint verification"]
     end
 
@@ -127,9 +125,9 @@ Extension startup / Tab activation
     │   │   ├─ HMAC verify signature → Fail → status = 'corrupted'
     │   │   ├─ Check fingerprint → Mismatch → status = 'device_mismatch'
     │   │   ├─ Check expireTs
-    │   │   │   ├─ Not expired → status remains trial/active
-    │   │   │   └─ Expired → status = 'expired'
-    │   │   └─ Return { status, daysLeft, features, maxMessages }
+    │   │   │   ├─ Not expired → status remains trial/active, all features available
+    │   │   │   └─ Expired → status = 'expired', all features disabled
+    │   │   └─ Return { status, daysLeft, expired }
     │   │
     │   └─ Update licenseStore state
     │
@@ -155,8 +153,6 @@ User enters activation code in SettingsModal
     │   │   │   status: 'active'
     │   │   │   fingerprint: <device fingerprint>
     │   │   │   expireTs: now + 30 days
-    │   │   │   features: ['chat', 'voice', 'automation']
-    │   │   │   maxMessages: -1 (unlimited)
     │   │   ├─ AES-256-CBC encrypt
     │   │   └─ Ed25519 sign
     │   │
@@ -167,7 +163,7 @@ User enters activation code in SettingsModal
     └─ UI shows "Activation successful"
 ```
 
-#### Flow 4: Feature Gating
+#### Flow 4: Validity Period Control + Stealth Verification
 
 ```
 User performs action (send message / voice / automation)
@@ -189,15 +185,11 @@ User performs action (send message / voice / automation)
     │       └─ if !passed:
     │           └─ Update degradeLevel (persisted to blob)
     │
-    ├─ wasm.feature_gate(blob, feature, degraded)
-    │   ├─ Check status === 'active' or 'trial'
-    │   ├─ Check feature is in features list
-    │   ├─ Check degradeLevel < 3
-    │   ├─ Check dailyUsed < maxMessages (trial limit)
-    │   └─ Return { allowed: true/false, reason }
+    ├─ wasm.check_license(blob) → { status, daysLeft, expired }
+    │   ├─ trial / active → All features available
+    │   └─ expired → All features disabled, show activation prompt
     │
-    └─ if !allowed:
-        └─ Show prompt ("Please activate" / "Trial expired")
+    └─ UI decides whether to show activation prompt based on status
 ```
 
 ---

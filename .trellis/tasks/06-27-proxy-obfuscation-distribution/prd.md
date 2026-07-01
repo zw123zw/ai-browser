@@ -43,12 +43,11 @@
 │  │  - initWasm()  │    │                                  │  │
 │  │  - activate()  │    │  全量逻辑都在 wasm 内:             │  │
 │  │  - tick()      │    │  ├─ verify_code() 激活码校验       │  │
-│  └───────┬───────┘    │  ├─ check_license() 授权状态      │  │
+│  └───────┬───────┘    │  ├─ check_license() 有效期检查     │  │
 │          │            │  ├─ hidden_verify() 隐性二次验证    │  │
 │          │            │  ├─ should_degrade() 渐进降级判断   │  │
 │          │            │  ├─ encrypt() / decrypt() 加密     │  │
 │          │            │  ├─ init_trial() 试用期初始化       │  │
-│          │            │  ├─ feature_gate() 功能门控         │  │
 │          │            │  └─ track_usage() 使用统计          │  │
 │          │            └──────────────────────────────────┘  │
 │          ▼                                                  │
@@ -63,10 +62,9 @@
 │          │                                                  │
 │          ▼                                                  │
 │  ┌───────────────────────────────────────────────────────┐  │
-│  │  功能门控 (wasm feature_gate 决定, JS 只读结果)         │  │
-│  │  - 基础聊天: 试用期可用，过期后受限                      │  │
-│  │  - 语音控制: 需要 active + 未降级                       │  │
-│  │  - 网页自动化: 需要 active + 未降级                     │  │
+│  │  有效期控制 (wasm check_license 决定, JS 只读结果)      │  │
+│  │  - trial / active → 全部功能可用                       │  │
+│  │  - expired → 全部功能不可用，提示激活                   │  │
 │  └───────────────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -92,9 +90,8 @@
     │   ├─ 通过 → 正常
     │   └─ 失败 → wasm should_degrade() → 渐进式降级
     │
-    ├─ wasm feature_gate(blob, feature) ← 最终权限判断
-    │   ├─ allowed → 正常执行
-    │   └─ denied → 提示激活/已降级
+    ├─ expired? → 全部功能不可用，提示激活
+    └─ trial/active → 全部功能可用
     │
     └─ 返回结果给 JS 薄壳层执行
 ```
@@ -114,10 +111,9 @@ wasm-license/
 ├── src/
 │   ├── lib.rs           # wasm 入口，导出函数
 │   ├── crypto.rs        # AES-256-CBC + Ed25519 签名 + PBKDF2
-│   ├── license.rs       # 激活码验证 + 试用期逻辑
+│   ├── license.rs       # 激活码验证 + 试用期逻辑 + 有效期控制
 │   ├── stealth.rs       # 隐性二次验证 + 渐进降级
 │   ├── usage.rs         # 使用时长/次数统计
-│   ├── gate.rs          # 功能门控（综合判断）
 │   └── fingerprint.rs   # 设备指纹生成（稳定硬件信号）
 ```
 
@@ -127,32 +123,33 @@ wasm-license/
 |------|------|------|------|
 | `init_trial(fingerprint)` | 设备指纹 | JSON `{blob, status, daysLeft}` | 初始化 7 天试用期 |
 | `verify_code(code, fingerprint)` | 激活码 + 设备指纹 | JSON `{valid, blob, error}` | 验证激活码（Ed25519 签名验证） |
-| `check_license(blob)` | 加密 blob | JSON `{status, daysLeft, features, maxMessages}` | 检查授权状态 |
+| `check_license(blob)` | 加密 blob | JSON `{status, daysLeft, expired}` | 检查授权状态（只看有效期） |
 | `track_usage(blob, action, ts)` | blob + 动作 + 时间戳 | JSON `{totalHours, totalActions, shouldCheck}` | 使用统计 + 是否触发隐性校验 |
 | `hidden_verify(blob)` | blob | JSON `{passed, degradeLevel}` | 隐性二次验证（静默） |
-| `feature_gate(blob, feature, degraded)` | blob + 功能名 + 降级状态 | JSON `{allowed, reason}` | 最终功能门控 |
 | `encrypt_data(data, key_seed)` | 明文 + 种子 | 加密字符串 | AES-256-CBC 加密 |
 | `decrypt_data(encrypted, key_seed)` | 密文 + 种子 | 明文字符串 | AES-256-CBC 解密 |
 
 **关键原则：JS 只做调用壳，不做任何判断逻辑。所有 if/else、校验、计算都在 wasm 内部。**
+**门控策略：只控制有效期，不控制功能。有效期内全部功能可用，过期后全部不可用。**
 
 #### 3.1.3 激活码格式（Ed25519 非对称签名）
 
 ```
 AIB-XXXX-XXXX-XXXX-XXXX
 ├── AIB：固定前缀
-├── 第 1 组 XXXX：version(1B) + expire_month(1B) + features(1B) + random(1B)
+├── 第 1 组 XXXX：version(1B) + expire_month(1B) + random(2B)
 ├── 第 2 组 XXXX：expire_ts 低 4 字节的 base32 编码
 ├── 第 3 组 XXXX：fingerprint_hash 低 4 字节（绑定设备）
 ├── 第 4 组 XXXX：Ed25519 签名前 4 字节
 ```
 
 **Ed25519 非对称签名**：
-- **生成端（离线工具）**：用私钥对 `version + expire_ts + features + fingerprint_hash` 签名
+- **生成端（离线工具）**：用私钥对 `version + expire_ts + fingerprint_hash` 签名
 - **验证端（wasm）**：用公钥验签。公钥嵌入 wasm 二进制，可公开泄露也无法伪造激活码
 - **安全优势**：即使 wasm 被逆向提取出公钥，也无法生成新激活码（需要私钥）
 
 **设备绑定**：激活码绑定 fingerprint，一个码只能在一台设备上使用。换设备需要新码。
+**有效期控制**：激活码内嵌 expire_ts，有效期内全部功能可用，过期后全部不可用。
 
 #### 3.1.4 试用期逻辑（稳定设备指纹）
 
@@ -180,7 +177,7 @@ function stableFingerprint(): string {
 // 每次启动:
 blob = chrome.storage.local.get('enc_blob')
 result = wasm.check_license(blob)
-→ { status: 'trial', daysLeft: 5, features: ['chat'], maxMessages: 50 }
+→ { status: 'trial', daysLeft: 5, expired: false }
 ```
 
 **关键改进**：fingerprint 不包含 `installTs`，卸载重装后指纹不变，试用期不会重置。
@@ -189,9 +186,9 @@ result = wasm.check_license(blob)
 
 | 状态 | 含义 | 可用功能 |
 |------|------|---------|
-| `trial` | 试用期内（7 天） | 基础聊天（每天 50 条），语音🔒，自动化🔒 |
-| `active` | 已激活 | 全部功能（受隐性校验约束） |
-| `expired` | 试用期已过，未激活 | 仅提示激活，不可使用 |
+| `trial` | 试用期内（7 天） | 全部功能可用 |
+| `active` | 已激活（有效期内） | 全部功能可用 |
+| `expired` | 已过期 | 全部功能不可用，提示激活 |
 
 ### 3.2 版本轮转机制（每次发布自动变化）
 
@@ -233,7 +230,7 @@ scripts/build-store.sh:
 
 ```bash
 # 生成时指定目标版本
-node gen-license.js --version 1.3.2 --days 30 --features voice,automation
+node gen-license.js --version 1.3.2 --days 30
 
 # wasm 验证时检查版本
 # verify_code("AIB-XXXX-XXXX-XXXX-XXXX", "1.3.2")
@@ -299,10 +296,9 @@ function tick(action: 'chat' | 'voice' | 'automation') {
 ```
 license_bg.wasm 内部:
 ├── crypto.rs        AES-256-CBC + Ed25519 签名 + PBKDF2 密钥派生
-├── license.rs       激活码验证 + 试用期初始化 + 授权状态管理
+├── license.rs       激活码验证 + 试用期初始化 + 有效期控制
 ├── stealth.rs       隐性校验触发器 + 渐进降级状态机
 ├── usage.rs         使用时长/次数统计（加密存储）
-├── gate.rs          功能门控（综合所有因素的最终判断）
 └── fingerprint.rs   设备指纹生成与验证
 ```
 
@@ -374,8 +370,6 @@ chrome.storage.local.get(['enc_blob', 'enc_usage'])
   "status": "active",
   "fingerprint": "a1b2c3d4...",
   "expireTs": 1738368000000,
-  "features": ["chat", "voice", "automation"],
-  "maxMessages": -1,
   "signature": "...",
   "degradeLevel": 0,
   "lastHiddenCheck": 1735776000000
@@ -410,11 +404,11 @@ chrome.storage.local.get(['enc_blob', 'enc_usage'])
 
 ```bash
 # 生成 100 个 30 天激活码（绑定版本 1.3.2）
-node scripts/gen-license.js --version 1.3.2 --count 100 --days 30 --features voice,automation
+node scripts/gen-license.js --version 1.3.2 --count 100 --days 30
 
 # 输出 licenses.csv
-# AIB-XK3M-P7N2-R9TQ,1.3.2,2026-07-28,voice|automation
-# AIB-L5F8-W2J6-H4Y1,1.3.2,2026-07-28,voice|automation
+# AIB-XK3M-P7N2-R9TQ,1.3.2,2026-07-28
+# AIB-L5F8-W2J6-H4Y1,1.3.2,2026-07-28
 
 # 生成单个激活码（指定设备指纹，绑定设备）
 node scripts/gen-license.js --version 1.3.2 --days 30 --fingerprint a1b2c3d4...
@@ -452,7 +446,7 @@ node scripts/gen-license.js --generate-keys
 
 ## 4. 文件变更清单
 
-### 4.1 新增文件（17 个）
+### 4.1 新增文件（16 个）
 
 | 文件 | 用途 |
 |------|------|
@@ -460,10 +454,9 @@ node scripts/gen-license.js --generate-keys
 | `wasm-license/build.rs` | 构建脚本（读取 .build-seed 嵌入常量） |
 | `wasm-license/src/lib.rs` | wasm 主入口，导出函数 |
 | `wasm-license/src/crypto.rs` | AES-256-CBC + Ed25519 + PBKDF2 |
-| `wasm-license/src/license.rs` | 激活码验证 + 试用期逻辑 |
+| `wasm-license/src/license.rs` | 激活码验证 + 试用期逻辑 + 有效期控制 |
 | `wasm-license/src/stealth.rs` | 隐性二次验证 + 渐进降级状态机 |
 | `wasm-license/src/usage.rs` | 使用时长/次数统计 |
-| `wasm-license/src/gate.rs` | 功能门控（综合判断） |
 | `wasm-license/src/fingerprint.rs` | 设备指纹生成与验证 |
 | `public/wasm/license.js` | wasm-bindgen 生成的 JS 胶水层（构建产物） |
 | `public/wasm/license_bg.wasm` | Rust 编译的 wasm 二进制（构建产物） |
@@ -474,7 +467,7 @@ node scripts/gen-license.js --generate-keys
 | `scripts/gen-license.js` | 激活码生成工具（私有，不分发） |
 | `scripts/build-store.sh` | 完整构建脚本（wasm + wxt + 混淆 + zip） |
 
-### 4.2 修改文件（8 个）
+### 4.2 修改文件（6 个）
 
 | 文件 | 改动内容 |
 |------|---------|
@@ -482,8 +475,6 @@ node scripts/gen-license.js --generate-keys
 | `package.json` | 添加 `javascript-obfuscator` 依赖 + 构建脚本 |
 | `entrypoints/content/App.vue` | `onMounted` 时初始化 `licenseStore.init()` |
 | `entrypoints/content/components/SettingsModal.vue` | 实现 `activateLicense()`，接入 licenseStore |
-| `src/voice/voice-manager.ts` | `start()` 方法开头调用 `tick('voice')` + `feature_gate` |
-| `src/input/pipeline.ts` | `executeCommand()` 调用 `tick('automation')` + `feature_gate` |
 | `src/i18n/zh-CN.json` | 新增 license 相关文案 |
 | `src/i18n/en-US.json` | 同上英文版 |
 
@@ -528,10 +519,10 @@ node scripts/gen-license.js --generate-keys
 6. 修改 `wxt.config.ts`（添加 wasm 资源声明）
 7. 测试：试用期初始化、激活码验证、状态切换
 
-### 第 3 天：功能门控 + 隐性校验
+### 第 3 天：有效期控制 + 隐性校验
 
-1. 修改 `src/voice/voice-manager.ts`（语音门控 + tick）
-2. 修改 `src/input/pipeline.ts`（自动化门控 + tick）
+1. 在 App.vue 入口调用 `tick()` 统计使用
+2. 测试：有效期检查、过期后全部功能不可用
 3. 测试：隐性二次验证触发、渐进降级效果
 4. 修改 `src/i18n/zh-CN.json` + `en-US.json`
 
@@ -575,10 +566,9 @@ node scripts/gen-license.js --generate-keys
 
 ### 基础功能
 - [ ] `npm run build:store` 成功编译完整产物
-- [ ] 首次安装自动进入 7 天试用期
-- [ ] 试用期只能使用基础聊天（每天 50 条），语音和自动化显示🔒
-- [ ] 输入有效激活码后，status 变为 active，所有功能解锁
-- [ ] 激活码过期后，功能降级回 expired 状态
+- [ ] 首次安装自动进入 7 天试用期，全部功能可用
+- [ ] 输入有效激活码后，status 变为 active，全部功能可用
+- [ ] 激活码过期后，status 变为 expired，全部功能不可用，提示激活
 
 ### 加密与防篡改
 - [ ] chrome.storage.local 中的 license 数据是 AES 加密的，无法直接读取

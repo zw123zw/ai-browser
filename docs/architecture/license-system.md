@@ -4,13 +4,13 @@
 
 ## 模块概述
 
-授权系统是 AI Browser 扩展的商业化核心，负责试用期管理、激活码验证、功能门控和防破解保护。系统采用 **Wasm 全量加固**架构——所有授权逻辑编译为 Rust → Wasm 二进制，JS 层仅做调用壳，不包含任何判断逻辑。
+授权系统是 AI Browser 扩展的商业化核心，负责试用期管理、激活码验证、有效期控制和防破解保护。系统采用 **Wasm 全量加固**架构——所有授权逻辑编译为 Rust → Wasm 二进制，JS 层仅做调用壳，不包含任何判断逻辑。
 
 系统承担五项核心职责：
 
 1. **试用期管理**：首次安装自动激活 7 天试用期，基于稳定设备指纹防止卸载重装绕过
 2. **激活码验证**：Ed25519 非对称签名验证，私钥离线保管，公钥嵌入 wasm 可公开
-3. **功能门控**：根据授权状态（trial/active/expired）控制功能可用性
+3. **有效期控制**：只控制有效期，不控制功能。有效期内全部功能可用，过期后全部不可用
 4. **隐性二次验证**：随机触发静默校验，破解版长期使用会渐进式降级（表现为"bug"）
 5. **本地存储加密**：chrome.storage 中的授权数据 AES-256-CBC 加密 + HMAC 防篡改
 
@@ -20,16 +20,15 @@
 |------|------|
 | `wasm-license/src/lib.rs` | Wasm 主入口，导出所有函数 |
 | `wasm-license/src/crypto.rs` | AES-256-CBC 加密 + Ed25519 签名 + PBKDF2 密钥派生 |
-| `wasm-license/src/license.rs` | 激活码验证 + 试用期初始化 + 授权状态管理 |
+| `wasm-license/src/license.rs` | 激活码验证 + 试用期初始化 + 有效期控制 |
 | `wasm-license/src/stealth.rs` | 隐性校验触发器 + 渐进降级状态机 |
 | `wasm-license/src/usage.rs` | 使用时长/次数统计（加密存储） |
-| `wasm-license/src/gate.rs` | 功能门控（综合所有因素的最终判断） |
 | `wasm-license/src/fingerprint.rs` | 设备指纹生成与验证 |
 | `src/license/wasm-loader.ts` | JS 薄壳层：加载 wasm、调用函数、暴露状态 |
 | `src/license/fingerprint.ts` | stableFingerprint 设备指纹生成 |
 | `src/stores/license.ts` | Pinia license store（状态管理） |
 
-**在架构中的位置**：授权系统位于 Vue 应用层与核心功能模块之间，是所有付费功能的唯一门控。Pinia licenseStore 通过 wasm-loader 与 Wasm 模块交互，Vue 组件只读取 licenseStore 的状态，不直接操作授权逻辑。
+**在架构中的位置**：授权系统位于 Vue 应用层与核心功能模块之间，是所有功能的唯一有效期门控。Pinia licenseStore 通过 wasm-loader 与 Wasm 模块交互，Vue 组件只读取 licenseStore 的状态，不直接操作授权逻辑。
 
 ---
 
@@ -45,7 +44,7 @@ graph TB
     end
 
     subgraph Store["状态管理层 (Pinia)"]
-        LS["useLicenseStore<br/>status / daysLeft / features / degraded"]
+        LS["useLicenseStore<br/>status / daysLeft / degraded"]
     end
 
     subgraph Loader["JS 薄壳层"]
@@ -56,10 +55,9 @@ graph TB
     subgraph Wasm["Wasm 核心模块 (Rust 编译)"]
         LIB["lib.rs<br/>导出函数入口"]
         CRYPTO["crypto.rs<br/>AES-256-CBC + Ed25519 + PBKDF2"]
-        LICENSE["license.rs<br/>激活码验证 + 试用期"]
+        LICENSE["license.rs<br/>激活码验证 + 有效期控制"]
         STEALTH["stealth.rs<br/>隐性校验 + 降级"]
         USAGE["usage.rs<br/>使用统计"]
-        GATE["gate.rs<br/>功能门控"]
         FPWASM["fingerprint.rs<br/>指纹验证"]
     end
 
@@ -127,9 +125,9 @@ App.vue onMounted()
     │   │   ├─ HMAC 验签 → 失败 → status = 'corrupted'
     │   │   ├─ 检查 fingerprint → 不匹配 → status = 'device_mismatch'
     │   │   ├─ 检查 expireTs
-    │   │   │   ├─ 未过期 → status 保持 trial/active
-    │   │   │   └─ 已过期 → status = 'expired'
-    │   │   └─ 返回 { status, daysLeft, features, maxMessages }
+    │   │   │   ├─ 未过期 → status 保持 trial/active，全部功能可用
+    │   │   │   └─ 已过期 → status = 'expired'，全部功能不可用
+    │   │   └─ 返回 { status, daysLeft, expired }
     │   │
     │   └─ 更新 licenseStore 状态
     │
@@ -155,8 +153,6 @@ App.vue onMounted()
     │   │   │   status: 'active'
     │   │   │   fingerprint: <设备指纹>
     │   │   │   expireTs: now + 30天
-    │   │   │   features: ['chat', 'voice', 'automation']
-    │   │   │   maxMessages: -1 (无限)
     │   │   ├─ AES-256-CBC 加密
     │   │   └─ Ed25519 签名
     │   │
@@ -167,7 +163,7 @@ App.vue onMounted()
     └─ UI 提示"激活成功"
 ```
 
-#### 流程 4：功能门控
+#### 流程 4：有效期控制 + 隐性校验
 
 ```
 用户执行操作（发送消息 / 语音 / 自动化）
@@ -189,15 +185,11 @@ App.vue onMounted()
     │       └─ if !passed:
     │           └─ 更新 degradeLevel（持久化到 blob）
     │
-    ├─ wasm.feature_gate(blob, feature, degraded)
-    │   ├─ 检查 status === 'active' 或 'trial'
-    │   ├─ 检查 feature 是否在 features 列表中
-    │   ├─ 检查 degradeLevel < 3
-    │   ├─ 检查 dailyUsed < maxMessages (trial 限制)
-    │   └─ 返回 { allowed: true/false, reason }
+    ├─ wasm.check_license(blob) → { status, daysLeft, expired }
+    │   ├─ trial / active → 全部功能可用
+    │   └─ expired → 全部功能不可用，提示激活
     │
-    └─ if !allowed:
-        └─ 显示提示（"请激活" / "试用期已过"）
+    └─ UI 根据 status 决定是否显示激活提示
 ```
 
 ---
