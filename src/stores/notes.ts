@@ -87,7 +87,6 @@ export const useNotesStore = defineStore('aib-notes', () => {
     if (!title) return;
     const newEntries = title.entries.filter((e) => e.id !== entryId);
     if (newEntries.length === 0) {
-      // 标题下没有条目了，删除整个标题
       titles.value = titles.value.filter((t) => t.id !== titleId);
     } else {
       title.entries = newEntries;
@@ -117,7 +116,6 @@ export const useNotesStore = defineStore('aib-notes', () => {
   async function renameTitle(titleId: string, newTitle: string) {
     const trimmed = newTitle.trim();
     if (!trimmed) return;
-    // 检查重名
     const duplicate = titles.value.find((t) => t.title === trimmed && t.id !== titleId);
     if (duplicate) {
       throw new Error('已存在同名笔记');
@@ -143,7 +141,6 @@ export const useNotesStore = defineStore('aib-notes', () => {
 
       const existing = titles.value.find((t) => t.title === incoming.title);
       if (existing) {
-        // 合并条目（去重 by id，深拷贝）
         const existingIds = new Set(existing.entries.map((e) => e.id));
         const newEntries = incoming.entries
           .filter((e) => e.id && !existingIds.has(e.id))
@@ -151,7 +148,6 @@ export const useNotesStore = defineStore('aib-notes', () => {
         existing.entries = [...existing.entries, ...newEntries].sort((a, b) => a.timestamp - b.timestamp);
         existing.updatedAt = Date.now();
       } else {
-        // 深拷贝，避免共享引用
         titles.value = [...titles.value, {
           ...incoming,
           entries: incoming.entries.map((e) => ({ ...e })),

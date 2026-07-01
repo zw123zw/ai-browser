@@ -95,6 +95,17 @@ export interface Conversation {
   updatedAt: number;
 }
 
+/** 语音引擎类型 */
+export type VoiceEngineType = 'web-speech' | 'iflytek' | 'baidu' | 'tencent'
+
+/** 引擎配置项 */
+export interface EngineConf {
+  engineType: string
+  appId: string
+  apiKey: string
+  apiSecret: string
+}
+
 /** 全局设置 */
 export interface AppSettings {
   /** 协议 */
@@ -133,6 +144,41 @@ export interface AppSettings {
   automationEnabled?: boolean;
   /** 界面语言：zh-CN=中文, en-US=英文 */
   locale?: 'zh-CN' | 'en-US';
+
+  // ── 语音配置 ──
+  /** 语音引擎类型 */
+  voiceEngineType?: VoiceEngineType;
+  /** 引擎 appId */
+  voiceAppId?: string;
+  /** 引擎 apiKey */
+  voiceApiKey?: string;
+  /** 引擎 apiSecret */
+  voiceApiSecret?: string;
+  /** 所有引擎的默认配置（从 voice-config.json 合并） */
+  voiceEngineConfs?: EngineConf[];
+  /** 语音识别语言 */
+  voiceRecognitionLang?: string;
+  /** 唤醒词 */
+  voiceWakeWord?: string;
+  /** 常驻语音模式 */
+  voiceAlwaysOn?: boolean;
+  /** 启用 TTS 播报 */
+  voiceEnableTts?: boolean;
+  /** TTS 语速 */
+  voiceTtsRate?: number;
+  /** TTS 音量 */
+  voiceTtsVolume?: number;
+  /** 语音缓冲超时（ms） */
+  voiceBufferTimeout?: number;
+  /** 语音空闲超时（ms） */
+  voiceIdleTimeout?: number;
+  /** 语音助手模式：chat=文字聊天, voice=语音助手 */
+  voiceMode?: 'chat' | 'voice';
+
+  // ── 用户数据 ──
+  /** 输入历史 */
+  inputHistory?: string[];
+
   /** @deprecated 已废弃，改用 translateMode */
   selectionTranslate?: boolean;
   /** @deprecated 已废弃，改用 translateMode */

@@ -2,6 +2,7 @@
 import { ref, watch } from 'vue'
 import { useI18n } from '@/src/i18n'
 import { useVoiceStore } from '@/src/stores/voice'
+import { useSettingsStore } from '@/src/stores/settings'
 import { useConversationsStore } from '@/src/stores/conversations'
 import type { SessionState } from '@/src/stores/voice'
 import MessageList from './MessageList.vue'
@@ -9,6 +10,7 @@ import MessageList from './MessageList.vue'
 const { t } = useI18n()
 const emit = defineEmits<{ (e: 'switch-chat'): void }>()
 const voiceStore = useVoiceStore()
+const settingsStore = useSettingsStore()
 const convStore = useConversationsStore()
 const messageListRef = ref<InstanceType<typeof MessageList> | null>(null)
 
@@ -51,8 +53,8 @@ function getStatusText(state: SessionState): string {
         <div class="aib-empty-icon">🎤</div>
         <p>{{ t('voice.title') }}</p>
         <p class="aib-empty-hint">
-          {{ voiceStore.settings.enableWakeWord
-            ? `说「${voiceStore.settings.wakeWord}」唤醒我`
+          {{ settingsStore.settings.voiceWakeWord
+            ? `说「${settingsStore.settings.voiceWakeWord}」唤醒我`
             : '直接说出命令' }}
         </p>
       </div>

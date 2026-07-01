@@ -448,23 +448,23 @@ const generalForm = reactive({
 
 // 语音配置临时变量（点保存才写入 store）
 const voiceForm = reactive({
-  engineType: voiceStore.settings.engineType,
-  appId: voiceStore.settings.appId,
-  apiKey: voiceStore.settings.apiKey,
-  apiSecret: voiceStore.settings.apiSecret,
-  recognitionLang: voiceStore.settings.recognitionLang,
-  wakeWord: voiceStore.settings.wakeWord,
-  alwaysOnVoice: voiceStore.settings.alwaysOnVoice,
-  enableTts: voiceStore.settings.enableTts,
-  ttsRate: voiceStore.settings.ttsRate,
-  ttsVolume: voiceStore.settings.ttsVolume,
-  bufferTimeout: voiceStore.settings.bufferTimeout,
-  idleTimeout: voiceStore.settings.idleTimeout,
+  engineType: store.settings.voiceEngineType || 'web-speech',
+  appId: store.settings.voiceAppId || '',
+  apiKey: store.settings.voiceApiKey || '',
+  apiSecret: store.settings.voiceApiSecret || '',
+  recognitionLang: store.settings.voiceRecognitionLang || 'zh-CN',
+  wakeWord: store.settings.voiceWakeWord || '你好，小灵',
+  alwaysOnVoice: store.settings.voiceAlwaysOn ?? false,
+  enableTts: store.settings.voiceEnableTts ?? true,
+  ttsRate: store.settings.voiceTtsRate ?? 1.8,
+  ttsVolume: store.settings.voiceTtsVolume ?? 0.8,
+  bufferTimeout: store.settings.voiceBufferTimeout ?? 1500,
+  idleTimeout: store.settings.voiceIdleTimeout ?? 3000,
 })
 
 // 切换引擎时，从 engineConfs 加载对应引擎的默认配置
 watch(() => voiceForm.engineType, (newType) => {
-  const conf = voiceStore.settings.engineConfs?.find(c => c.engineType === newType)
+  const conf = store.settings.voiceEngineConfs?.find(c => c.engineType === newType)
   if (conf) {
     voiceForm.appId = conf.appId
     voiceForm.apiKey = conf.apiKey
@@ -477,20 +477,22 @@ function openVoiceGuide() {
 }
 
 function saveVoice() {
-  voiceStore.updateSettings({
-    engineType: voiceForm.engineType,
-    appId: voiceForm.appId,
-    apiKey: voiceForm.apiKey,
-    apiSecret: voiceForm.apiSecret,
-    recognitionLang: voiceForm.recognitionLang,
-    wakeWord: voiceForm.wakeWord,
-    alwaysOnVoice: voiceForm.alwaysOnVoice,
-    enableTts: voiceForm.enableTts,
-    ttsRate: voiceForm.ttsRate,
-    ttsVolume: voiceForm.ttsVolume,
-    bufferTimeout: voiceForm.bufferTimeout,
-    idleTimeout: voiceForm.idleTimeout,
+  store.update({
+    voiceEngineType: voiceForm.engineType,
+    voiceAppId: voiceForm.appId,
+    voiceApiKey: voiceForm.apiKey,
+    voiceApiSecret: voiceForm.apiSecret,
+    voiceRecognitionLang: voiceForm.recognitionLang,
+    voiceWakeWord: voiceForm.wakeWord,
+    voiceAlwaysOn: voiceForm.alwaysOnVoice,
+    voiceEnableTts: voiceForm.enableTts,
+    voiceTtsRate: voiceForm.ttsRate,
+    voiceTtsVolume: voiceForm.ttsVolume,
+    voiceBufferTimeout: voiceForm.bufferTimeout,
+    voiceIdleTimeout: voiceForm.idleTimeout,
   })
+  // 通知 VoiceManager 重建
+  voiceStore.bumpSettingsVersion()
   toast.success(t('settings.general.saved'))
   emit('close')
 }

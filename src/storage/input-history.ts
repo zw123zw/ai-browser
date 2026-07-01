@@ -1,4 +1,4 @@
-import { inputHistoryStorage } from './index';
+import { useSettingsStore } from '@/src/stores/settings';
 
 const INPUT_HISTORY_MAX = 100;
 
@@ -6,7 +6,8 @@ const INPUT_HISTORY_MAX = 100;
 export async function pushInputHistory(text: string) {
   if (!text.trim()) return;
   try {
-    const history = await inputHistoryStorage.getValue();
+    const settingsStore = useSettingsStore();
+    const history = [...(settingsStore.settings.inputHistory || [])];
     // 连续去重：与最后一条相同则跳过
     if (history.length > 0 && history[history.length - 1] === text) return;
     history.push(text);
@@ -14,7 +15,7 @@ export async function pushInputHistory(text: string) {
     if (history.length > INPUT_HISTORY_MAX) {
       history.splice(0, history.length - INPUT_HISTORY_MAX);
     }
-    await inputHistoryStorage.setValue(history);
+    settingsStore.settings.inputHistory = history;
   } catch {
     // 扩展上下文失效时静默忽略
   }

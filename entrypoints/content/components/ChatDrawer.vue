@@ -32,25 +32,13 @@ function openNoteViewer() {
   window.dispatchEvent(new Event('aib-toggle-note-viewer'));
 }
 
-/** 当前模式：chat 或 voice（持久化到 storage，新页面自动恢复） */
-const activeMode = ref<'chat' | 'voice'>('chat');
-
-// 从 storage 恢复模式
-chrome.storage.local.get('aib-voice-mode').then((result) => {
-  if (result['aib-voice-mode'] === 'voice') {
-    activeMode.value = 'voice';
-  }
-});
-
-// 模式变化时保存，并通知 App 管理麦克风
-watch(activeMode, (mode) => {
-  chrome.storage.local.set({ 'aib-voice-mode': mode });
-  // 切换到文字模式时，停止麦克风（除非常驻语音开启）
-  if (mode === 'chat') {
-    window.dispatchEvent(new CustomEvent('aib-mode-changed', { detail: { mode: 'chat' } }))
-  } else {
-    window.dispatchEvent(new CustomEvent('aib-mode-changed', { detail: { mode: 'voice' } }))
-  }
+/** 当前模式：chat 或 voice（通过 settingsStore 管理，自动持久化 + 跨标签页同步） */
+const activeMode = computed({
+  get: () => settingsStore.settings.voiceMode || 'chat',
+  set: (mode: 'chat' | 'voice') => {
+    settingsStore.update({ voiceMode: mode })
+    window.dispatchEvent(new CustomEvent('aib-mode-changed', { detail: { mode } }))
+  },
 });
 
 /* ---- 左侧拖拽调整宽度 ---- */

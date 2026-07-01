@@ -25,7 +25,7 @@ export const useConversationsStore = defineStore('aib-conversations', () => {
   /** 兼容旧接口：active 指向唯一的会话 */
   const active = computed<Conversation | undefined>(() => conversation.value ?? undefined);
 
-  // 跨页面 + 防抖持久化（单会话）
+  // 跨页面 + 防抖持久化（单会话，独立 storage key）
   defineStorageSync<Conversation | null>({
     source: conversation,
     storage: conversationStorage,

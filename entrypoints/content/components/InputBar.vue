@@ -6,7 +6,7 @@ import { getFileTypeIcon, formatFileSize } from '@/src/utils/file-type';
 import { useToast } from '@/src/composables/useToast';
 import { useI18n } from '@/src/i18n';
 import { Logger } from '@/src/utils/logger';
-import { inputHistoryStorage } from '@/src/storage';
+import { useSettingsStore } from '@/src/stores/settings';
 import { CAPABILITY_DOMAIN_LIST } from '@/src/input/prompts/common';
 import type { Conversation, ModelConfig, Attachment } from '@/src/types';
 
@@ -15,6 +15,7 @@ const ocrProgressMap = ref<Record<string, number>>({});
 
 const log = new Logger('InputBar');
 const { t } = useI18n();
+const settingsStore = useSettingsStore();
 
 const props = defineProps<{
   conversation: Conversation | null | undefined;
@@ -66,7 +67,7 @@ let savedDraft = '';
 /** 确保历史缓存已加载 */
 async function ensureHistoryLoaded() {
   if (historyCache === null) {
-    historyCache = await inputHistoryStorage.getValue();
+    historyCache = [...(settingsStore.settings.inputHistory || [])];
   }
 }
 

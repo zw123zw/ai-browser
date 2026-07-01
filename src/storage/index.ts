@@ -1,36 +1,7 @@
 import { storage } from 'wxt/storage';
-import type { AppSettings, Conversation, ModelConfig, NotesData, Provider } from '@/src/types';
+import type { AppSettings, Conversation, ModelConfig, NotesData, Provider, EngineConf } from '@/src/types';
 import rawModels from '@/src/local-config.json';
 import voiceConfig from '@/src/voice-config.json';
-
-/** 语音引擎类型 */
-type EngineType = 'web-speech' | 'iflytek' | 'baidu' | 'tencent'
-
-/** 引擎配置项 */
-export interface EngineConf {
-  engineType: string
-  appId: string
-  apiKey: string
-  apiSecret: string
-}
-
-/** 语音设置 */
-export interface VoiceSettings {
-  engineType: EngineType
-  appId: string
-  apiKey: string
-  apiSecret: string
-  /** 所有引擎的默认配置（从 voice-config.json 合并） */
-  engineConfs: EngineConf[]
-  recognitionLang: string
-  wakeWord: string
-  alwaysOnVoice: boolean
-  enableTts: boolean
-  ttsRate: number
-  ttsVolume: number
-  bufferTimeout: number
-  idleTimeout: number
-}
 
 /** 从引擎配置数组中按类型查找配置项 */
 function findEngineConf(type: string): Record<string, string> {
@@ -39,22 +10,6 @@ function findEngineConf(type: string): Record<string, string> {
 }
 
 export { findEngineConf }
-
-export const DEFAULT_VOICE_SETTINGS: VoiceSettings = {
-  engineType: 'web-speech',
-  appId: '',
-  apiKey: '',
-  apiSecret: '',
-  engineConfs: [],
-  recognitionLang: 'zh-CN',
-  wakeWord: '你好，小灵',
-  alwaysOnVoice: false,
-  enableTts: true,
-  ttsRate: 1.8,
-  ttsVolume: 0.8,
-  bufferTimeout: 1500,
-  idleTimeout: 3000,
-}
 
 /** 从 local-config.json 映射到 ModelConfig */
 function parseLocalModels(list: any[]): ModelConfig[] {
@@ -80,7 +35,18 @@ function parseLocalModels(list: any[]): ModelConfig[] {
 
 const localModels = parseLocalModels(rawModels);
 
-/** 默认设置（从 local-config.json 读取） */
+/** 从 voice-config.json 解析引擎默认配置 */
+function parseEngineConfs(): EngineConf[] {
+  if (!Array.isArray(voiceConfig)) return []
+  return voiceConfig.map((c: any) => ({
+    engineType: c.engineType || '',
+    appId: c.appId || '',
+    apiKey: c.apiKey || '',
+    apiSecret: c.apiSecret || '',
+  }))
+}
+
+/** 默认设置（从 local-config.json + voice-config.json 读取） */
 export const DEFAULT_SETTINGS: AppSettings = {
   provider: 'openai',
   baseUrl: localModels[0]?.baseUrl || 'https://api.openai.com/v1',
@@ -100,6 +66,25 @@ export const DEFAULT_SETTINGS: AppSettings = {
   automationEnabled: true,
   locale: 'zh-CN',
   models: localModels,
+
+  // 语音默认值
+  voiceEngineType: 'web-speech',
+  voiceAppId: '',
+  voiceApiKey: '',
+  voiceApiSecret: '',
+  voiceEngineConfs: parseEngineConfs(),
+  voiceRecognitionLang: 'zh-CN',
+  voiceWakeWord: '你好，小灵',
+  voiceAlwaysOn: false,
+  voiceEnableTts: true,
+  voiceTtsRate: 1.8,
+  voiceTtsVolume: 0.8,
+  voiceBufferTimeout: 1500,
+  voiceIdleTimeout: 3000,
+  voiceMode: 'chat',
+
+  // 用户数据默认值
+  inputHistory: [],
 };
 
 /** 存储键 */
@@ -111,15 +96,16 @@ export const settingsStorage = storage.defineItem<AppSettings>(KEY_SETTINGS, {
   fallback: DEFAULT_SETTINGS,
 });
 
-/** 语音设置存储 */
-export const voiceSettingsStorage = storage.defineItem<VoiceSettings>('local:voice-settings', {
-  fallback: DEFAULT_VOICE_SETTINGS,
-});
-
-/** 单会话存储（新） */
+/** 单会话存储（独立 key：体积大、含附件，与 settings 隔离） */
 export const conversationStorage = storage.defineItem<Conversation | null>(
   KEY_CONVERSATION,
   { fallback: null }
+);
+
+/** 笔记数据存储（独立 key） */
+export const notesStorage = storage.defineItem<NotesData>(
+  'local:ai-browser-notes',
+  { fallback: { titles: [] } }
 );
 
 /** 悬浮按钮位置 (距离视口右下角) */
@@ -136,11 +122,6 @@ export const drawerOpenStorage = storage.defineItem<boolean>('local:ai-browser-d
   fallback: false,
 });
 
-/** 输入历史记录（跨标签页 + 跨浏览器重启持久化，上限 100 条） */
-export const inputHistoryStorage = storage.defineItem<string[]>('local:ai-browser-input-history', {
-  fallback: [],
-});
-
 /** 跨标签页排队任务（navigate/click 导航后，新页自动恢复执行） */
 export interface QueuedTask {
   originalRequest: string
@@ -151,10 +132,4 @@ export interface QueuedTask {
 export const queuedTaskStorage = storage.defineItem<QueuedTask | null>(
   'local:aib-queued-task',
   { fallback: null }
-)
-
-/** 笔记数据存储 */
-export const notesStorage = storage.defineItem<NotesData>(
-  'local:ai-browser-notes',
-  { fallback: { titles: [] } }
 )

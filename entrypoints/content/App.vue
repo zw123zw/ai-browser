@@ -75,7 +75,7 @@ function getSpeakText(msg: { role: string; content: string }): string | null {
 
 function startBgVoice() {
   if (bgManager) return
-  const s = voiceStore.settings
+  const s = voiceStore.getVoiceSettings()
   log.info('常驻语音启动')
   claimMic()
   bgManager = new VoiceManager({
@@ -143,7 +143,7 @@ watch(
     return `${last.role}:${last.status}:${last.content}`
   },
   (val) => {
-    log.info('[TTS] watch 触发', { hasBgManager: !!bgManager, isActive: bgManager?.isActive, enableTts: voiceStore.settings.enableTts, val: val?.slice(0, 50) })
+    log.info('[TTS] watch 触发', { hasBgManager: !!bgManager, isActive: bgManager?.isActive, enableTts: settingsStore.settings.voiceEnableTts, val: val?.slice(0, 50) })
     if (!bgManager?.isActive || !val) return
     const msgs = convStore.conversation?.messages
     if (!msgs?.length) return
@@ -163,9 +163,8 @@ watch(
 
 // 常驻语音开关（仅焦点标签页响应）
 watch(
-  () => voiceStore.settings.alwaysOnVoice,
+  () => settingsStore.settings.voiceAlwaysOn,
   (on) => {
-    // 只有焦点标签页才能启动/停止引擎
     if (!document.hasFocus()) return
     if (on) startBgVoice(); else stopBgVoice()
   },
@@ -176,10 +175,8 @@ watch(
 watch(
   () => voiceStore.settingsVersion,
   () => {
-    // 只有焦点标签页才能重建引擎
     if (!document.hasFocus()) return
-    // 常驻模式 或 抽屉打开时，设置变更都需要重建引擎
-    if ((voiceStore.settings.alwaysOnVoice || open.value) && bgManager) {
+    if ((settingsStore.settings.voiceAlwaysOn || open.value) && bgManager) {
       log.info('语音设置变更，重建 bgManager')
       stopBgVoice()
       startBgVoice()
@@ -189,11 +186,9 @@ watch(
 
 // 抽屉开关 → 语音助手模式才启动麦克风
 watch(open, (isOpen) => {
-  if (voiceStore.settings.alwaysOnVoice) return // 常驻模式不随抽屉变化
-  // 只有抽屉打开且处于语音助手模式才启动麦克风
+  if (settingsStore.settings.voiceAlwaysOn) return // 常驻模式不随抽屉变化
   if (isOpen) {
-    const mode = localStorage.getItem('aib-voice-mode')
-    if (mode !== 'chat') {
+    if (settingsStore.settings.voiceMode !== 'chat') {
       startBgVoice()
     }
   } else {
@@ -312,11 +307,10 @@ function handleBlur() {
 
 /** 仅在满足条件时启动引擎 */
 function startVoiceIfAllowed() {
-  if (voiceStore.settings.alwaysOnVoice) {
+  if (settingsStore.settings.voiceAlwaysOn) {
     startBgVoice()
   } else if (open.value) {
-    const mode = localStorage.getItem('aib-voice-mode')
-    if (mode !== 'chat') {
+    if (settingsStore.settings.voiceMode !== 'chat') {
       startBgVoice()
     }
   }
@@ -454,8 +448,8 @@ function onShowVoiceGuide() {
 function onModeChanged(e: Event) {
   const detail = (e as CustomEvent).detail;
   if (!detail?.mode) return;
-  log.info('[模式切换]', { mode: detail.mode, alwaysOn: voiceStore.settings.alwaysOnVoice, drawerOpen: open.value })
-  if (voiceStore.settings.alwaysOnVoice) return // 常驻模式不随模式切换变化
+  log.info('[模式切换]', { mode: detail.mode, alwaysOn: settingsStore.settings.voiceAlwaysOn, drawerOpen: open.value })
+  if (settingsStore.settings.voiceAlwaysOn) return // 常驻模式不随模式切换变化
   if (detail.mode === 'chat') {
     stopBgVoice()
   } else if (detail.mode === 'voice' && open.value) {
@@ -479,7 +473,7 @@ function onBookmarkNote(e: Event) {
 
 onMounted(async () => {
   try {
-    await Promise.all([settingsStore.init(), convStore.init(), notesStore.init(), voiceStore.initSettings()]);
+    await Promise.all([settingsStore.init(), convStore.init(), notesStore.init()]);
   } catch (error) {
     log.error('Store 初始化失败:', error);
   }
