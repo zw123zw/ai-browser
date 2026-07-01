@@ -19,13 +19,13 @@
 4. **隐性二次验证**：激活后仍随机触发静默校验，破解版长期使用会"出 bug"
 5. **本地存储加密**：chrome.storage 中的授权信息 AES 加密，防直接篡改
 6. **零业务服务器**：纯前端实现，不需要任何后端服务
-7. **（可选·Phase2）远程静态黑名单**：等有用户量且出现盗版后再加，GitHub Pages 托管 JSON
+7. **Chrome Web Store 兼容**：所有方案符合商店审核政策
 
 ### 1.3 已接受的硬短板
 
 - 没有服务端校验 = 任何付费限制都能被改 JS 破解（Wasm + 隐性校验大幅提高门槛）
 - crx 解压就是 JS，只能提高逆向成本，做不到 100% 防泄露
-- 无法实现真正自动更新（需要静态托管）
+- 无法实现真正自动更新（Chrome Web Store 自带更新机制解决此问题）
 
 ---
 
@@ -35,7 +35,7 @@
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  Chrome 扩展 (JS 混淆产物, 自建 crx 分发)                     │
+│  Chrome 扩展 (JS 混淆产物, Chrome Web Store 分发)              │
 │                                                             │
 │  ┌───────────────┐    ┌──────────────────────────────────┐  │
 │  │  JS 薄壳层     │───→│  license_bg.wasm                 │  │
@@ -58,7 +58,7 @@
 │  │ - status       │    │ enc_usage: AES 加密的使用统计      │  │
 │  │ - daysLeft     │    └──────────────────────────────────┘  │
 │  │ - features     │                                         │
-│  │ - degraded     │                                         │
+│  │ - degraded     │                                         │  │
 │  └───────┬───────┘                                         │
 │          │                                                  │
 │          ▼                                                  │
@@ -74,11 +74,12 @@
 ### 2.2 核心流程
 
 ```
-用户安装扩展
+用户安装扩展（Chrome Web Store）
     │
     ▼
 首次启动
     │
+    ├─ stableFingerprint() → 基于硬件信号生成设备指纹
     ├─ wasm init_trial(fingerprint) → 7 天试用加密 blob
     ├─ 存入 chrome.storage.local
     │
@@ -86,12 +87,12 @@
 每次启动 / 每次操作
     │
     ├─ wasm check_license(blob)        ← 解密 + 验签 + 时间检查
-    ├─ wasm track_usage(action)        ← 累计使用时长/次数
-    ├─ wasm hidden_verify()            ← 随机触发二次验证
+    ├─ wasm track_usage(blob, action)  ← 累计使用时长/次数
+    ├─ wasm hidden_verify(blob)        ← 随机触发二次验证
     │   ├─ 通过 → 正常
     │   └─ 失败 → wasm should_degrade() → 渐进式降级
     │
-    ├─ wasm feature_gate(feature)      ← 最终权限判断
+    ├─ wasm feature_gate(blob, feature) ← 最终权限判断
     │   ├─ allowed → 正常执行
     │   └─ denied → 提示激活/已降级
     │
@@ -112,11 +113,12 @@ wasm-license/
 ├── build.rs             # 构建脚本（读取 .build-seed 嵌入常量）
 ├── src/
 │   ├── lib.rs           # wasm 入口，导出函数
-│   ├── crypto.rs        # AES-256-CBC + HMAC-SHA256 + PBKDF2
+│   ├── crypto.rs        # AES-256-CBC + Ed25519 签名 + PBKDF2
 │   ├── license.rs       # 激活码验证 + 试用期逻辑
 │   ├── stealth.rs       # 隐性二次验证 + 渐进降级
 │   ├── usage.rs         # 使用时长/次数统计
-│   └── gate.rs          # 功能门控（综合判断）
+│   ├── gate.rs          # 功能门控（综合判断）
+│   └── fingerprint.rs   # 设备指纹生成（稳定硬件信号）
 ```
 
 #### 3.1.2 导出函数（全部逻辑在 wasm 内）
@@ -124,7 +126,7 @@ wasm-license/
 | 函数 | 输入 | 输出 | 说明 |
 |------|------|------|------|
 | `init_trial(fingerprint)` | 设备指纹 | JSON `{blob, status, daysLeft}` | 初始化 7 天试用期 |
-| `verify_code(code, version)` | 激活码 + 版本号 | JSON `{valid, blob, error}` | 验证激活码（绑定版本） |
+| `verify_code(code, fingerprint)` | 激活码 + 设备指纹 | JSON `{valid, blob, error}` | 验证激活码（Ed25519 签名验证） |
 | `check_license(blob)` | 加密 blob | JSON `{status, daysLeft, features, maxMessages}` | 检查授权状态 |
 | `track_usage(blob, action, ts)` | blob + 动作 + 时间戳 | JSON `{totalHours, totalActions, shouldCheck}` | 使用统计 + 是否触发隐性校验 |
 | `hidden_verify(blob)` | blob | JSON `{passed, degradeLevel}` | 隐性二次验证（静默） |
@@ -132,36 +134,56 @@ wasm-license/
 | `encrypt_data(data, key_seed)` | 明文 + 种子 | 加密字符串 | AES-256-CBC 加密 |
 | `decrypt_data(encrypted, key_seed)` | 密文 + 种子 | 明文字符串 | AES-256-CBC 解密 |
 
-> **可选·Phase2**：`check_blacklist(blob, bl_json)` — 远程黑名单拦截，等有用户量且出现盗版后再加
-
 **关键原则：JS 只做调用壳，不做任何判断逻辑。所有 if/else、校验、计算都在 wasm 内部。**
 
-#### 3.1.3 激活码格式
+#### 3.1.3 激活码格式（Ed25519 非对称签名）
 
 ```
-AIB-XXXX-XXXX-XXXX
+AIB-XXXX-XXXX-XXXX-XXXX
 ├── AIB：固定前缀
 ├── 第 1 组 XXXX：version(1B) + expire_month(1B) + features(1B) + random(1B)
 ├── 第 2 组 XXXX：expire_ts 低 4 字节的 base32 编码
-├── 第 3 组 XXXX：HMAC-SHA256(version + expire_ts + features, per_version_key) 前 4 字节
+├── 第 3 组 XXXX：fingerprint_hash 低 4 字节（绑定设备）
+├── 第 4 组 XXXX：Ed25519 签名前 4 字节
 ```
 
-**版本绑定**：HMAC 密钥由 `master_secret + version + build_seed` 派生，激活码只能在对应版本上验证通过。
-用户升级版本后需要重新激活（或生成工具支持多版本码）。
+**Ed25519 非对称签名**：
+- **生成端（离线工具）**：用私钥对 `version + expire_ts + features + fingerprint_hash` 签名
+- **验证端（wasm）**：用公钥验签。公钥嵌入 wasm 二进制，可公开泄露也无法伪造激活码
+- **安全优势**：即使 wasm 被逆向提取出公钥，也无法生成新激活码（需要私钥）
 
-#### 3.1.4 试用期逻辑
+**设备绑定**：激活码绑定 fingerprint，一个码只能在一台设备上使用。换设备需要新码。
 
+#### 3.1.4 试用期逻辑（稳定设备指纹）
+
+```typescript
+// 首次安装:
+fingerprint = stableFingerprint()  // 基于硬件信号，不含 installTs
+blob = wasm.init_trial(fingerprint)
+chrome.storage.local.set({ enc_blob: blob })
+
+// stableFingerprint 生成逻辑:
+function stableFingerprint(): string {
+  const signals = [
+    chrome.runtime.id,                                    // 扩展 ID（固定）
+    navigator.userAgent,                                  // 浏览器 UA
+    navigator.platform,                                   // 操作系统平台
+    `${screen.width}x${screen.height}x${screen.colorDepth}`, // 屏幕参数
+    navigator.hardwareConcurrency?.toString(),             // CPU 核心数
+    (navigator as any).deviceMemory?.toString(),           // 设备内存
+    Intl.DateTimeFormat().resolvedOptions().timeZone,      // 时区
+    navigator.language,                                    // 语言
+  ].join('|');
+  return sha256(signals);  // SHA-256 哈希
+}
+
+// 每次启动:
+blob = chrome.storage.local.get('enc_blob')
+result = wasm.check_license(blob)
+→ { status: 'trial', daysLeft: 5, features: ['chat'], maxMessages: 50 }
 ```
-首次安装:
-  fingerprint = hash(chrome.runtime.id + userAgent + screen.width + screen.height + installTs)
-  blob = wasm.init_trial(fingerprint)
-  chrome.storage.local.set({ enc_blob: blob })
 
-每次启动:
-  blob = chrome.storage.local.get('enc_blob')
-  result = wasm.check_license(blob)
-  → { status: 'trial', daysLeft: 5, features: ['chat'], maxMessages: 50 }
-```
+**关键改进**：fingerprint 不包含 `installTs`，卸载重装后指纹不变，试用期不会重置。
 
 #### 3.1.5 授权状态
 
@@ -178,7 +200,7 @@ AIB-XXXX-XXXX-XXXX
 每次 `npm run build:store` 时，构建脚本自动生成随机 `build_seed`，同时影响：
 
 1. **JS 混淆参数**：`stringArrayEncoding` 的 key、`controlFlowFlatteningThreshold`、`deadCodeInjectionThreshold` 随机微调
-2. **Wasm 编译**：`build_seed` 嵌入 Rust 编译常量，影响 HMAC 派生密钥、隐性校验阈值、降级触发条件
+2. **Wasm 编译**：`build_seed` 嵌入 Rust 编译常量，影响 Ed25519 公钥派生路径、隐性校验阈值、降级触发条件
 3. **版本号自动递增**：`package.json` 的 patch 版本 +1
 
 **效果**：
@@ -202,22 +224,21 @@ scripts/build-store.sh:
 6. wxt build
 
 7. node scripts/obfuscate.js --seed $build_seed
-   (混淆参数基于 seed 随机微调)
+   (混淆参数基于 seed 随机微调，禁用 Chrome Web Store 不兼容选项)
 
 8. zip -r lingbot-v$VERSION-$BUILD_SEED_SHORT.zip
 ```
 
 #### 3.2.3 版本绑定激活码
 
-```javascript
-// scripts/gen-license.js
-// 生成时指定目标版本
+```bash
+# 生成时指定目标版本
 node gen-license.js --version 1.3.2 --days 30 --features voice,automation
 
-// wasm 验证时检查版本
-// verify_code("AIB-XXXX-XXXX-XXXX", "1.3.2")
-// → HMAC(version="1.3.2") 匹配 → valid
-// → 用在 v1.3.1 上 → HMAC(version="1.3.1") 不匹配 → invalid
+# wasm 验证时检查版本
+# verify_code("AIB-XXXX-XXXX-XXXX-XXXX", "1.3.2")
+# → Ed25519 签名(version="1.3.2") 匹配 → valid
+# → 用在 v1.3.1 上 → 签名(version="1.3.1") 不匹配 → invalid
 ```
 
 ### 3.3 隐性二次验证（防破解长期使用）
@@ -235,7 +256,7 @@ wasm 内部维护使用统计，随机触发静默校验：
 触发时：
   wasm.hidden_verify(blob)
   ├─ 重新计算 fingerprint → 与 blob 中存储的对比
-  ├─ 重新验证 blob HMAC 签名
+  ├─ 重新验证 blob Ed25519 签名
   ├─ 检查使用时长是否合理（不能凭空跳变）
   └─ 返回 { passed: true/false, degradeLevel: 0-3 }
 ```
@@ -271,46 +292,21 @@ function tick(action: 'chat' | 'voice' | 'automation') {
 }
 ```
 
-### 3.4 （可选·Phase2）远程静态黑名单
+### 3.4 全量 Wasm 逻辑（JS 只做薄壳）
 
-> **暂不实施**，等有用户量且出现盗版后再加。不影响主流程。
-
-<details>
-<summary>展开查看方案设计（备忘）</summary>
-
-**原理**：GitHub Pages 托管 `blacklist.json`，wasm 读取并拦截盗版机器码/泄露激活码。
-
-**`blacklist.json` 结构**：
-```json
-{
-  "blockedFingerprints": ["a1b2c3d4..."],
-  "blockedCodes": ["AIB-XK3M-P7N2-R9TQ"],
-  "minVersion": "1.3.1"
-}
-```
-
-**流程**：JS fetch JSON → 传入 wasm → 验签 + 匹配 → 命中则锁定
-
-**管理**：编辑 JSON → 提交 GitHub → 自动生效
-
-**注意**：破解者可删掉 JS 中的 fetch 调用绕过，因此这只是辅助手段。
-
-</details>
-
-### 3.5 全量 Wasm 逻辑（JS 只做薄壳）
-
-#### 3.5.1 Wasm 内部模块
+#### 3.4.1 Wasm 内部模块
 
 ```
 license_bg.wasm 内部:
-├── crypto.rs        AES-256-CBC + HMAC-SHA256 + PBKDF2 密钥派生
+├── crypto.rs        AES-256-CBC + Ed25519 签名 + PBKDF2 密钥派生
 ├── license.rs       激活码验证 + 试用期初始化 + 授权状态管理
 ├── stealth.rs       隐性校验触发器 + 渐进降级状态机
 ├── usage.rs         使用时长/次数统计（加密存储）
-└── gate.rs          功能门控（综合所有因素的最终判断）
+├── gate.rs          功能门控（综合所有因素的最终判断）
+└── fingerprint.rs   设备指纹生成与验证
 ```
 
-#### 3.5.2 JS 薄壳层职责（极简）
+#### 3.4.2 JS 薄壳层职责（极简）
 
 ```typescript
 // src/license/wasm-loader.ts — JS 只做这些事：
@@ -324,9 +320,9 @@ license_bg.wasm 内部:
 // 所有判断都在 wasm 内部完成
 ```
 
-### 3.6 JS 混淆（自建 crx 分发 + 版本轮转）
+### 3.5 JS 混淆（Chrome Web Store 兼容 + 版本轮转）
 
-#### 3.6.1 混淆配置（基于 build_seed 随机微调）
+#### 3.5.1 混淆配置（基于 build_seed 随机微调）
 
 ```javascript
 // scripts/obfuscate.js
@@ -345,18 +341,26 @@ const options = {
   transformObjectKeys: true,
   splitStrings: true,
   splitStringsChunkLength: 6 + Math.floor(rng() * 8),  // 6~13 随机
+
+  // ── Chrome Web Store 审核禁用项 ──
+  selfDefending: false,       // ❌ 禁止：注入检测代码，审核不通过
+  debugProtection: false,     // ❌ 禁止：注入 debugger 语句
+  domainLock: [],             // ❌ 禁止：域名锁定
+  disableConsoleOutput: false, // ⚠️ 建议关闭：审核可能标记
+  // ── 确保不用 eval() ──
+  target: 'browser',          // 不生成 node-specific 代码
 };
 ```
 
-#### 3.6.2 混淆目标
+#### 3.5.2 混淆目标
 
 构建产物中所有 `.js` 文件：
 - `background.js`
 - `content-scripts/content.js`
 
-### 3.7 本地存储加密
+### 3.6 本地存储加密
 
-#### 3.7.1 存储结构
+#### 3.6.1 存储结构
 
 ```javascript
 chrome.storage.local.get(['enc_blob', 'enc_usage'])
@@ -368,12 +372,11 @@ chrome.storage.local.get(['enc_blob', 'enc_usage'])
 ```json
 {
   "status": "active",
-  "installTs": 1735689600000,
-  "expireTs": 1738368000000,
   "fingerprint": "a1b2c3d4...",
+  "expireTs": 1738368000000,
   "features": ["chat", "voice", "automation"],
   "maxMessages": -1,
-  "hmac": "...",
+  "signature": "...",
   "degradeLevel": 0,
   "lastHiddenCheck": 1735776000000
 }
@@ -391,17 +394,17 @@ chrome.storage.local.get(['enc_blob', 'enc_usage'])
 }
 ```
 
-#### 3.7.2 防篡改机制
+#### 3.6.2 防篡改机制
 
 - AES 密钥由 wasm 内部派生，JS 层不可见
-- 每个 blob 都有 HMAC 签名，wasm 解密后先验签
-- 指纹绑定：换设备后试用期不继承
+- 每个 blob 都有 Ed25519 签名，wasm 解密后先验签
+- 指纹绑定：换设备后试用期不继承（fingerprint 基于稳定硬件信号）
 - 时间合理性检查：expireTs 不能早于 installTs，不能超过合理范围
 - 使用统计防跳变：totalHours 不能凭空增加（与实际 tick 频率对比）
 
-### 3.8 激活码生成工具
+### 3.7 激活码生成工具
 
-#### 3.8.1 工具文件
+#### 3.7.1 工具文件
 
 `scripts/gen-license.js` — 私有脚本，不随扩展分发
 
@@ -412,9 +415,32 @@ node scripts/gen-license.js --version 1.3.2 --count 100 --days 30 --features voi
 # 输出 licenses.csv
 # AIB-XK3M-P7N2-R9TQ,1.3.2,2026-07-28,voice|automation
 # AIB-L5F8-W2J6-H4Y1,1.3.2,2026-07-28,voice|automation
+
+# 生成单个激活码（指定设备指纹，绑定设备）
+node scripts/gen-license.js --version 1.3.2 --days 30 --fingerprint a1b2c3d4...
+
+# 生成设备变更重置码
+node scripts/gen-license.js --reset --old-fingerprint abc123 --new-fingerprint def456
 ```
 
-#### 3.8.2 销售渠道
+#### 3.7.2 密钥管理
+
+```
+scripts/keys/
+├── ed25519-private.key    # 私钥（离线保管，绝不公开）
+├── ed25519-public.key     # 公钥（嵌入 wasm，可公开）
+└── .gitignore             # 确保私钥不提交到仓库
+```
+
+**生成密钥对**：
+```bash
+# 首次使用前生成
+node scripts/gen-license.js --generate-keys
+# → 生成 ed25519-private.key + ed25519-public.key
+# → 公钥复制到 wasm-license/src/ 目录
+```
+
+#### 3.7.3 销售渠道
 
 | 渠道 | 地区 | 收款 | 自动发码 |
 |------|------|------|---------|
@@ -426,21 +452,23 @@ node scripts/gen-license.js --version 1.3.2 --count 100 --days 30 --features voi
 
 ## 4. 文件变更清单
 
-### 4.1 新增文件（15 个）
+### 4.1 新增文件（17 个）
 
 | 文件 | 用途 |
 |------|------|
 | `wasm-license/Cargo.toml` | Rust crate 配置 |
 | `wasm-license/build.rs` | 构建脚本（读取 .build-seed 嵌入常量） |
 | `wasm-license/src/lib.rs` | wasm 主入口，导出函数 |
-| `wasm-license/src/crypto.rs` | AES-256-CBC + HMAC-SHA256 + PBKDF2 |
+| `wasm-license/src/crypto.rs` | AES-256-CBC + Ed25519 + PBKDF2 |
 | `wasm-license/src/license.rs` | 激活码验证 + 试用期逻辑 |
 | `wasm-license/src/stealth.rs` | 隐性二次验证 + 渐进降级状态机 |
 | `wasm-license/src/usage.rs` | 使用时长/次数统计 |
 | `wasm-license/src/gate.rs` | 功能门控（综合判断） |
+| `wasm-license/src/fingerprint.rs` | 设备指纹生成与验证 |
 | `public/wasm/license.js` | wasm-bindgen 生成的 JS 胶水层（构建产物） |
 | `public/wasm/license_bg.wasm` | Rust 编译的 wasm 二进制（构建产物） |
 | `src/license/wasm-loader.ts` | JS 加载 wasm 的封装层（薄壳） |
+| `src/license/fingerprint.ts` | stableFingerprint 设备指纹生成 |
 | `src/stores/license.ts` | Pinia license store（状态管理） |
 | `scripts/obfuscate.js` | JS 混淆脚本（版本轮转） |
 | `scripts/gen-license.js` | 激活码生成工具（私有，不分发） |
@@ -481,22 +509,24 @@ node scripts/gen-license.js --version 1.3.2 --count 100 --days 30 --features voi
 
 1. 安装 Rust 工具链（rustup + wasm-pack + wasm32 target）
 2. 创建 `wasm-license/` crate
-3. 实现 `crypto.rs`（AES-256-CBC + HMAC-SHA256 + PBKDF2）
-4. 实现 `license.rs`（激活码验证 + 试用期逻辑）
-5. 实现 `usage.rs`（使用统计）
-6. 实现 `stealth.rs`（隐性验证 + 降级）
-7. 实现 `gate.rs`（功能门控）
-8. 实现 `build.rs`（读取 build-seed 嵌入常量）
-9. `wasm-pack build --target web --release` 编译
+3. 实现 `crypto.rs`（AES-256-CBC + Ed25519 + PBKDF2）
+4. 实现 `fingerprint.rs`（设备指纹生成与验证）
+5. 实现 `license.rs`（激活码验证 + 试用期逻辑）
+6. 实现 `usage.rs`（使用统计）
+7. 实现 `stealth.rs`（隐性验证 + 降级）
+8. 实现 `gate.rs`（功能门控）
+9. 实现 `build.rs`（读取 build-seed 嵌入常量）
+10. `wasm-pack build --target web --release` 编译
 
 ### 第 2 天：JS 集成
 
-1. 创建 `src/license/wasm-loader.ts`（wasm 薄壳加载层）
-2. 创建 `src/stores/license.ts`（Pinia store）
-3. 修改 `entrypoints/content/App.vue`（初始化 license）
-4. 修改 `SettingsModal.vue`（实现 activateLicense）
-5. 修改 `wxt.config.ts`（添加 wasm 资源声明）
-6. 测试：试用期初始化、激活码验证、状态切换
+1. 创建 `src/license/fingerprint.ts`（stableFingerprint）
+2. 创建 `src/license/wasm-loader.ts`（wasm 薄壳加载层）
+3. 创建 `src/stores/license.ts`（Pinia store）
+4. 修改 `entrypoints/content/App.vue`（初始化 license）
+5. 修改 `SettingsModal.vue`（实现 activateLicense）
+6. 修改 `wxt.config.ts`（添加 wasm 资源声明）
+7. 测试：试用期初始化、激活码验证、状态切换
 
 ### 第 3 天：功能门控 + 隐性校验
 
@@ -508,11 +538,12 @@ node scripts/gen-license.js --version 1.3.2 --count 100 --days 30 --features voi
 ### 第 4 天：混淆 + 版本轮转 + 打包
 
 1. `npm install javascript-obfuscator --save-dev`
-2. 创建 `scripts/obfuscate.js`（版本轮转混淆）
+2. 创建 `scripts/obfuscate.js`（版本轮转混淆，Chrome Web Store 兼容配置）
 3. 创建 `scripts/build-store.sh`（完整构建流程）
-4. 创建 `scripts/gen-license.js`（激活码生成）
-5. 修改 `package.json`（添加脚本）
-6. 测试 `npm run build:store` 完整流程
+4. 创建 `scripts/gen-license.js`（激活码生成，Ed25519 签名）
+5. 生成 Ed25519 密钥对
+6. 修改 `package.json`（添加脚本）
+7. 测试 `npm run build:store` 完整流程
 
 ### 第 5 天：测试 + 上架
 
@@ -521,8 +552,8 @@ node scripts/gen-license.js --version 1.3.2 --count 100 --days 30 --features voi
 3. 测试换设备 → 试用期不继承
 4. 测试隐性降级（长时间使用后）
 5. 测试版本轮转（连续构建两次，产物不同）
-6. 准备分发材料
-7. 上传 GitHub Releases / 蓝奏云
+6. 准备 Chrome Web Store 上架材料
+7. 提交 Chrome Web Store 审核
 
 ---
 
@@ -533,11 +564,10 @@ node scripts/gen-license.js --version 1.3.2 --count 100 --days 30 --features voi
 | Rust 工具链 | 免费 |
 | wasm-pack | 免费 |
 | javascript-obfuscator | 免费 |
+| Chrome Web Store 开发者账号 | $5（一次性） |
 | Gumroad | 免费（抽成 10%） |
 | 爱发电 | 免费（抽成 5-6%） |
-| GitHub Releases | 免费 |
-| 蓝奏云 | 免费 |
-| **总计** | **¥0** |
+| **总计** | **$5** |
 
 ---
 
@@ -569,6 +599,12 @@ node scripts/gen-license.js --version 1.3.2 --count 100 --days 30 --features voi
 - [ ] 混淆后的扩展能正常安装和运行
 - [ ] 混淆后 JS 可读性极低（变量名随机、控制流扁平化、死代码注入）
 - [ ] wasm 二进制无法直接阅读
+- [ ] 混淆配置不含 selfDefending/debugProtection/domainLock（Chrome Web Store 兼容）
+
+### Chrome Web Store 兼容
+- [ ] 扩展通过 Chrome Web Store 审核
+- [ ] 不使用 eval()、selfDefending、debugProtection
+- [ ] Wasm 文件在 manifest 中正确声明
 
 ---
 
@@ -579,12 +615,14 @@ node scripts/gen-license.js --version 1.3.2 --count 100 --days 30 --features voi
 | Rust 工具链安装复杂 | 开发环境搭建慢 | 提供详细安装文档；备选 AssemblyScript |
 | wasm 被提取逆向 | 核心逻辑泄露 | 混淆 + wasm 双重保护 + 版本轮转 |
 | 用户篡改时间戳 | 绕过试用期 | wasm 检查时间合理性 + 隐性验证 |
-| 激活码被批量生成 | 收入损失 | HMAC 在 wasm 中 + 版本绑定 |
+| 激活码被批量生成 | 收入损失 | Ed25519 非对称签名，私钥离线保管 |
 | wasm 增加扩展体积 | 下载变慢 | `opt-level = "s"` + LTO + strip，预期 < 100KB |
-| Chrome 沙箱兼容性 | 扩展崩溃 | 不开 selfDefending / debugProtection |
 | 用户改 JS 绕过门控 | 免费用付费功能 | 全量逻辑在 wasm，JS 只是调用壳 |
 | 隐性降级被用户发现 | 差评 | 降级表现像自然 bug，不暴露防破解意图 |
 | 旧版本被长期使用 | 安全风险 | 版本轮转 + 激活码绑定版本号 |
+| Chrome Web Store 审核不通过 | 延迟上架 | 严格禁用不兼容选项，提前自测 |
+| 用户卸载重装绕过试用期 | 试用期滥用 | stableFingerprint 基于硬件信号，卸载重装不变 |
+| 用户换设备后激活码失效 | 用户投诉 | 提供设备变更重置码机制 |
 
 ---
 
