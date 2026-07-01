@@ -23,6 +23,9 @@ echo "=========================================="
 echo "  AI Browser - Chrome Web Store Build"
 echo "=========================================="
 
+# Timestamp for this build
+BUILD_TIME=$(date +%Y%m%d-%H%M%S)
+
 # Step 1: Generate build seed
 echo ""
 echo "[1/6] Generating build seed..."
@@ -52,13 +55,16 @@ echo ""
 echo "[3/6] Building wasm module..."
 cd wasm-license
 
+# Add cargo to PATH
+export PATH="$HOME/.cargo/bin:$PATH"
+
 # Check if wasm-pack is installed
 if ! command -v wasm-pack &> /dev/null; then
   echo "  wasm-pack not found, installing..."
   cargo install wasm-pack
 fi
 
-wasm-pack build --target web --release --out-dir ../public/wasm
+wasm-pack build --target web --release --out-dir ../public/wasm --no-opt
 cd "$PROJECT_DIR"
 echo "  Wasm build complete"
 
@@ -67,31 +73,54 @@ echo ""
 echo "[4/6] Building extension..."
 cp docs/site/guide-zh.md public/guide-zh.md
 cp docs/site/guide-en.md public/guide-en.md
-wxt build
-echo "  Extension build complete"
+BUILD_SEED_SHORT="${BUILD_SEED:0:8}"
+BUILD_DIR=".output-store/lingbot-v${NEW_VERSION}-${BUILD_TIME}-${BUILD_SEED_SHORT}"
+npx wxt build
+mkdir -p .output-store
+mv .output/chrome-mv3 "$BUILD_DIR"
+echo "  Extension build complete → $BUILD_DIR"
 
-# Step 5: Obfuscate JS
+# Step 5: Obfuscate JS (string encryption only, fast on large files)
 echo ""
 echo "[5/6] Obfuscating JavaScript..."
-if [ -d ".output/chrome-mv3" ]; then
-  node scripts/obfuscate.js --seed="$BUILD_SEED"
+if [ -d "$BUILD_DIR" ]; then
+  node scripts/obfuscate.js --seed="$BUILD_SEED" --dir="$BUILD_DIR"
 else
-  echo "  Warning: .output/chrome-mv3 not found, skipping obfuscation"
+  echo "  Warning: $BUILD_DIR not found, skipping"
 fi
 
 # Step 6: Package zip
 echo ""
 echo "[6/6] Packaging zip..."
-BUILD_SEED_SHORT="${BUILD_SEED:0:8}"
 ZIP_NAME="lingbot-v${NEW_VERSION}-${BUILD_SEED_SHORT}.zip"
 
-if [ -d ".output/chrome-mv3" ]; then
-  cd .output/chrome-mv3
-  zip -r "../${ZIP_NAME}" . -x '*.map'
-  cd "$PROJECT_DIR"
-  echo "  Package: .output/${ZIP_NAME}"
+if [ -d "$BUILD_DIR" ]; then
+  node -e "
+    const fs = require('fs');
+    const path = require('path');
+    const JSZip = require('jszip');
+    const zip = new JSZip();
+    const buildDir = '${BUILD_DIR}';
+    const zipPath = '.output-store/${ZIP_NAME}';
+    function addDir(dir, prefix) {
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        const fullPath = path.join(dir, entry.name);
+        const zipName = prefix ? prefix + '/' + entry.name : entry.name;
+        if (entry.isDirectory()) {
+          addDir(fullPath, zipName);
+        } else {
+          zip.file(zipName, fs.readFileSync(fullPath));
+        }
+      }
+    }
+    addDir(buildDir, '');
+    zip.generateAsync({ type: 'nodebuffer' }).then(buf => {
+      fs.writeFileSync(zipPath, buf);
+      console.log('  Package: ' + zipPath + ' (' + (buf.length/1024/1024).toFixed(1) + 'MB)');
+    });
+  "
 else
-  echo "  Warning: .output/chrome-mv3 not found, skipping packaging"
+  echo "  Warning: $BUILD_DIR not found, skipping packaging"
 fi
 
 echo ""
@@ -100,7 +129,8 @@ echo "  Build Complete!"
 echo "=========================================="
 echo "  Version: ${NEW_VERSION}"
 echo "  Build seed: ${BUILD_SEED_SHORT}"
-echo "  Output: .output/${ZIP_NAME}"
+echo "  Directory: ${BUILD_DIR}"
+echo "  Package: .output/${ZIP_NAME}"
 echo ""
 echo "Next steps:"
 echo "  1. Test the extension in Chrome"

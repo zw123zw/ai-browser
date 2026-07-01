@@ -5,8 +5,12 @@ export default defineConfig({
   modules: ['@wxt-dev/module-vue'],
   srcDir: '.',
   // 强制 esbuild 输出 ASCII，规避 Chrome "isn't UTF-8 encoded" 错误
+  // 生产环境开启 esbuild 属性名混淆（快速、内置）
   vite: () => ({
-    esbuild: { charset: 'ascii' },
+    esbuild: {
+      charset: 'ascii',
+      mangleProps: /^_/,  // 混淆 _ 开头的私有属性名
+    },
     build: { cssMinify: 'esbuild' },
   }),
   manifest: {
