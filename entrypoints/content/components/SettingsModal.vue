@@ -12,6 +12,7 @@ import { THEMES } from '@/src/themes';
 import { useI18n, type Locale } from '@/src/i18n';
 import { useVoiceStore } from '@/src/stores/voice';
 import ConfirmDialog from './ConfirmDialog.vue';
+import SecretField from './SecretField.vue';
 
 const emit = defineEmits<{ (e: 'close'): void }>();
 const store = useSettingsStore();
@@ -19,7 +20,7 @@ const voiceStore = useVoiceStore();
 const toast = useToast();
 const { t, locale, setLocale } = useI18n();
 
-const appVersion = '1.3.1';
+const appVersion = '1.8.3';
 
 // ========== License & 缓存 ==========
 const licenseKey = ref('');
@@ -167,8 +168,8 @@ const selectedModelId = ref(store.settings.defaultModelId || localModels.value[0
 // 当前编辑的表单
 const form = reactive<ModelConfig>(getEmptyModel());
 
-// API Key 显示切换
-const showApiKey = ref(false);
+// 当前正在编辑的密钥字段（同一时刻只允许编辑一个）
+const editingSecretField = ref<string | null>(null);
 
 // 是否是新建模式
 const isNewMode = ref(false);
@@ -314,7 +315,7 @@ const currentIndex = computed(() =>
 function selectModel(id: string) {
   selectedModelId.value = id;
   isNewMode.value = false;
-  showApiKey.value = false;
+  editingSecretField.value = null;
   const m = localModels.value.find((m) => m.id === id);
   if (m) Object.assign(form, JSON.parse(JSON.stringify(m)));
 }
@@ -322,7 +323,7 @@ function selectModel(id: string) {
 // 新建模型
 function createNewModel() {
   isNewMode.value = true;
-  showApiKey.value = false;
+  editingSecretField.value = null;
   Object.assign(form, getEmptyModel());
 }
 
@@ -464,6 +465,7 @@ const voiceForm = reactive({
 
 // 切换引擎时，从 engineConfs 加载对应引擎的默认配置
 watch(() => voiceForm.engineType, (newType) => {
+  editingSecretField.value = null
   const conf = store.settings.voiceEngineConfs?.find(c => c.engineType === newType)
   if (conf) {
     voiceForm.appId = conf.appId
@@ -888,28 +890,14 @@ function importModels(e: Event) {
             <!-- API Key -->
             <div class="aib-form-row">
               <label>API Key</label>
-              <div class="aib-input-group">
-                <input
-                  v-model="form.apiKey"
-                  :type="showApiKey ? 'text' : 'password'"
-                  class="aib-input aib-input-with-btn"
-                  placeholder="sk-..."
-                />
-                <button
-                  class="aib-btn aib-btn-toggle"
-                  @click="showApiKey = !showApiKey"
-                  :title="showApiKey ? t('common.close') : t('common.confirm')"
-                >
-                  <svg v-if="!showApiKey" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                    <circle cx="12" cy="12" r="3"/>
-                  </svg>
-                  <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
-                    <line x1="1" y1="1" x2="23" y2="23"/>
-                  </svg>
-                </button>
-              </div>
+              <SecretField
+                :model-value="form.apiKey || ''"
+                :editing="editingSecretField === 'modelApiKey'"
+                placeholder="sk-..."
+                @update:model-value="form.apiKey = $event"
+                @edit="editingSecretField = 'modelApiKey'"
+                @cancel="editingSecretField = null"
+              />
             </div>
 
             <!-- 认证字段 -->
@@ -1263,28 +1251,37 @@ function importModels(e: Event) {
 
             <div v-if="voiceForm.engineType !== 'web-speech'" class="aib-form-row">
               <label>{{ t('settings.voice.appId') }}</label>
-              <input
-                v-model="voiceForm.appId"
+              <SecretField
+                :model-value="voiceForm.appId"
+                :editing="editingSecretField === 'voiceAppId'"
                 placeholder="xxxxxxxx"
-                class="aib-input"
+                @update:model-value="voiceForm.appId = $event"
+                @edit="editingSecretField = 'voiceAppId'"
+                @cancel="editingSecretField = null"
               />
             </div>
 
             <div v-if="voiceForm.engineType !== 'web-speech'" class="aib-form-row">
               <label>{{ t('settings.voice.apiKey') }}</label>
-              <input
-                v-model="voiceForm.apiKey"
+              <SecretField
+                :model-value="voiceForm.apiKey"
+                :editing="editingSecretField === 'voiceApiKey'"
                 placeholder="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-                class="aib-input"
+                @update:model-value="voiceForm.apiKey = $event"
+                @edit="editingSecretField = 'voiceApiKey'"
+                @cancel="editingSecretField = null"
               />
             </div>
 
             <div v-if="voiceForm.engineType !== 'web-speech'" class="aib-form-row">
               <label>{{ t('settings.voice.apiSecret') }}</label>
-              <input
-                v-model="voiceForm.apiSecret"
+              <SecretField
+                :model-value="voiceForm.apiSecret"
+                :editing="editingSecretField === 'voiceApiSecret'"
                 placeholder="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-                class="aib-input"
+                @update:model-value="voiceForm.apiSecret = $event"
+                @edit="editingSecretField = 'voiceApiSecret'"
+                @cancel="editingSecretField = null"
               />
             </div>
 

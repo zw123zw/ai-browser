@@ -1,6 +1,6 @@
 ---
 name: site-gen
-description: "扫描项目代码和 PRD，生成中英文使用指南（guide-zh.md + guide-en.md），输出到 docs/site/ 和 public/ 文件夹。"
+description: "扫描项目代码和 PRD，生成中英文使用指南（guide-zh.md + guide-en.md），同步项目信息到 index.html 和 package.json，输出到 docs/site/ 和 public/ 文件夹。"
 ---
 
 # Site Gen — 使用文档生成
@@ -14,15 +14,18 @@ docs/site/                  public/
 ├── guide-zh.md   ────────→ guide-zh.md   (中文，App 内文档 + Web 站)
 ├── guide-en.md   ────────→ guide-en.md   (英文，App 内文档 + Web 站)
 ├── guide.html              (渲染壳，手动维护，自动加载对应语言 MD)
-└── index.html              (首页，手动维护)
+└── index.html              (首页，项目信息同步)
+
+README.md                   (项目根目录，项目信息同步)
+package.json                (项目根目录，项目信息同步)
 ```
 
-> **本技能只生成 `guide-zh.md` 和 `guide-en.md`**，不生成也不修改 `guide.html` 和 `index.html`。
+> **本技能生成 `guide-zh.md` 和 `guide-en.md`，并同步 `index.html`、`README.md` 和 `package.json` 中的项目信息。**
 > 生成后自动复制到 `public/` 目录（供 App 内 `chrome.runtime.getURL` 访问）。
 
 ## 触发命令
 
-- `/site-gen` — 生成 guide-zh.md + guide-en.md（首次全量，后续增量）
+- `/site-gen` — 生成 guide-zh.md + guide-en.md（首次全量，后续增量），同步项目信息到 index.html、README.md 和 package.json
 
 ---
 
@@ -35,11 +38,13 @@ docs/site/                  public/
 | `name` | 产品名称 |
 | `description` | 产品描述 |
 | `author.name` | 作者 |
+| `author.email` | 联系邮箱 |
 | `license` | 许可证 |
 | `homepage` | 项目主页链接 |
 | `repository.url` | 仓库地址 |
+| `keywords` | 项目标签 |
 
-**版本号规则：** `git tag --sort=-creatordate | head -1`，无 tag 回退到 `package.json` 的 `version`。
+**版本号规则：** `git tag --sort=-creatordate | head -1` 为权威来源，同步到 `package.json`、`index.html`、`README.md`。无 tag 时回退到 `package.json` 的 `version`。
 
 ---
 
@@ -189,6 +194,8 @@ cat package.json
 git tag --sort=-creatordate | head -1
 ```
 
+同步项目信息到 `index.html`、`README.md` 和 `package.json`（详见下方"项目信息同步"章节）。
+
 ### Step 1: 判断模式
 
 检查 `docs/site/guide-zh.md` 是否存在：
@@ -314,3 +321,65 @@ git ls-files --others --exclude-standard    # 未跟踪的新文件
 ### ❌ 错误 4：中英文混在一个文件
 
 **规则：** guide-zh.md 纯中文，guide-en.md 纯英文，不混排。
+
+---
+
+## 项目信息同步
+
+`/site-gen` 执行时，除了生成使用指南，还会同步 `index.html`、`README.md` 和 `package.json` 中的项目信息。
+
+### 同步字段
+
+| 来源 | 目标文件 | 同步内容 |
+|------|----------|----------|
+| `git tag` → `package.json` | `package.json` | `version` 字段更新为最新 tag |
+| `git tag` → `index.html` | `docs/site/index.html` | 版本号（hero-tag） |
+| `git tag` → `README.md` | `README.md` | `**Version X.Y.Z**` |
+| `package.json` → `index.html` | `docs/site/index.html` | 联系邮箱（footer）、产品名称 |
+| `package.json` → `README.md` | `README.md` | 使用指南链接指向 `guide-zh.md`、邮箱 |
+
+### index.html 同步规则
+
+1. **版本号**：从 `git tag` 或 `package.json` 的 `version` 读取，更新 `.hero-tag` 中的 `vX.Y.Z`
+2. **联系邮箱**：从 `package.json` 的 `author.email` 读取，更新 footer 的 `mailto:` 链接
+3. **产品名称**：保持 `package.json` 的 `name` 与页面标题一致
+4. **页脚链接**：移除 GitHub 反馈链接，仅保留"使用指南"和"联系我们"
+
+### README.md 同步规则
+
+1. **版本号**：从 `git tag` 或 `package.json` 的 `version` 读取，更新 `**Version X.Y.Z**`
+2. **使用指南链接**：确保指向 `./docs/site/guide-zh.md`（GitHub 可渲染），而非 `guide.html`
+3. **邮箱**：若页面有联系邮箱信息，保持一致
+
+### package.json 同步规则
+
+1. **version 字段**：以最新 git tag 为准，自动更新 `package.json` 的 `version`
+2. **email 字段**：若 `author.email` 不存在，提示用户补充
+3. **keywords 字段**：保持与页面 meta keywords 一致
+
+### 同步流程
+
+```
+1. 读取 git tag，确定最新版本号（权威来源）
+2. 读取 package.json，提取 author.email、keywords
+3. 更新 package.json 的 version 为最新 git tag
+4. 读取 docs/site/index.html，更新版本号、邮箱、关键词
+5. 读取 README.md，更新版本号、确保使用指南链接指向 guide-zh.md
+6. 检查 package.json 的 author.email，缺失则提示
+7. 输出同步报告
+```
+
+### 同步报告
+
+```
+✅ 项目信息同步完成
+
+版本：v1.4.1 (来源：git tag)
+邮箱：xiaoling6668882026@outlook.com
+关键词：browser-extension, chrome-extension, ai, voice, automation, wxt, vue3, manifest-v3
+
+更新文件：
+- package.json（version: 1.3.1 → 1.4.1, author.email 已存在）
+- docs/site/index.html（版本号、邮箱、关键词）
+- README.md（版本号、使用指南链接）
+```

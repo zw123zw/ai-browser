@@ -926,6 +926,41 @@ table {
   border-radius: 6px;
 }
 
+/* SecretField 组件 */
+.aib-secret-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+}
+.aib-secret-mask {
+  font-family: monospace;
+  letter-spacing: 2px;
+  color: var(--aib-text-soft);
+  user-select: none;
+  min-width: 80px;
+}
+.aib-secret-input {
+  flex: 1;
+}
+.aib-btn-outline {
+  background: transparent;
+  border-color: var(--aib-border);
+  color: var(--aib-text);
+}
+.aib-btn-outline:hover {
+  border-color: var(--aib-primary);
+  color: var(--aib-primary);
+}
+.aib-btn-ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--aib-text-soft);
+}
+.aib-btn-ghost:hover {
+  color: var(--aib-text);
+}
+
 /* 主区空状态 */
 .aib-main-empty {
   flex: 1;
