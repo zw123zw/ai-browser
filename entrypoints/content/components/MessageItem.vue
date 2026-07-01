@@ -39,23 +39,54 @@ const hasChart = computed(() => parsedFiles.value.some(f => f.category === 'char
 /** 文件摘要信息 */
 const filesSummary = computed(() => getFilesSummary(parsedFiles.value));
 
+/**
+ * 检测流式输出中正在生成的文件（有 [FILE: 但无对应 [/FILE]）
+ * 返回正在生成的文件名列表
+ */
+const generatingFiles = computed<string[]>(() => {
+  if (!isStreaming.value) return [];
+  const content = props.message.content;
+  const generating: string[] = [];
+  // 匹配所有 [FILE: 开始标签
+  const startRegex = /\[FILE:\s*([^\]]+)\]/gi;
+  let startMatch;
+  while ((startMatch = startRegex.exec(content)) !== null) {
+    const filename = startMatch[1].trim();
+    // 检查这个文件名是否有对应的 [/FILE] 闭合标签
+    const closedRegex = new RegExp(
+      `\\[FILE:\\s*${filename.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\][\\s\\S]*?\\[/FILE\\]`,
+      'i'
+    );
+    if (!closedRegex.test(content)) {
+      generating.push(filename);
+    }
+  }
+  return generating;
+});
+
+/** 是否有正在生成的文件 */
+const hasGeneratingFiles = computed(() => generatingFiles.value.length > 0);
+
 // ============ 内容渲染 ============
 
 /** 是否正在流式输出 */
 const isStreaming = computed(() => props.message.status === 'streaming');
 
-/** 去掉文件标签后的纯文本内容 */
+/** 去掉文件标签后的纯文本内容（同时去掉完整和不完整的 [FILE] 标签） */
 const textWithoutFiles = computed(() => {
-  if (!hasFiles.value) return props.message.content;
-  // 移除所有 [FILE:xxx]...[/FILE] 标签（支持无闭合标签）
-  return props.message.content.replace(/\[FILE:\s*[^\]]+\]\r?\n?[\s\S]*?(?:\[\/FILE\]|$)/gi, '').trim();
+  const content = props.message.content;
+  if (!hasFiles.value && !hasGeneratingFiles.value) return content;
+  // 移除所有 [FILE:xxx]...[/FILE] 完整标签
+  let text = content.replace(/\[FILE:\s*[^\]]+\]\r?\n?[\s\S]*?(?:\[\/FILE\]|$)/gi, '');
+  // 移除不完整的 [FILE:xxx] 开始标签（流式生成中，只有开始没有结束）
+  text = text.replace(/\[FILE:\s*[^\]]+\]\r?\n?[\s\S]*$/gi, '');
+  return text.trim();
 });
 
 /** 渲染后的消息内容 */
 const renderedContent = computed(() => {
-  // 流式时显示原始内容（包括文件标签），完成后只显示纯文本
-  const content = isStreaming.value ? props.message.content : textWithoutFiles.value;
-  return renderMarkdown(content);
+  // 流式和完成状态都去掉文件标签，文件通过 FileCard 组件展示
+  return renderMarkdown(textWithoutFiles.value);
 });
 
 /** 渲染后的推理内容 */
@@ -243,7 +274,7 @@ function onCodeCopy(e: MouseEvent) {
     @click="(e) => { onTableDownload(e); onCodeCopy(e); }"
   >
     <div
-      :class="['aib-msg', isUser ? 'aib-bubble-user' : 'aib-bubble-ai', { 'aib-msg--has-files': hasChart }]"
+      :class="['aib-msg', isUser ? 'aib-bubble-user' : 'aib-bubble-ai', { 'aib-msg--has-files': hasFiles || hasGeneratingFiles }]"
       @contextmenu="onContextMenu"
     >
       <!-- 思考块（仅在用户开启深度思考时展示） -->
@@ -282,7 +313,14 @@ function onCodeCopy(e: MouseEvent) {
       />
 
       <!-- AI 生成的文件卡片 -->
-      <div v-if="hasFiles" class="aib-msg-files">
+      <div v-if="hasFiles || hasGeneratingFiles" class="aib-msg-files">
+        <!-- 正在生成中的文件（loading 状态，放在上方） -->
+        <FileCard
+          v-for="(filename, i) in generatingFiles"
+          :key="`generating-${i}`"
+          :loading="true"
+        />
+        <!-- 已完成的文件 -->
         <FileCard
           v-for="file in parsedFiles"
           :key="file.index"

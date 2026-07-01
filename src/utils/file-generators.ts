@@ -13,6 +13,7 @@ import * as XLSX from 'xlsx';
 import { Document, Packer, Paragraph, TextRun } from 'docx';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas-pro';
+import { renderMarkdownPlain } from './markdown';
 
 // ============ 核心生成函数 ============
 
@@ -84,58 +85,6 @@ export async function generateDocx(content: string): Promise<Blob> {
 }
 
 /**
- * Markdown 转 HTML（简易解析）
- */
-function markdownToHtml(markdown: string): string {
-  const lines = markdown.split('\n');
-  const html: string[] = [];
-  let inCodeBlock = false;
-
-  for (const line of lines) {
-    // 代码块
-    if (line.startsWith('```')) {
-      if (inCodeBlock) {
-        html.push('</code></pre>');
-        inCodeBlock = false;
-      } else {
-        html.push('<pre><code>');
-        inCodeBlock = true;
-      }
-      continue;
-    }
-    if (inCodeBlock) {
-      html.push(line.replace(/</g, '&lt;').replace(/>/g, '&gt;'));
-      continue;
-    }
-
-    // 标题
-    if (line.startsWith('### ')) {
-      html.push(`<h3>${line.slice(4)}</h3>`);
-    } else if (line.startsWith('## ')) {
-      html.push(`<h2>${line.slice(3)}</h2>`);
-    } else if (line.startsWith('# ')) {
-      html.push(`<h1>${line.slice(2)}</h1>`);
-    } else if (line.startsWith('---') || line.startsWith('***')) {
-      html.push('<hr>');
-    } else if (line.startsWith('- ') || line.startsWith('* ')) {
-      html.push(`<li>${line.slice(2)}</li>`);
-    } else if (line.trim() === '') {
-      html.push('<br>');
-    } else {
-      html.push(`<p>${line}</p>`);
-    }
-  }
-
-  // 清理 markdown 标记
-  return html
-    .join('\n')
-    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-    .replace(/\*(.*?)\*/g, '<em>$1</em>')
-    .replace(/`(.*?)`/g, '<code>$1</code>')
-    .replace(/\[(.*?)\]\(.*?\)/g, '<a>$1</a>');
-}
-
-/**
  * HTML 渲染为 canvas 并生成 PDF Blob
  *
  * 隔离策略：scoped 类名前缀 + !important，不污染主页面。
@@ -149,21 +98,31 @@ async function htmlToPdf(htmlContent: string): Promise<Blob> {
   const WIDTH_PX = 794;
   const A4_PAGE_PX = 1123; // A4 高度 @ 96dpi
 
-  // 注入 scoped 样式
+  // 注入 scoped 样式（适配 markdown-it 输出）
   const styleEl = document.createElement('style');
   styleEl.textContent = `
-    .aib-pdf-root h1 { font-size: 24px; font-weight: bold; margin: 16px 0 12px; }
-    .aib-pdf-root h2 { font-size: 20px; font-weight: bold; margin: 14px 0 10px; }
-    .aib-pdf-root h3 { font-size: 17px; font-weight: bold; margin: 12px 0 8px; }
-    .aib-pdf-root p { margin: 6px 0; }
-    .aib-pdf-root li { margin: 4px 0; padding-left: 16px; list-style: disc; }
-    .aib-pdf-root pre { background: #f5f5f5; padding: 12px; border-radius: 6px; overflow-x: auto; margin: 8px 0; }
-    .aib-pdf-root code { background: #f0f0f0; padding: 2px 5px; border-radius: 3px; font-family: "Cascadia Code", "Fira Code", Consolas, monospace; font-size: 13px; }
-    .aib-pdf-root pre code { background: none; padding: 0; }
-    .aib-pdf-root hr { border: none; border-top: 1px solid #ddd; margin: 12px 0; }
+    .aib-pdf-root h1 { font-size: 24px; font-weight: bold; margin: 20px 0 12px; color: #1a1a1a; }
+    .aib-pdf-root h2 { font-size: 20px; font-weight: bold; margin: 16px 0 10px; color: #1a1a1a; }
+    .aib-pdf-root h3 { font-size: 17px; font-weight: bold; margin: 14px 0 8px; color: #1a1a1a; }
+    .aib-pdf-root h4, .aib-pdf-root h5, .aib-pdf-root h6 { font-size: 15px; font-weight: 600; margin: 12px 0 6px; }
+    .aib-pdf-root p { margin: 8px 0; line-height: 1.8; }
+    .aib-pdf-root ul, .aib-pdf-root ol { padding-left: 24px; margin: 8px 0; }
+    .aib-pdf-root ul { list-style: disc; }
+    .aib-pdf-root ol { list-style: decimal; }
+    .aib-pdf-root li { margin: 4px 0; line-height: 1.7; }
+    .aib-pdf-root pre { background: #f5f5f5; padding: 14px 16px; border-radius: 8px; overflow-x: auto; margin: 10px 0; border: 1px solid #e5e7eb; }
+    .aib-pdf-root pre code { background: none; padding: 0; font-size: 13px; line-height: 1.5; }
+    .aib-pdf-root code { background: #f0f0f0; padding: 2px 5px; border-radius: 3px; font-family: "Cascadia Code", "Fira Code", Consolas, monospace; font-size: 0.9em; }
+    .aib-pdf-root hr { border: none; border-top: 1px solid #ddd; margin: 16px 0; }
     .aib-pdf-root a { color: #2563eb; text-decoration: none; }
-    .aib-pdf-root strong { font-weight: bold; }
-    .aib-pdf-root em { font-style: italic; }
+    .aib-pdf-root strong, .aib-pdf-root b { font-weight: 600; }
+    .aib-pdf-root em, .aib-pdf-root i { font-style: italic; }
+    .aib-pdf-root blockquote { border-left: 3px solid #6366f1; margin: 10px 0; padding: 8px 16px; color: #555; background: #f8f7ff; border-radius: 0 8px 8px 0; }
+    .aib-pdf-root table { border-collapse: collapse; width: 100%; margin: 10px 0; font-size: 13px; }
+    .aib-pdf-root th, .aib-pdf-root td { border: 1px solid #ddd; padding: 8px 12px; text-align: left; }
+    .aib-pdf-root th { background: #f5f5f5; font-weight: 600; }
+    .aib-pdf-root img { max-width: 100%; }
+    .aib-pdf-root del, .aib-pdf-root s { text-decoration: line-through; opacity: 0.7; }
   `;
   document.head.appendChild(styleEl);
 
@@ -258,10 +217,11 @@ export async function generatePdf(content: string): Promise<Blob> {
 
 /**
  * 从 Markdown 文本生成 PDF Blob（canvas 截图）
+ * 使用项目统一的 markdown-it 渲染引擎，支持完整 markdown 语法
  * @param markdown Markdown 文本
  */
 export async function generatePdfFromMarkdown(markdown: string): Promise<Blob> {
-  const html = markdownToHtml(markdown);
+  const html = renderMarkdownPlain(markdown);
   return htmlToPdf(html);
 }
 
