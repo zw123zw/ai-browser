@@ -1,19 +1,21 @@
 # Storage 模块架构
 
+> [English Version](./storage-en.md)
+
 ## 模块概述
 
 存储模块是 AI Browser 扩展的持久化基础设施，基于 WXT 框架的 `wxt/storage` API 对 `chrome.storage.local` 进行封装，提供类型安全的键值存储抽象。模块承担三项核心职责：
 
-1. **存储项定义**：通过 `storage.defineItem<T>()` 声明具名存储项，附带类型约束和 `fallback` 默认值，涵盖应用设置、语音配置、会话数据、UI 状态、输入历史、笔记数据和跨标签页任务队列共 8 个存储项。
-2. **输入历史管理**：`input-history.ts` 提供输入历史的 CRUD 操作，实现连续去重、上限截断（100 条 FIFO）和扩展上下文失效容错。
+1. **存储项定义**：通过 `storage.defineItem<T>()` 声明具名存储项，附带类型约束和 `fallback` 默认值，涵盖应用设置（含语音配置和输入历史）、会话数据、笔记数据、UI 状态和跨标签页任务队列共 6 个存储项。
+2. **输入历史管理**：`input-history.ts` 提供输入历史的追加操作，实现连续去重、上限截断（100 条 FIFO）和扩展上下文失效容错。输入历史作为 `AppSettings` 的字段统一存储。
 3. **跨标签页双向同步**：`storage-sync.ts` 提供 `defineStorageSync<T>()` 工具函数，将 Vue reactive ref 与 chrome.storage 建立双向绑定，通过 200ms 防抖写入 + 500ms 回声窗口 + 3 层防回声机制保证跨标签页数据一致性。
 
 **源文件**：
 
 | 文件 | 职责 |
 |------|------|
-| `src/storage/index.ts` | 存储项定义、默认值、模型配置解析 |
-| `src/storage/input-history.ts` | 输入历史记录工具 |
+| `src/storage/index.ts` | 存储项定义、默认值、模型配置解析、语音引擎配置解析 |
+| `src/storage/input-history.ts` | 输入历史记录工具（通过 settingsStore 操作） |
 | `src/utils/storage-sync.ts` | `defineStorageSync` 双向同步引擎 + `plain()` 代理剥离 |
 
 **在架构中的位置**：存储模块位于 Pinia store 与 `chrome.storage.local` 之间，是所有持久化数据的唯一出口。Pinia store 通过 `defineStorageSync` 与存储项建立双向绑定，Vue 组件不直接操作存储层。
@@ -34,7 +36,6 @@ graph TB
         SS["useSettingsStore"]
         CS["useConversationsStore"]
         NS["useNotesStore"]
-        VS["useVoiceStore"]
     end
 
     subgraph SyncLayer["持久化同步层"]
@@ -56,7 +57,7 @@ graph TB
     Stores --> IH
     DSS --> PL
     DSS --> SI
-    IH --> SI
+    IH --> SS
     NS --> PL
     NS --> SI
     SI --> CSL
@@ -66,15 +67,13 @@ graph TB
 
 ```mermaid
 graph LR
-    subgraph StorageItems["8 个存储项"]
+    subgraph StorageItems["6 个存储项"]
         S1["settingsStorage<br/>local:ai-browser-settings<br/>AppSettings"]
-        S2["voiceSettingsStorage<br/>local:voice-settings<br/>VoiceSettings"]
-        S3["conversationStorage<br/>local:ai-browser-conversation<br/>Conversation | null"]
+        S2["conversationStorage<br/>local:ai-browser-conversation<br/>Conversation | null"]
+        S3["notesStorage<br/>local:ai-browser-notes<br/>NotesData"]
         S4["fabPosStorage<br/>local:ai-browser-fab-pos<br/>FabPos"]
         S5["drawerOpenStorage<br/>local:ai-browser-drawer-open<br/>boolean"]
-        S6["inputHistoryStorage<br/>local:ai-browser-input-history<br/>string[]"]
-        S7["queuedTaskStorage<br/>local:aib-queued-task<br/>QueuedTask | null"]
-        S8["notesStorage<br/>local:ai-browser-notes<br/>NotesData"]
+        S6["queuedTaskStorage<br/>local:aib-queued-task<br/>QueuedTask | null"]
     end
 
     subgraph SyncMethod["同步方式"]
@@ -85,13 +84,22 @@ graph LR
 
     S1 --> Auto
     S2 --> Auto
-    S3 --> Auto
+    S3 --> Manual
     S4 --> Direct
     S5 --> Direct
     S6 --> Direct
-    S7 --> Direct
-    S8 --> Manual
 ```
+
+### 旧存储项迁移
+
+早期版本中，语音设置（`local:voice-settings`）和输入历史（`local:ai-browser-input-history`）分别存储在独立的 storage key 中。当前版本已将它们统一合并到 `AppSettings` 中：
+
+| 旧 Key | 旧类型 | 迁移目标字段 |
+|--------|--------|-------------|
+| `local:voice-settings` | `VoiceSettings` | `AppSettings.voice*` 系列字段 |
+| `local:ai-browser-input-history` | `string[]` | `AppSettings.inputHistory` |
+
+迁移逻辑位于 `useSettingsStore.migrateOldKeys()`：初始化时检测旧 key，将数据合并到 `AppSettings`，然后删除旧 key。
 
 ---
 
@@ -103,15 +111,60 @@ graph LR
 
 ```typescript
 // src/storage/index.ts 中的键定义
-const KEY_SETTINGS   = 'local:ai-browser-settings'
+const KEY_SETTINGS    = 'local:ai-browser-settings'
 const KEY_CONVERSATION = 'local:ai-browser-conversation'
-const KEY_FAB_POS    = 'local:ai-browser-fab-pos'
+const KEY_FAB_POS     = 'local:ai-browser-fab-pos'
 // 其余键内联在 storage.defineItem() 调用中：
-// 'local:voice-settings'
-// 'local:ai-browser-drawer-open'
-// 'local:ai-browser-input-history'
-// 'local:aib-queued-task'
 // 'local:ai-browser-notes'
+// 'local:ai-browser-drawer-open'
+// 'local:aib-queued-task'
+```
+
+### AppSettings（核心配置类型）
+
+`AppSettings` 是最大的存储类型，统一承载全局设置、语音配置和用户数据：
+
+```typescript
+interface AppSettings {
+  // ── 全局设置 ──
+  provider: Provider
+  baseUrl: string
+  apiKey: string
+  authField?: string
+  models: ModelConfig[]
+  defaultModelId: string
+  drawerWidth: number
+  primaryColor: string
+  theme?: string
+  shortcut: string
+  maxConversations?: number
+  maxContext?: number
+  autoSendSelection?: 'auto' | 'manual' | 'off'
+  translateTargetLang?: string
+  translateMode?: 'selection' | 'auto' | 'click' | 'off'
+  noteMode?: NoteMode
+  automationEnabled?: boolean
+  locale?: 'zh-CN' | 'en-US'
+
+  // ── 语音配置（原独立 VoiceSettings，已合并） ──
+  voiceEngineType?: VoiceEngineType
+  voiceAppId?: string
+  voiceApiKey?: string
+  voiceApiSecret?: string
+  voiceEngineConfs?: EngineConf[]
+  voiceRecognitionLang?: string
+  voiceWakeWord?: string
+  voiceAlwaysOn?: boolean
+  voiceEnableTts?: boolean
+  voiceTtsRate?: number
+  voiceTtsVolume?: number
+  voiceBufferTimeout?: number
+  voiceIdleTimeout?: number
+  voiceMode?: 'chat' | 'voice'
+
+  // ── 用户数据 ──
+  inputHistory?: string[]
+}
 ```
 
 ### 存储项类型定义
@@ -136,7 +189,7 @@ interface QueuedTask {
 }
 
 // 语音引擎类型
-type EngineType = 'web-speech' | 'iflytek' | 'baidu' | 'tencent'
+type VoiceEngineType = 'web-speech' | 'iflytek' | 'baidu' | 'tencent'
 
 // 引擎配置项
 interface EngineConf {
@@ -144,23 +197,6 @@ interface EngineConf {
   appId: string
   apiKey: string
   apiSecret: string
-}
-
-// 语音设置
-interface VoiceSettings {
-  engineType: EngineType
-  appId: string
-  apiKey: string
-  apiSecret: string
-  engineConfs: EngineConf[]
-  recognitionLang: string
-  wakeWord: string
-  alwaysOnVoice: boolean
-  enableTts: boolean
-  ttsRate: number
-  ttsVolume: number
-  bufferTimeout: number
-  idleTimeout: number
 }
 ```
 
@@ -243,31 +279,36 @@ function parseLocalModels(list: any[]): ModelConfig[] {
 - `label`: `m.label` -> `modelName`
 - `provider`: `m.provider` -> `'openai'`
 
-### 语音设置默认值 (DEFAULT_VOICE_SETTINGS)
+### 语音引擎配置解析 (parseEngineConfs / findEngineConf)
+
+`DEFAULT_SETTINGS` 的 `voiceEngineConfs` 字段从 `src/voice-config.json` 动态解析：
 
 ```typescript
-export const DEFAULT_VOICE_SETTINGS: VoiceSettings = {
-  engineType: 'web-speech',
-  appId: '', apiKey: '', apiSecret: '',
-  engineConfs: [],                // initSettings() 时从 voice-config.json 合并
-  recognitionLang: 'zh-CN',
-  wakeWord: '你好，小灵',
-  alwaysOnVoice: false,
-  enableTts: true,
-  ttsRate: 1.8,
-  ttsVolume: 0.8,
-  bufferTimeout: 1500,
-  idleTimeout: 3000,
+function parseEngineConfs(): EngineConf[] {
+  if (!Array.isArray(voiceConfig)) return []
+  return voiceConfig.map((c: any) => ({
+    engineType: c.engineType || '',
+    appId: c.appId || '',
+    apiKey: c.apiKey || '',
+    apiSecret: c.apiSecret || '',
+  }))
 }
 ```
 
-`findEngineConf(type)` 辅助函数从 `voice-config.json` 数组中按 `engineType` 查找配置项，用于初始化时补全空字段。
+`findEngineConf(type)` 辅助函数从 `voice-config.json` 数组中按 `engineType` 查找单个配置项：
+
+```typescript
+export function findEngineConf(type: string): Record<string, string> {
+  if (!Array.isArray(voiceConfig)) return {}
+  return voiceConfig.find((c: any) => c.engineType === type) || {}
+}
+```
 
 ### input-history CRUD
 
 源码：`src/storage/input-history.ts`
 
-`pushInputHistory(text)` 实现输入历史的追加逻辑：
+`pushInputHistory(text)` 实现输入历史的追加逻辑。输入历史作为 `AppSettings.inputHistory` 字段存储，通过 `useSettingsStore` 读写：
 
 ```typescript
 const INPUT_HISTORY_MAX = 100
@@ -275,13 +316,14 @@ const INPUT_HISTORY_MAX = 100
 export async function pushInputHistory(text: string) {
   if (!text.trim()) return                            // 过滤空文本
   try {
-    const history = await inputHistoryStorage.getValue()
+    const settingsStore = useSettingsStore()
+    const history = [...(settingsStore.settings.inputHistory || [])]
     if (history.length > 0 && history[history.length - 1] === text) return  // 连续去重
     history.push(text)
     if (history.length > INPUT_HISTORY_MAX) {
       history.splice(0, history.length - INPUT_HISTORY_MAX)  // FIFO 截断
     }
-    await inputHistoryStorage.setValue(history)
+    settingsStore.settings.inputHistory = history
   } catch {
     // 扩展上下文失效时静默忽略
   }
@@ -289,9 +331,11 @@ export async function pushInputHistory(text: string) {
 ```
 
 **设计要点**：
+- **存储位置**：`AppSettings.inputHistory`，与全局设置统一存储，无独立 storage key
 - **连续去重**：仅与最后一条比较，不检查历史中是否存在（性能优先）
 - **FIFO 策略**：超过 100 条时从头部截断，保留最新记录
 - **容错处理**：try-catch 包裹，扩展上下文失效时（页面导航后）静默忽略
+- **不可变更新**：展开运算符创建新数组副本，避免直接修改 store 中的引用
 - **无删除接口**：输入历史只增不减，用户无法手动清理
 
 ### defineStorageSync 实现
@@ -399,6 +443,50 @@ export function defineStorageSync<T>(opts: SyncOptions<T>) {
 | `markSelfWrite()` | `void` | 手动标记自我写入时间戳，用于 init 时首次写入场景，避免触发远端监听器的回声 |
 | `flush()` | `Promise<void>` | 绕过防抖立即写入，用于设置更新等需要确保即时持久化的场景 |
 
+### 旧数据迁移 (migrateOldKeys)
+
+源码：`src/stores/settings.ts`
+
+`useSettingsStore` 在初始化时执行 `migrateOldKeys()`，将旧版独立存储的语音设置和输入历史迁移到统一的 `AppSettings` 中：
+
+```typescript
+const OLD_KEYS = {
+  voice: 'local:voice-settings',
+  inputHistory: 'local:ai-browser-input-history',
+} as const
+
+async function migrateOldKeys() {
+  const result = await chrome.storage.local.get(Object.values(OLD_KEYS))
+
+  // 迁移语音设置：逐字段映射到 AppSettings.voice* 字段
+  const oldVoice = result[OLD_KEYS.voice]
+  if (oldVoice && typeof oldVoice === 'object') {
+    if (oldVoice.engineType) settings.value.voiceEngineType = oldVoice.engineType
+    if (oldVoice.appId) settings.value.voiceAppId = oldVoice.appId
+    // ... 其他字段
+  }
+
+  // 迁移输入历史：直接赋值到 AppSettings.inputHistory
+  const oldHistory = result[OLD_KEYS.inputHistory]
+  if (Array.isArray(oldHistory) && oldHistory.length > 0
+      && (!settings.value.inputHistory || settings.value.inputHistory.length === 0)) {
+    settings.value.inputHistory = oldHistory
+  }
+
+  // 写入迁移后的数据，删除旧 key
+  if (migrated) {
+    sync.markSelfWrite()
+    await settingsStorage.setValue(plain(settings.value))
+    await chrome.storage.local.remove(Object.values(OLD_KEYS))
+  }
+}
+```
+
+**迁移策略**：
+- 仅在旧 key 存在且新字段为空时迁移（不覆盖已有数据）
+- 迁移完成后立即删除旧 key，释放存储空间
+- `markSelfWrite()` 标记写入时间戳，防止迁移写入触发跨标签页回声
+
 ---
 
 ## 数据流
@@ -447,7 +535,7 @@ sequenceDiagram
     Store->>Storage: getValue()
     alt chrome.storage 中有值
         Storage-->>Store: 返回已存储的值
-        Store->>Store: 合并默认值 (mergeSettings)
+        Store->>Store: mergeSettings(已存储值 + DEFAULT_SETTINGS)
     else 无值（首次安装）
         Storage-->>Store: 返回 fallback 默认值
         Store->>Store: 使用 DEFAULT_SETTINGS
@@ -455,8 +543,41 @@ sequenceDiagram
         Note right of Sync: 标记自我写入，防止后续 watch 回声
         Store->>Storage: setValue(plain(defaultValue))
     end
+
+    Note over Store,Storage: 旧数据迁移
+    Store->>Storage: get(['local:voice-settings', 'local:ai-browser-input-history'])
+    alt 存在旧 key
+        Store->>Store: 逐字段合并到 AppSettings
+        Store->>Sync: markSelfWrite()
+        Store->>Storage: setValue(plain(mergedSettings))
+        Store->>Storage: remove(旧 keys)
+    end
+
     Store->>Store: ready.value = true
     Note right of Sync: ready 为 true 后，defineStorageSync 的 watch 开始生效
+```
+
+### 输入历史写入流程
+
+```mermaid
+sequenceDiagram
+    participant Conv as useConversationsStore
+    participant IH as pushInputHistory()
+    participant SS as useSettingsStore
+    participant Sync as defineStorageSync
+    participant Storage as chrome.storage.local
+
+    Conv->>IH: pushInputHistory(text)
+    IH->>IH: text.trim() 为空? → 跳过
+    IH->>SS: useSettingsStore()
+    IH->>IH: 展开创建 history 副本
+    IH->>IH: 与最后一条相同? → 跳过（连续去重）
+    IH->>IH: push(text)
+    IH->>IH: 超过 100 条? → splice(0, 超出部分)
+    IH->>SS: settings.inputHistory = newHistory
+    SS->>Sync: deep watch 触发
+    Sync->>Sync: debounce 200ms
+    Sync->>Storage: setValue(plain(settings))
 ```
 
 ---
@@ -476,13 +597,18 @@ sequenceDiagram
 | 键名 | 存储项 | 类型 | 同步方式 |
 |------|--------|------|----------|
 | `local:ai-browser-settings` | `settingsStorage` | `AppSettings` | defineStorageSync |
-| `local:voice-settings` | `voiceSettingsStorage` | `VoiceSettings` | defineStorageSync |
 | `local:ai-browser-conversation` | `conversationStorage` | `Conversation \| null` | defineStorageSync |
 | `local:ai-browser-notes` | `notesStorage` | `NotesData` | 手动 persist() |
 | `local:ai-browser-fab-pos` | `fabPosStorage` | `FabPos` | 直接 getValue/setValue |
 | `local:ai-browser-drawer-open` | `drawerOpenStorage` | `boolean` | 直接 getValue/setValue |
-| `local:ai-browser-input-history` | `inputHistoryStorage` | `string[]` | 直接 getValue/setValue |
 | `local:aib-queued-task` | `queuedTaskStorage` | `QueuedTask \| null` | 直接 getValue/setValue |
+
+**已废弃的旧键**（迁移后自动删除）：
+
+| 旧键名 | 原类型 | 迁移目标 |
+|--------|--------|----------|
+| `local:voice-settings` | `VoiceSettings` | `AppSettings.voice*` 系列字段 |
+| `local:ai-browser-input-history` | `string[]` | `AppSettings.inputHistory` |
 
 ### 扩展新存储项
 
@@ -525,17 +651,17 @@ sequenceDiagram
 
 ## 已知限制
 
-1. **apiKey 明文存储**：`settingsStorage` 和 `voiceSettingsStorage` 中的 `apiKey` / `apiSecret` 以明文形式存储在 `chrome.storage.local`，任何有扩展权限的代码都可读取。建议使用 Chrome 的 `chrome.storage.session` 或加密方案保护敏感字段。
+1. **apiKey 明文存储**：`settingsStorage` 中的 `apiKey`、`voiceApiKey`、`voiceApiSecret` 以明文形式存储在 `chrome.storage.local`，任何有扩展权限的代码都可读取。建议使用 Chrome 的 `chrome.storage.session` 或加密方案保护敏感字段。
 
-2. **plain() 全量深拷贝开销**：每次写入 storage 都经过 `JSON.parse(JSON.stringify(toRaw(v)))` 全量深拷贝。对于大型会话（数百条消息），序列化开销可能显著。无增量同步或分块存储机制。
+2. **plain() 全量深拷贝开销**：每次写入 storage 都经过 `JSON.parse(JSON.stringify(toRaw(v)))` 全量深拷贝。对于大型设置对象（含数百个模型配置和输入历史），序列化开销可能显著。无增量同步或分块存储机制。
 
-3. **无存储迁移机制**：存储结构变更时没有版本号和迁移脚本。旧数据加载时仅通过 fallback 兜底，字段缺失或类型变更可能导致运行时异常。
+3. **无存储迁移版本号**：迁移逻辑仅检测旧 key 是否存在，无版本号管理。如果未来存储结构再次变更，需要为每次变更编写独立的迁移代码。
 
 4. **Chrome Storage 5MB 容量限制**：`chrome.storage.local` 默认 5MB 上限。大量对话历史、笔记数据和附件内容可能接近上限。无容量监控或自动清理机制（`checkAndAutoClear` 在 store 层而非存储层）。
 
 5. **笔记 store 无跨标签页同步**：`useNotesStore` 不使用 `defineStorageSync`，手动调用 `persist()`。多标签页同时编辑笔记时采用 last-write-wins 策略，可能导致数据覆盖。
 
-6. **输入历史不可清理**：`inputHistoryStorage` 只提供 `pushInputHistory()` 追加接口，无删除或清空方法。用户无法手动清理历史记录。
+6. **输入历史不可清理**：`pushInputHistory()` 只提供追加接口，无删除或清空方法。用户无法手动清理历史记录。
 
 7. **queuedTask 无持久化保护**：`queuedTaskStorage` 仅靠 `timestamp` 做过期判断（30s），Service Worker 重启后任务丢失。无重试或恢复机制。
 

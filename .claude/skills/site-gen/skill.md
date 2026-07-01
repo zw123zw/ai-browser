@@ -1,6 +1,6 @@
 ---
 name: site-gen
-description: "扫描项目代码和 PRD，生成中英文使用指南（guide-zh.md + guide-en.md），同步项目信息到 index.html 和 package.json，输出到 docs/site/ 和 public/ 文件夹。"
+description: "扫描项目代码和 PRD，生成中英文使用指南（guide-zh.md + guide-en.md），同步项目信息到 index.html、README.md、README-en.md 和 package.json，输出到 docs/site/ 和 public/ 文件夹。"
 ---
 
 # Site Gen — 使用文档生成
@@ -16,16 +16,17 @@ docs/site/                  public/
 ├── guide.html              (渲染壳，手动维护，自动加载对应语言 MD)
 └── index.html              (首页，项目信息同步)
 
-README.md                   (项目根目录，项目信息同步)
+README.md                   (中文版，项目信息 + 文档链接同步)
+README-en.md                (英文版，项目信息 + 文档链接同步)
 package.json                (项目根目录，项目信息同步)
 ```
 
-> **本技能生成 `guide-zh.md` 和 `guide-en.md`，并同步 `index.html`、`README.md` 和 `package.json` 中的项目信息。**
+> **本技能生成 `guide-zh.md` 和 `guide-en.md`，并同步 `index.html`、`README.md`、`README-en.md` 和 `package.json` 中的项目信息。**
 > 生成后自动复制到 `public/` 目录（供 App 内 `chrome.runtime.getURL` 访问）。
 
 ## 触发命令
 
-- `/site-gen` — 生成 guide-zh.md + guide-en.md（首次全量，后续增量），同步项目信息到 index.html、README.md 和 package.json
+- `/site-gen` — 生成 guide-zh.md + guide-en.md（首次全量，后续增量），同步项目信息到 index.html、README.md、README-en.md 和 package.json
 
 ---
 
@@ -326,7 +327,7 @@ git ls-files --others --exclude-standard    # 未跟踪的新文件
 
 ## 项目信息同步
 
-`/site-gen` 执行时，除了生成使用指南，还会同步 `index.html`、`README.md` 和 `package.json` 中的项目信息。
+`/site-gen` 执行时，除了生成使用指南，还会同步 `index.html`、`README.md`、`README-en.md` 和 `package.json` 中的项目信息。
 
 ### 同步字段
 
@@ -335,21 +336,37 @@ git ls-files --others --exclude-standard    # 未跟踪的新文件
 | `git tag` → `package.json` | `package.json` | `version` 字段更新为最新 tag |
 | `git tag` → `index.html` | `docs/site/index.html` | 版本号（hero-tag） |
 | `git tag` → `README.md` | `README.md` | `**Version X.Y.Z**` |
+| `git tag` → `README-en.md` | `README-en.md` | `**Version X.Y.Z**` |
 | `package.json` → `index.html` | `docs/site/index.html` | 联系邮箱（footer）、产品名称 |
-| `package.json` → `README.md` | `README.md` | 使用指南链接指向 `guide-zh.md`、邮箱 |
+| `package.json` → `README.md` | `README.md` | 使用指南链接、架构文档链接、邮箱 |
+| `package.json` → `README-en.md` | `README-en.md` | User Guide 链接、Architecture 链接、邮箱 |
+| `docs/architecture/` → `README.md` | `README.md` | 扫描目录，同步架构文档链接列表 |
+| `docs/architecture/` → `README-en.md` | `README-en.md` | 扫描目录，同步架构文档链接列表 |
 
 ### index.html 同步规则
 
 1. **版本号**：从 `git tag` 或 `package.json` 的 `version` 读取，更新 `.hero-tag` 中的 `vX.Y.Z`
 2. **联系邮箱**：从 `package.json` 的 `author.email` 读取，更新 footer 的 `mailto:` 链接
 3. **产品名称**：保持 `package.json` 的 `name` 与页面标题一致
-4. **页脚链接**：移除 GitHub 反馈链接，仅保留"使用指南"和"联系我们"
+4. **页脚链接**：仅保留"使用指南"和"联系我们"
 
-### README.md 同步规则
+### README.md 同步规则（中文版）
 
-1. **版本号**：从 `git tag` 或 `package.json` 的 `version` 读取，更新 `**Version X.Y.Z**`
-2. **使用指南链接**：确保指向 `./docs/site/guide-zh.md`（GitHub 可渲染），而非 `guide.html`
-3. **邮箱**：若页面有联系邮箱信息，保持一致
+1. **版本号**：从 `git tag` 读取，更新 `**Version X.Y.Z**`
+2. **语言切换**：顶部有 `🌐 English` 链接指向 `README-en.md`
+3. **使用指南链接**：指向 `./docs/site/guide-zh.md`
+4. **架构文档链接**：指向 `./docs/architecture/README.md`
+5. **模块文档表**：扫描 `docs/architecture/` 目录，列出所有 `xxx.md`（排除 `-en.md` 和 `README.md`）
+6. **邮箱**：从 `package.json` 的 `author.email` 读取
+
+### README-en.md 同步规则（英文版）
+
+1. **版本号**：同 README.md
+2. **语言切换**：顶部有 `🌐 中文` 链接指向 `README.md`
+3. **User Guide 链接**：指向 `./docs/site/guide-en.md`
+4. **Architecture 链接**：指向 `./docs/architecture/README-en.md`
+5. **Module Docs 表**：扫描 `docs/architecture/` 目录，列出所有 `xxx-en.md`（排除 `README-en.md`）
+6. **邮箱**：同 README.md
 
 ### package.json 同步规则
 
@@ -364,9 +381,11 @@ git ls-files --others --exclude-standard    # 未跟踪的新文件
 2. 读取 package.json，提取 author.email、keywords
 3. 更新 package.json 的 version 为最新 git tag
 4. 读取 docs/site/index.html，更新版本号、邮箱、关键词
-5. 读取 README.md，更新版本号、确保使用指南链接指向 guide-zh.md
-6. 检查 package.json 的 author.email，缺失则提示
-7. 输出同步报告
+5. 扫描 docs/architecture/ 目录，获取架构文档列表
+6. 更新 README.md（版本号 + 语言切换 + 中文文档链接）
+7. 更新 README-en.md（版本号 + 语言切换 + 英文文档链接）
+8. 检查 package.json 的 author.email，缺失则提示
+9. 输出同步报告
 ```
 
 ### 同步报告
@@ -381,5 +400,6 @@ git ls-files --others --exclude-standard    # 未跟踪的新文件
 更新文件：
 - package.json（version: 1.3.1 → 1.4.1, author.email 已存在）
 - docs/site/index.html（版本号、邮箱、关键词）
-- README.md（版本号、使用指南链接）
+- README.md（版本号 + 12 个架构文档链接 + 使用指南链接）
+- README-en.md（版本号 + 12 个架构文档链接 + User Guide 链接）
 ```

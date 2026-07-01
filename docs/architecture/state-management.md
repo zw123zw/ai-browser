@@ -1,8 +1,12 @@
 # 状态管理架构
 
+> [English](./state-management-en.md) | 中文
+
 ## 模块概述
 
-状态管理模块是 AI Browser 扩展的数据层核心，基于 **Pinia** 实现，采用 **Composition API（setup store）** 模式。模块负责管理扩展运行时的所有状态，包括全局设置、对话历史、笔记数据和语音状态，并通过 `defineStorageSync` 工具函数实现与 `chrome.storage.local` 的双向持久化同步。
+状态管理模块是 AI Browser 扩展的数据层核心，基于 **Pinia** 实现，采用 **Composition API（setup store）** 模式。模块负责管理扩展运行时的所有状态，包括全局设置（含语音配置和输入历史）、对话历史和笔记数据，并通过 `defineStorageSync` 工具函数实现与 `chrome.storage.local` 的双向持久化同步。
+
+**核心变更**：语音配置已合并到 `AppSettings`，不再使用独立的 `voiceSettingsStorage`。`useVoiceStore` 仅管理运行时状态（识别状态、会话状态、中间文本），通过 `getVoiceSettings()` 从 `useSettingsStore` 读取语音配置。输入历史也已纳入 `AppSettings.inputHistory`。
 
 **在架构中的位置**：状态管理位于 Content Script 层，作为 UI 组件（Vue）与底层服务（适配器、存储、语音引擎）之间的桥梁。所有组件通过 Pinia store 访问数据，store 内部协调适配器调用、存储读写和跨标签页同步。
 
@@ -10,29 +14,28 @@
 
 | 方向 | 模块 | 说明 |
 |------|------|------|
-| 上游依赖 | `src/storage/` | WXT storage 封装，提供 `settingsStorage`、`conversationStorage` 等存储项 |
+| 上游依赖 | `src/storage/` | WXT storage 封装，提供 `settingsStorage`、`conversationStorage`、`notesStorage` 等存储项 |
 | 上游依赖 | `src/adapters/` | AI 适配器工厂，`createAdapter(provider)` |
 | 上游依赖 | `src/utils/storage-sync.ts` | `defineStorageSync` 双向同步引擎 |
 | 上游依赖 | `src/utils/cache.ts` | `checkAndAutoClear()` 缓存超限自动清除 |
 | 上游依赖 | `src/composables/usePipeline` | `abortPipeline()` 中断指令流 |
-| 上游依赖 | `src/storage/input-history.ts` | `pushInputHistory()` 输入历史记录 |
 | 下游被依赖 | 所有 Vue 组件 | 通过 `useXxxStore()` 消费状态 |
 
 **源码位置**：
 
 ```
 src/stores/
-├── settings.ts         # useSettingsStore
-├── conversations.ts    # useConversationsStore
-├── notes.ts            # useNotesStore
-└── voice.ts            # useVoiceStore
+├── settings.ts         # useSettingsStore（全局设置 + 语音配置 + 输入历史）
+├── conversations.ts    # useConversationsStore（单会话对话管理）
+├── notes.ts            # useNotesStore（笔记管理）
+└── voice.ts            # useVoiceStore（语音运行时状态）
 
 src/utils/
 └── storage-sync.ts     # defineStorageSync + plain()
 
 src/storage/
-├── index.ts            # 存储项定义 + DEFAULT_SETTINGS + DEFAULT_VOICE_SETTINGS
-└── input-history.ts    # 输入历史记录工具
+├── index.ts            # 存储项定义 + DEFAULT_SETTINGS
+└── input-history.ts    # pushInputHistory() 输入历史工具
 ```
 
 ```mermaid
@@ -46,10 +49,10 @@ graph TB
     end
 
     subgraph Stores["状态管理层 (Pinia)"]
-        SS["useSettingsStore<br/>aib-settings"]
+        SS["useSettingsStore<br/>aib-settings<br/>（含语音配置 + 输入历史）"]
         CS["useConversationsStore<br/>aib-conversations"]
         NS["useNotesStore<br/>aib-notes"]
-        VS["useVoiceStore<br/>voice"]
+        VS["useVoiceStore<br/>aib-voice<br/>（仅运行时状态）"]
     end
 
     subgraph Sync["持久化同步层"]
@@ -61,8 +64,6 @@ graph TB
         STG_S["settingsStorage<br/>local:ai-browser-settings"]
         STG_C["conversationStorage<br/>local:ai-browser-conversation"]
         STG_N["notesStorage<br/>local:ai-browser-notes"]
-        STG_V["voiceSettingsStorage<br/>local:voice-settings"]
-        STG_IH["inputHistoryStorage<br/>local:ai-browser-input-history"]
     end
 
     subgraph External["外部服务"]
@@ -74,17 +75,15 @@ graph TB
     UI --> Stores
     SS --> DSS
     CS --> DSS
-    VS --> DSS
     DSS --> PL
     DSS --> STG_S
     DSS --> STG_C
-    DSS --> STG_V
     NS --> PL
     NS --> STG_N
     CS --> Adapter
     CS --> Cache
     CS --> Pipeline
-    CS --> STG_IH
+    VS -->|"getVoiceSettings()"| SS
 ```
 
 ---
@@ -102,6 +101,8 @@ graph TB
 | **防御式合并** | `mergeSettings` | 使用 `DEFAULT_SETTINGS` 作为兜底，确保数据完整性 |
 | **单例会话** | `useConversationsStore` | 不再支持多会话，单一 `conversation` ref 管理全部消息 |
 | **手动持久化** | `useNotesStore` | 不使用 `defineStorageSync`，手动调用 `persist()` 写入 storage |
+| **配置聚合** | `AppSettings` | 语音配置、输入历史等统一存储在 `AppSettings` 中，减少存储键数量 |
+| **运行时/持久化分离** | `useVoiceStore` | 语音运行时状态（status/sessionState）与持久化配置（voiceXxx）分离到不同 store |
 
 ### Store 间依赖关系
 
@@ -110,18 +111,18 @@ graph LR
     CS["useConversationsStore"] -->|"读取模型配置<br/>API Key / maxContext"| SS["useSettingsStore"]
     CS -->|"createAdapter(provider)"| AD["AI 适配器"]
     CS -->|"abortPipeline()"| PL["usePipeline"]
-    CS -->|"pushInputHistory()"| IH["inputHistoryStorage"]
+    CS -->|"pushInputHistory()"| SS
     CS -->|"checkAndAutoClear()"| Cache["缓存管理"]
+    VS["useVoiceStore"] -->|"getVoiceSettings()"| SS
     SS -.->|"独立"| NS["useNotesStore"]
-    VS["useVoiceStore"] -.->|"独立"| VS
 ```
 
 - `useConversationsStore` 在 `send()` 中调用 `useSettingsStore()` 获取模型配置、API Key、`maxContext` 等参数
 - `useConversationsStore` 在 `send()` 中调用 `createAdapter()` 创建 AI 适配器
 - `useConversationsStore` 在 `clearCurrent()` / `resetConversation()` 中调用 `abortPipeline()` 中断指令流
-- `useConversationsStore` 在 `send()` 中调用 `pushInputHistory()` 记录输入历史
+- `useConversationsStore` 在 `send()` 中调用 `pushInputHistory()` 记录输入历史（该函数内部操作 `useSettingsStore`）
 - `useConversationsStore` 在 `saveConversation()` 后调用 `checkAndAutoClear()` 检查缓存大小
-- `useVoiceStore` 完全独立，不依赖其他 store
+- `useVoiceStore` 通过 `getVoiceSettings()` 从 `useSettingsStore` 读取所有语音配置
 - `useNotesStore` 完全独立，不依赖其他 store
 
 ---
@@ -130,10 +131,11 @@ graph LR
 
 ### AppSettings
 
-全局应用设置，存储键 `local:ai-browser-settings`。
+全局应用设置（含语音配置和输入历史），存储键 `local:ai-browser-settings`。
 
 ```typescript
 interface AppSettings {
+  // ── 基础配置 ──
   provider: Provider;                    // 协议类型
   baseUrl: string;                       // 全局请求地址
   apiKey: string;                        // 全局密钥
@@ -152,6 +154,32 @@ interface AppSettings {
   noteMode?: NoteMode;                   // 笔记模式
   automationEnabled?: boolean;           // 网页自动化开关（默认 true）
   locale?: 'zh-CN' | 'en-US';          // 界面语言
+
+  // ── 语音配置 ──
+  voiceEngineType?: VoiceEngineType;     // 语音引擎类型（默认 'web-speech'）
+  voiceAppId?: string;                   // 引擎 appId
+  voiceApiKey?: string;                  // 引擎 apiKey
+  voiceApiSecret?: string;               // 引擎 apiSecret
+  voiceEngineConfs?: EngineConf[];       // 所有引擎的默认配置（从 voice-config.json 合并）
+  voiceRecognitionLang?: string;         // 识别语言（默认 'zh-CN'）
+  voiceWakeWord?: string;                // 唤醒词（默认 '你好，小灵'）
+  voiceAlwaysOn?: boolean;               // 常驻语音模式
+  voiceEnableTts?: boolean;              // TTS 开关（默认 true）
+  voiceTtsRate?: number;                 // TTS 语速（默认 1.8）
+  voiceTtsVolume?: number;              // TTS 音量（默认 0.8）
+  voiceBufferTimeout?: number;           // 语音缓冲超时 ms（默认 1500）
+  voiceIdleTimeout?: number;             // 语音空闲超时 ms（默认 3000）
+  voiceMode?: 'chat' | 'voice';         // 语音助手模式
+
+  // ── 用户数据 ──
+  inputHistory?: string[];               // 输入历史（上限 100 条，FIFO + 连续去重）
+
+  /** @deprecated 已废弃，改用 translateMode */
+  selectionTranslate?: boolean;
+  /** @deprecated 已废弃，改用 translateMode */
+  autoTranslate?: boolean;
+  /** @deprecated 已废弃，改用 translateMode */
+  clickTranslate?: boolean;
 }
 ```
 
@@ -280,12 +308,12 @@ interface NotesData {
 }
 ```
 
-### VoiceSettings / EngineConf
+### VoiceEngineType / EngineConf
 
-语音设置类型，存储键 `local:voice-settings`。
+语音引擎类型（定义在 `src/types.ts`，配置存储在 `AppSettings` 中）：
 
 ```typescript
-type EngineType = 'web-speech' | 'iflytek' | 'baidu' | 'tencent';
+type VoiceEngineType = 'web-speech' | 'iflytek' | 'baidu' | 'tencent';
 
 interface EngineConf {
   engineType: string;
@@ -293,27 +321,11 @@ interface EngineConf {
   apiKey: string;
   apiSecret: string;
 }
-
-interface VoiceSettings {
-  engineType: EngineType;       // 语音引擎类型
-  appId: string;                // 应用 ID
-  apiKey: string;               // API 密钥
-  apiSecret: string;            // API 密钥
-  engineConfs: EngineConf[];    // 所有引擎的默认配置（从 voice-config.json 合并）
-  recognitionLang: string;      // 识别语言（默认 'zh-CN'）
-  wakeWord: string;             // 唤醒词（默认 '你好，小灵'）
-  alwaysOnVoice: boolean;       // 始终监听
-  enableTts: boolean;           // TTS 开关（默认 true）
-  ttsRate: number;              // TTS 语速（默认 1.8）
-  ttsVolume: number;            // TTS 音量（默认 0.8）
-  bufferTimeout: number;        // 缓冲超时 ms（默认 1500）
-  idleTimeout: number;          // 空闲超时 ms（默认 3000）
-}
 ```
 
 ### VoiceStatus / SessionState
 
-语音运行时状态类型（不持久化）：
+语音运行时状态类型（不持久化，仅在 `useVoiceStore` 中管理）：
 
 ```typescript
 type VoiceStatus = 'idle' | 'listening' | 'processing' | 'error';
@@ -374,57 +386,6 @@ function defineStorageSync<T>(opts: SyncOptions<T>): {
 
 4. **上下文失效检测**：`isContextValid()` 通过检查 `chrome?.runtime?.id` 判断扩展上下文是否仍有效，防止在扩展卸载/更新后继续操作导致报错。
 
-```typescript
-export function defineStorageSync<T>(opts: SyncOptions<T>) {
-  const { source, storage, ready, applyRemote } = opts;
-  const debounceMs = opts.debounce ?? 200;
-  const echoMs = opts.echoWindow ?? 500;
-
-  let lastSelfWrite = 0;
-  let timer: number | null = null;
-  let applyingRemote = false;
-
-  // 跨页面同步：监听 storage 变化
-  storage.watch((nv) => {
-    if (nv == null) return;
-    if (Date.now() - lastSelfWrite < echoMs) return;  // 回声窗口内忽略
-    applyingRemote = true;
-    applyRemote(nv);
-    setTimeout(() => (applyingRemote = false), 0);
-  });
-
-  // 本地变化 → 防抖写入
-  watch(
-    source,
-    () => {
-      if (!ready.value || applyingRemote) return;
-      if (!isContextValid()) return;
-      if (timer) window.clearTimeout(timer);
-      timer = window.setTimeout(() => {
-        if (!isContextValid()) return;
-        lastSelfWrite = Date.now();
-        storage.setValue(plain(source.value)).catch(() => {});
-      }, debounceMs);
-    },
-    { deep: true }
-  );
-
-  // 显式立即写入（绕过防抖）
-  async function flush() {
-    if (!isContextValid()) return;
-    if (timer) window.clearTimeout(timer);
-    lastSelfWrite = Date.now();
-    await storage.setValue(plain(source.value)).catch(() => {});
-  }
-
-  return {
-    isApplyingRemote: () => applyingRemote,
-    markSelfWrite: () => (lastSelfWrite = Date.now()),
-    flush,
-  };
-}
-```
-
 **返回值说明**：
 
 | 方法 | 返回值 | 用途 |
@@ -459,7 +420,7 @@ Chrome 扩展的 content script 在页面导航后可能失去扩展上下文。
 
 ---
 
-### useSettingsStore —— 全局设置
+### useSettingsStore —— 全局设置（含语音配置与输入历史）
 
 源码：`src/stores/settings.ts`
 
@@ -496,6 +457,10 @@ function mergeSettings(v: Partial<AppSettings>): AppSettings {
   ) {
     merged.defaultModelId = merged.models[0].id;
   }
+  // 确保 voiceEngineConfs 有值
+  if (!Array.isArray(merged.voiceEngineConfs) || merged.voiceEngineConfs.length === 0) {
+    merged.voiceEngineConfs = DEFAULT_SETTINGS.voiceEngineConfs || [];
+  }
   return merged;
 }
 ```
@@ -505,6 +470,7 @@ function mergeSettings(v: Partial<AppSettings>): AppSettings {
 - 模型缺少 `id` 时，回退链：`m.id` -> `m.modelName` -> `'model-${i}'`
 - 模型缺少 `label` 时，回退链：`m.label` -> `m.modelName` -> `'模型 ${i + 1}'`
 - `defaultModelId` 指向不存在的模型时，自动回退到 `models[0].id`
+- `voiceEngineConfs` 不是数组或为空时，回退到 `DEFAULT_SETTINGS.voiceEngineConfs`
 
 **错误处理**：该函数不抛出异常，始终返回有效的 `AppSettings` 对象。
 
@@ -518,8 +484,9 @@ flowchart TD
     E --> F{"defaultModelId 有效?<br/>在 models 中能找到?"}
     F -->|否| G["defaultModelId = models[0].id"]
     F -->|是| H["保持原值"]
-    G --> I["返回 merged"]
+    G --> I["确保 voiceEngineConfs 有值"]
     H --> I
+    I --> J["返回 merged"]
 ```
 
 #### init(): Promise<void>
@@ -540,6 +507,20 @@ async function init() {
     sync.markSelfWrite();
     await settingsStorage.setValue(plain(settings.value));
   }
+
+  // 迁移旧 storage key（voice-settings、input-history）
+  await migrateOldKeys();
+
+  // 从 engineConfs 回填空的 API 密钥
+  const conf = settings.value.voiceEngineConfs?.find(
+    c => c.engineType === settings.value.voiceEngineType
+  );
+  if (conf) {
+    if (!settings.value.voiceAppId) settings.value.voiceAppId = conf.appId;
+    if (!settings.value.voiceApiKey) settings.value.voiceApiKey = conf.apiKey;
+    if (!settings.value.voiceApiSecret) settings.value.voiceApiSecret = conf.apiSecret;
+  }
+
   ready.value = true;
 }
 ```
@@ -547,6 +528,54 @@ async function init() {
 **有效性判断**：`v` 必须是非数组对象，且 `models` 为非空数组。
 
 **首次加载**：无有效数据时，使用 `DEFAULT_SETTINGS`（含 `local-config.json` 中的模型配置）写入 storage。`markSelfWrite()` 阻止后续 `defineStorageSync` 的 watch 将刚写入的默认值再次写入（防回声）。
+
+**旧数据迁移**：`init()` 后自动调用 `migrateOldKeys()`，将旧的 `local:voice-settings` 和 `local:ai-browser-input-history` 迁移到 `AppSettings` 中，迁移完成后删除旧 key。
+
+**语音密钥回填**：从 `voiceEngineConfs` 中查找当前引擎的默认配置，补全空的 `voiceAppId`、`voiceApiKey`、`voiceApiSecret`。
+
+#### migrateOldKeys(): Promise<void>
+
+```typescript
+async function migrateOldKeys() {
+  const result = await chrome.storage.local.get([
+    'local:voice-settings',
+    'local:ai-browser-input-history',
+  ]);
+
+  let migrated = false;
+
+  // 迁移语音设置：旧 VoiceSettings 字段 -> AppSettings.voiceXxx 字段
+  const oldVoice = result['local:voice-settings'];
+  if (oldVoice && typeof oldVoice === 'object') {
+    if (oldVoice.engineType) settings.value.voiceEngineType = oldVoice.engineType;
+    if (oldVoice.appId) settings.value.voiceAppId = oldVoice.appId;
+    // ... 其他字段逐个映射
+    migrated = true;
+  }
+
+  // 迁移输入历史：仅在 AppSettings 中无数据时迁移
+  const oldHistory = result['local:ai-browser-input-history'];
+  if (Array.isArray(oldHistory) && oldHistory.length > 0
+      && (!settings.value.inputHistory || settings.value.inputHistory.length === 0)) {
+    settings.value.inputHistory = oldHistory;
+    migrated = true;
+  }
+
+  if (migrated) {
+    sync.markSelfWrite();
+    await settingsStorage.setValue(plain(settings.value));
+    await chrome.storage.local.remove([
+      'local:voice-settings',
+      'local:ai-browser-input-history',
+    ]);
+  }
+}
+```
+
+**迁移策略**：
+- 语音设置：逐字段映射（`engineType` -> `voiceEngineType`，`appId` -> `voiceAppId`，...）
+- 输入历史：仅在 `AppSettings.inputHistory` 为空时迁移（避免覆盖新数据）
+- 迁移后删除旧 key，防止重复迁移
 
 #### update(partial: Partial<AppSettings>): Promise<void>
 
@@ -701,7 +730,7 @@ sequenceDiagram
 
 4. **自动标题生成**：首条用户消息的前 20 个字符作为会话标题。
 
-5. **输入历史记录**：非空文本消息通过 `pushInputHistory()` 记录到 `inputHistoryStorage`（上限 100 条，FIFO 策略，连续去重）。
+5. **输入历史记录**：非空文本消息通过 `pushInputHistory()` 记录到 `settingsStore.settings.inputHistory`（上限 100 条，FIFO 策略，连续去重）。
 
 **错误处理**：
 
@@ -1010,36 +1039,51 @@ async function importNotes(data: NotesData) {
 
 ---
 
-### useVoiceStore —— 语音状态管理
+### useVoiceStore —— 语音运行时状态
 
 源码：`src/stores/voice.ts`
 
-**Store ID**: `voice`（注意：未使用 `aib-` 前缀）
+**Store ID**: `aib-voice`
 
-#### 状态分类
+**重要变更**：`useVoiceStore` 不再管理语音持久化配置。所有语音配置（引擎类型、API 密钥、TTS 参数等）已合并到 `AppSettings` 中，由 `useSettingsStore` 统一管理。`useVoiceStore` 仅负责语音运行时状态。
 
-1. **运行时状态**（不持久化）：
-   - `status: Ref<VoiceStatus>` — `'idle' | 'listening' | 'processing' | 'error'`
-   - `sessionState: Ref<SessionState>` — `'idle' | 'wake' | 'command' | 'processing' | 'speaking'`
-   - `interimText: Ref<string>` — 识别中间结果
-   - `finalText: Ref<string>` — 识别最终结果
-
-2. **持久化设置**（通过 `defineStorageSync` 同步到 `voiceSettingsStorage`）：
-   - `settings: Ref<VoiceSettings>` — 语音设置
-   - `settingsVersion: Ref<number>` — 版本号，App.vue 监听变化来重建 manager
+#### 状态
 
 ```typescript
-// 运行时状态
+// 运行时状态（不持久化）
 const status = ref<VoiceStatus>('idle');
 const sessionState = ref<SessionState>('idle');
 const interimText = ref('');
 const finalText = ref('');
-
-// 持久化设置
-const settings = ref<VoiceSettings>({ ...DEFAULT_SETTINGS });
-const ready = ref(false);
-const settingsVersion = ref(0);
+const settingsVersion = ref(0);  // 保存时 +1，App.vue 监听变化来重建 manager
 ```
+
+#### getVoiceSettings(): VoiceSettingsSnapshot
+
+从 `useSettingsStore` 读取语音配置的便捷 getter：
+
+```typescript
+function getVoiceSettings() {
+  const s = useSettingsStore().settings;
+  return {
+    engineType: s.voiceEngineType || 'web-speech',
+    appId: s.voiceAppId || '',
+    apiKey: s.voiceApiKey || '',
+    apiSecret: s.voiceApiSecret || '',
+    engineConfs: s.voiceEngineConfs || [],
+    recognitionLang: s.voiceRecognitionLang || 'zh-CN',
+    wakeWord: s.voiceWakeWord || '你好，小灵',
+    alwaysOnVoice: s.voiceAlwaysOn ?? false,
+    enableTts: s.voiceEnableTts ?? true,
+    ttsRate: s.voiceTtsRate ?? 1.8,
+    ttsVolume: s.voiceTtsVolume ?? 0.8,
+    bufferTimeout: s.voiceBufferTimeout ?? 1500,
+    idleTimeout: s.voiceIdleTimeout ?? 3000,
+  };
+}
+```
+
+**设计要点**：返回一个扁平对象，字段名与旧 `VoiceSettings` 接口兼容，方便消费方无缝迁移。每个字段都提供默认值兜底。
 
 #### 状态机
 
@@ -1058,100 +1102,6 @@ stateDiagram-v2
     listening --> processing: 识别完成
     listening --> idle: 取消
 ```
-
-#### initSettings(): Promise<void>
-
-```typescript
-async function initSettings() {
-  try {
-    const stored = await voiceSettingsStorage.getValue();
-    const merged = { ...DEFAULT_SETTINGS, ...stored };
-
-    // 首次加载：把 voice-config.json 整个数组写入 engineConfs
-    if (!merged.engineConfs || merged.engineConfs.length === 0) {
-      merged.engineConfs = Array.isArray(voiceConfig)
-        ? voiceConfig.map((c: any) => ({
-            engineType: c.engineType || '',
-            appId: c.appId || '',
-            apiKey: c.apiKey || '',
-            apiSecret: c.apiSecret || '',
-          }))
-        : [];
-    }
-
-    // 从 engineConfs 中取当前引擎的默认值补全空字段
-    const conf = merged.engineConfs.find(c => c.engineType === merged.engineType);
-    if (conf) {
-      if (!merged.appId) merged.appId = conf.appId;
-      if (!merged.apiKey) merged.apiKey = conf.apiKey;
-      if (!merged.apiSecret) merged.apiSecret = conf.apiSecret;
-    }
-
-    settings.value = merged;
-
-    if (!stored) {
-      sync.markSelfWrite();
-      await voiceSettingsStorage.setValue(plain(settings.value) as VoiceSettings);
-    }
-    ready.value = true;
-  } catch (error) {
-    log.error('加载语音设置失败:', error);
-    ready.value = true;  // 错误时仍设置 ready，不阻塞应用启动
-  }
-}
-```
-
-**初始化流程**：
-1. 从 `voiceSettingsStorage` 读取已保存设置
-2. 与 `DEFAULT_SETTINGS` 合并
-3. 首次加载时，从 `voice-config.json` 整个数组写入 `engineConfs`
-4. 从 `engineConfs` 中取当前引擎的默认值补全空字段（`appId`、`apiKey`、`apiSecret`）
-5. 无已保存数据 -> 标记 `markSelfWrite()` 后写入默认值
-6. 错误处理：catch 后仍设置 `ready = true`（不阻塞应用启动）
-
-#### updateSetting<K>(key, value): void
-
-```typescript
-function updateSetting<K extends keyof VoiceSettings>(key: K, value: VoiceSettings[K]) {
-  settings.value[key] = value;
-  sync.flush();
-}
-```
-
-单个设置项更新，立即持久化。
-
-#### updateSettings(partial): Promise<void>
-
-```typescript
-async function updateSettings(partial: Partial<VoiceSettings>) {
-  Object.assign(settings.value, partial);
-  settingsVersion.value++;
-  await sync.flush();
-  // 验证写入结果
-  const verify = await voiceSettingsStorage.getValue();
-  log.info('语音设置已更新并验证', {
-    version: settingsVersion.value,
-    engineType: settings.value.engineType,
-    storedEngineType: verify?.engineType,
-  });
-}
-```
-
-批量更新设置：
-1. `Object.assign` 合并到当前 settings（注意：此处使用 mutation，与 settings store 的展开运算符风格不同）
-2. 递增 `settingsVersion`（触发 App.vue 重建 manager）
-3. `sync.flush()` 立即持久化
-4. 写入后验证（读取 storage 确认写入成功）
-
-#### resetSettings(): void
-
-```typescript
-function resetSettings() {
-  Object.assign(settings.value, DEFAULT_SETTINGS);
-}
-```
-
-重置为默认设置（仅修改内存，由 `defineStorageSync` 自动持久化）。
 
 #### 状态更新函数
 
@@ -1179,9 +1129,15 @@ function reset() {
   interimText.value = '';
   finalText.value = '';
 }
+
+function bumpSettingsVersion() {
+  settingsVersion.value++;
+}
 ```
 
 **updateText 设计要点**：`finalText` 和 `interimText` 分离，UI 可以同时展示"已确认文本 + 实时识别中间结果"。最终结果确认后清空 `interimText`，避免重复显示。
+
+**bumpSettingsVersion**：语音设置变更时由外部调用，递增 `settingsVersion`，App.vue 通过 watch 此值来重建 VoiceManager 实例。
 
 ---
 
@@ -1238,7 +1194,7 @@ sequenceDiagram
     CS->>CS: 查找模型配置 + 验证 API Key
 
     CS->>CS: 创建用户消息 → push 到 messages
-    CS->>CS: pushInputHistory("你好")
+    CS->>SS: pushInputHistory("你好")
     CS->>CS: title = "你好".slice(0, 20)（首条消息时）
 
     CS->>CS: 创建 AI 占位消息（reactive, status: streaming）
@@ -1296,30 +1252,31 @@ sequenceDiagram
     NS->>NS: persist()
 ```
 
-### 语音设置更新流程
+### 语音配置读取流程
 
 ```mermaid
 sequenceDiagram
-    participant App as App.vue
+    participant App as App.vue / VoicePanel
     participant VS as useVoiceStore
-    participant DSS as defineStorageSync
-    participant STG as voiceSettingsStorage
+    participant SS as useSettingsStore
+    participant STG as settingsStorage
 
-    App->>VS: initSettings()
-    VS->>STG: getValue()
-    STG-->>VS: 已保存设置 或 null
-    VS->>VS: 合并 DEFAULT_SETTINGS + voice-config.json
-    VS->>VS: 补全当前引擎的 appId/apiKey/apiSecret
-    VS->>VS: ready.value = true
+    App->>SS: init()
+    SS->>STG: getValue()
+    STG-->>SS: AppSettings（含 voiceXxx 字段）
+    SS->>SS: mergeSettings() + migrateOldKeys()
+    SS->>SS: 从 engineConfs 回填 API 密钥
+    SS->>SS: ready = true
 
-    App->>VS: updateSettings({ engineType: 'baidu' })
-    VS->>VS: Object.assign(settings, partial)
-    VS->>VS: settingsVersion++
-    VS->>DSS: flush()
-    DSS->>STG: setValue(plain(settings))
-    STG-->>VS: 写入完成
-    VS->>STG: getValue()（验证写入结果）
-    VS-->>App: settingsVersion 变化 → 重建 manager
+    App->>VS: getVoiceSettings()
+    VS->>SS: settings（读取 voiceXxx 字段）
+    VS-->>App: { engineType, appId, apiKey, ... }
+
+    App->>SS: update({ voiceEngineType: 'baidu' })
+    SS->>SS: mergeSettings()
+    SS->>STG: flush()（立即持久化）
+    App->>VS: bumpSettingsVersion()
+    VS->>VS: settingsVersion++（触发 App.vue 重建 manager）
 ```
 
 ---
@@ -1328,13 +1285,17 @@ sequenceDiagram
 
 ### 默认设置来源
 
-`DEFAULT_SETTINGS` 从 `src/local-config.json` 动态解析：
+`DEFAULT_SETTINGS` 从 `src/local-config.json` 和 `src/voice-config.json` 动态解析：
 
 ```mermaid
 flowchart LR
     A[local-config.json] -->|import| B[rawModels]
     B -->|parseLocalModels| C[ModelConfig[]]
-    C -->|DEFAULT_SETTINGS| D[settingsStorage fallback]
+    C -->|DEFAULT_SETTINGS.models| D[settingsStorage fallback]
+
+    E[voice-config.json] -->|import| F[voiceConfig]
+    F -->|parseEngineConfs| G[EngineConf[]]
+    G -->|DEFAULT_SETTINGS.voiceEngineConfs| D
 ```
 
 `parseLocalModels()` 处理逻辑：
@@ -1343,20 +1304,27 @@ flowchart LR
 - `label` 默认等于 `modelName`
 - `provider` 默认为 `'openai'`
 
-`DEFAULT_VOICE_SETTINGS` 从 `src/voice-config.json` 读取引擎配置，`initSettings()` 时合并到 `engineConfs` 数组。
+`parseEngineConfs()` 处理逻辑：
+- 从 `voice-config.json` 数组中提取 `engineType`、`appId`、`apiKey`、`apiSecret`
+- 作为 `DEFAULT_SETTINGS.voiceEngineConfs` 的默认值
 
 ### 存储键映射
 
 | 键 | Store | 类型 | 说明 |
 |----|-------|------|------|
-| `local:ai-browser-settings` | useSettingsStore | `AppSettings` | 全局设置 |
+| `local:ai-browser-settings` | useSettingsStore | `AppSettings` | 全局设置（含语音配置、输入历史） |
 | `local:ai-browser-conversation` | useConversationsStore | `Conversation \| null` | 当前会话 |
 | `local:ai-browser-notes` | useNotesStore | `NotesData` | 笔记数据 |
-| `local:voice-settings` | useVoiceStore | `VoiceSettings` | 语音设置 |
 | `local:ai-browser-fab-pos` | — | `FabPos` | 悬浮按钮位置 |
 | `local:ai-browser-drawer-open` | — | `boolean` | 抽屉展开状态 |
-| `local:ai-browser-input-history` | — | `string[]` | 输入历史记录 |
 | `local:aib-queued-task` | — | `QueuedTask \| null` | 跨标签页排队任务 |
+
+**已废弃的存储键**（通过 `migrateOldKeys()` 迁移）：
+
+| 键 | 迁移目标 | 说明 |
+|----|----------|------|
+| `local:voice-settings` | `AppSettings.voiceXxx` | 旧独立语音设置 |
+| `local:ai-browser-input-history` | `AppSettings.inputHistory` | 旧独立输入历史 |
 
 ### 可配置参数
 
@@ -1369,11 +1337,11 @@ flowchart LR
 | `drawerWidth` | Settings | `480` | 抽屉宽度（vw 百分比） |
 | `primaryColor` | Settings | `#4f46e5` | 主题色 |
 | `shortcut` | Settings | `` Ctrl+` `` | 唤起快捷键 |
-| `ttsRate` | VoiceSettings | `1.8` | TTS 语速 |
-| `ttsVolume` | VoiceSettings | `0.8` | TTS 音量 |
-| `bufferTimeout` | VoiceSettings | `1500` ms | 语音缓冲超时 |
-| `idleTimeout` | VoiceSettings | `3000` ms | 语音空闲超时 |
-| `wakeWord` | VoiceSettings | `你好，小灵` | 唤醒词 |
+| `voiceTtsRate` | Settings | `1.8` | TTS 语速 |
+| `voiceTtsVolume` | Settings | `0.8` | TTS 音量 |
+| `voiceBufferTimeout` | Settings | `1500` ms | 语音缓冲超时 |
+| `voiceIdleTimeout` | Settings | `3000` ms | 语音空闲超时 |
+| `voiceWakeWord` | Settings | `你好，小灵` | 唤醒词 |
 | `CACHE_LIMIT` | cache.ts | `30` MB | 缓存自动清除阈值 |
 | `INPUT_HISTORY_MAX` | input-history.ts | `100` 条 | 输入历史上限 |
 
@@ -1417,7 +1385,7 @@ flowchart LR
 | `storage.onChanged` | 监听 | 跨标签页同步的事件源（由 WXT storage 封装） |
 | AI 适配器 | 调用 | `createAdapter(provider).chat()` 流式调用 |
 | `abortPipeline()` | 调用 | 中断进行中的指令流 |
-| `pushInputHistory()` | 调用 | 记录输入历史 |
+| `pushInputHistory()` | 调用 | 记录输入历史（内部操作 settingsStore） |
 | `checkAndAutoClear()` | 调用 | 缓存超限自动清除 |
 
 ---
@@ -1432,17 +1400,13 @@ flowchart LR
 
 `useNotesStore` 不使用 `defineStorageSync`，手动调用 `persist()`。在多个标签页同时编辑笔记时可能出现数据覆盖（last-write-wins）。
 
-### voice store ID 不一致
-
-`useVoiceStore` 的 store ID 为 `'voice'`，未遵循 `aib-` 前缀规范（其他三个 store 均使用 `aib-` 前缀）。
-
 ### mutation 使用不一致
 
-`deleteMessage` 使用 `splice` 原地修改数组，而 `deleteEntry` 和 `importNotes` 使用展开运算符创建新数组。`updateSettings` 使用 `Object.assign`（mutation），而 `useSettingsStore.update` 使用展开运算符（immutable）。风格不统一。
+`deleteMessage` 使用 `splice` 原地修改数组，而 `deleteEntry` 和 `importNotes` 使用展开运算符创建新数组。`updateSettings`（旧 voice store）使用 `Object.assign`（mutation），而 `useSettingsStore.update` 使用展开运算符（immutable）。风格不统一。
 
 ### plain() 性能开销
 
-每次写入 storage 都经过 `JSON.parse(JSON.stringify(toRaw(v)))` 全量深拷贝，对于大型会话（数百条消息）可能有性能影响。
+每次写入 storage 都经过 `JSON.parse(JSON.stringify(toRaw(v)))` 全量深拷贝，对于大型会话（数百条消息）可能有性能影响。由于语音配置已合并到 `AppSettings`，`settingsStorage` 的写入体积有所增大。
 
 ### 会话数据无版本迁移
 
@@ -1468,6 +1432,10 @@ flowchart LR
 
 `defineStorageSync` 中 `storage.setValue(...).catch(() => {})` 静默忽略写入错误；`checkAndAutoClear` 中 `getBytesInUse` 失败时也静默忽略。这可能导致数据丢失时用户无感知。
 
+### 旧数据迁移的局限
+
+`migrateOldKeys()` 仅在 `init()` 时执行一次。如果用户在旧版本中同时使用了 `local:voice-settings` 和新版本的 `AppSettings.voiceXxx`，迁移逻辑以旧数据为准（逐字段覆盖），可能丢失新版本中的手动修改。迁移完成后旧 key 被删除，不可回滚。
+
 ### 未来改进方向
 
 1. **多会话恢复**：恢复 `conversations` 列表支持，保留 `maxConversations` 配置的意义
@@ -1475,5 +1443,5 @@ flowchart LR
 3. **操作日志/时间线**：为关键状态变更（settings 更新、会话清除）记录操作日志，便于调试
 4. **选择性持久化**：对大型会话消息采用分块存储或增量同步，减少 `plain()` 的全量拷贝开销
 5. **统一 mutation 策略**：在 immutable 和 mutable 操作之间做出明确选择，统一代码风格
-6. **store ID 规范化**：将 `voice` store ID 改为 `aib-voice`
-7. **数据版本迁移**：为存储数据添加版本号字段，支持 breaking change 时的自动迁移
+6. **数据版本迁移**：为存储数据添加版本号字段，支持 breaking change 时的自动迁移
+7. **AppSettings 瘦身**：考虑将语音配置拆分为独立的子对象（如 `voice: VoiceConfig`），减少顶层字段数量

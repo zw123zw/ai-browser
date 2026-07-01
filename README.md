@@ -1,8 +1,10 @@
 # 小灵 LingBot — AI 语音浏览器助手
 
+> 🌐 **[English](./README-en.md)**
+
 > Chrome 扩展：AI 语音浏览器助手。WXT + Vue 3 + TypeScript + Pinia，运行在 Shadow DOM 中。
 
-**Version 1.8.3** | [GitHub](https://github.com/zw123zw/ai-browser) | [使用指南](./docs/site/guide-zh.md) | [架构文档](./docs/architecture/)
+**Version 1.8.3** | [使用指南](./docs/site/guide-zh.md) | [架构文档](./docs/architecture/README.md)
 
 ## 技术栈
 

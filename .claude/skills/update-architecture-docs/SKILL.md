@@ -1,13 +1,13 @@
 ---
 name: update-architecture-docs
-description: "扫描项目代码，生成/增量更新各模块架构文档（docs/architecture/）。首次全量生成，后续只更新变化模块。"
+description: "扫描项目代码，生成/增量更新各模块架构文档中英文版本（docs/architecture/）。首次全量生成，后续只更新变化模块。"
 ---
 
 # 架构文档生成
 
-扫描项目代码，生成并维护架构文档到 `docs/architecture/`。首次全量生成，后续增量更新变化模块。
+扫描项目代码，生成并维护架构文档到 `docs/architecture/`，每个模块生成中文 + 英文两份。首次全量生成，后续增量更新变化模块。
 
-**核心原则：文档必须反映代码的真实状态。首次全量生成，后续只更新有变化的模块。**
+**核心原则：文档必须反映代码的真实状态。首次全量生成，后续只更新有变化的模块。每个模块中英文各一份。**
 
 ---
 
@@ -15,18 +15,51 @@ description: "扫描项目代码，生成/增量更新各模块架构文档（do
 
 ```
 docs/architecture/
-├── README.md              # 总体架构概览
-├── browser-command.md     # 浏览器命令引擎
-├── input-pipeline.md      # 输入管线
-├── ai-adapters.md         # AI 适配器
-├── state-management.md    # 状态管理
-├── background-service.md  # 后台服务
-├── content-script.md      # 内容脚本
-├── translation.md         # 翻译系统
-├── voice.md               # 语音系统
-├── storage.md             # 存储层
-├── file-parsing.md        # 文件处理
-└── utils.md               # 工具函数
+├── README.md              # 总体架构概览（中文）
+├── README-en.md           # 总体架构概览（英文）
+├── browser-command.md     # 浏览器命令引擎（中文）
+├── browser-command-en.md  # 浏览器命令引擎（英文）
+├── input-pipeline.md      # 输入管线（中文）
+├── input-pipeline-en.md   # 输入管线（英文）
+├── ai-adapters.md         # AI 适配器（中文）
+├── ai-adapters-en.md      # AI 适配器（英文）
+├── state-management.md    # 状态管理（中文）
+├── state-management-en.md # 状态管理（英文）
+├── background-service.md  # 后台服务（中文）
+├── background-service-en.md # 后台服务（英文）
+├── content-script.md      # 内容脚本（中文）
+├── content-script-en.md   # 内容脚本（英文）
+├── translation.md         # 翻译系统（中文）
+├── translation-en.md      # 翻译系统（英文）
+├── voice.md               # 语音系统（中文）
+├── voice-en.md            # 语音系统（英文）
+├── storage.md             # 存储层（中文）
+├── storage-en.md          # 存储层（英文）
+├── file-parsing.md        # 文件处理（中文）
+├── file-parsing-en.md     # 文件处理（英文）
+└── utils.md               # 工具函数（中文）
+└── utils-en.md            # 工具函数（英文）
+```
+
+### 命名规则
+
+| 文件 | 语言 | 后缀 |
+|------|------|------|
+| `xxx.md` | 中文 | 无后缀 |
+| `xxx-en.md` | 英文 | `-en` |
+
+### 文档间导航
+
+每个文档顶部添加语言切换链接：
+
+中文文档顶部：
+```markdown
+> **🌐 English version: [xxx-en.md](./xxx-en.md)**
+```
+
+英文文档顶部：
+```markdown
+> **🌐 中文版本：[xxx.md](./xxx.md)**
 ```
 
 ---
@@ -55,7 +88,7 @@ docs/architecture/
 ### 首次检测
 
 检查 `docs/architecture/README.md` 是否存在：
-- **不存在** → 全量生成所有文档
+- **不存在** → 全量生成所有文档（中英文）
 - **存在** → 增量更新
 
 ### 变化检测
@@ -76,14 +109,14 @@ find src/ entrypoints/ -name "*.ts" -o -name "*.vue" -newer docs/architecture/RE
 
 ```
 1. 扫描 src/ 和 entrypoints/ 目录，获取当前所有模块
-2. 读取 docs/architecture/ 已有文档列表
+2. 读取 docs/architecture/ 已有文档列表（中文 + 英文）
 3. 检测源文件变化（git diff + git ls-files --others）
 4. 匹配模块映射表，确定需要更新的文档集合
 5. ★ 读取变化模块的【所有】源文件（不是只读变化的文件），重新生成对应文档
-6. 检测新增模块（有目录但无文档）→ 读取所有源文件，生成新文档
-7. 检测已删除模块（有文档但源目录已不存在）→ 删除孤立文档
-8. 更新 README.md（模块列表可能变化）
-9. 同步根目录 README.md
+6. 先生成中文版，再生成英文版（结构完全对应）
+7. 检测新增模块（有目录但无文档）→ 读取所有源文件，生成中英文新文档
+8. 检测已删除模块（有文档但源目录已不存在）→ 删除中英文孤立文档
+9. 更新 README.md 和 README-en.md（模块列表可能变化）
 ```
 
 ### ⚠️ 关键规则：必须读取模块内所有源文件
@@ -119,16 +152,14 @@ find src/ entrypoints/ -name "*.ts" -o -name "*.vue" -newer docs/architecture/RE
 
 1. 并行读取所有源文件
 2. 分析代码结构和依赖关系
-3. 生成所有架构文档
-4. 同步根目录 README.md
+3. 生成所有架构文档（先中文，再英文）
 
 ### 增量模式（后续）
 
 1. 检测变化的源文件
 2. 只读取变化模块的源文件
-3. 只更新/新增/删除变化模块的文档
-4. 更新 README.md（如有模块增删）
-5. 同步根目录 README.md
+3. 只更新/新增/删除变化模块的文档（中英文同步）
+4. 更新 README.md 和 README-en.md（如有模块增删）
 
 ### 增量报告
 
@@ -138,15 +169,15 @@ find src/ entrypoints/ -name "*.ts" -o -name "*.vue" -newer docs/architecture/RE
 ✅ 架构文档更新完成（增量模式）
 
 扫描文件：N 个
-更新文档：M 篇（列出文档名）
-新增文档：X 篇（列出新模块名）
-删除文档：Y 篇（如有）
+更新文档：M 篇 × 2 语言（列出文档名）
+新增文档：X 篇 × 2 语言（列出新模块名）
+删除文档：Y 篇 × 2 语言（如有）
 未变更文档：Z 篇（跳过）
 
 文档列表：
-  - README.md（总体架构）
-  - browser-command.md
-  - input-pipeline.md
+  - README.md + README-en.md（总体架构）
+  - browser-command.md + browser-command-en.md
+  - input-pipeline.md + input-pipeline-en.md
   - ...
 ```
 
@@ -154,7 +185,14 @@ find src/ entrypoints/ -name "*.ts" -o -name "*.vue" -newer docs/architecture/RE
 
 ## 文档内容标准
 
-每个架构文档必须包含以下章节，**写清技术方案和实现细节**：
+每个架构文档必须包含以下章节，**写清技术方案和实现细节**。中文版和英文版结构完全对应。
+
+### 语言规则
+
+- `xxx.md`：纯中文，无英文混排（专有名词除外，如 TypeScript、Vue 3）
+- `xxx-en.md`：纯英文，无中文混排
+- 两个文件章节编号、标题层级、Mermaid 图完全一致
+- 英文版不是机翻，要自然流畅的技术英语
 
 ### 1. 模块概述
 
@@ -217,9 +255,9 @@ find src/ entrypoints/ -name "*.ts" -o -name "*.vue" -newer docs/architecture/RE
 
 ---
 
-## README.md 生成规则
+## README 生成规则
 
-`docs/architecture/README.md` 包含：
+### docs/architecture/README.md（中文）
 
 1. **项目概述** — 一句话描述
 2. **技术栈** — 框架、库、工具
@@ -227,8 +265,15 @@ find src/ entrypoints/ -name "*.ts" -o -name "*.vue" -newer docs/architecture/RE
 4. **模块列表** — 每个模块的一句话描述 + 链接
 5. **数据流概览** — 从用户输入到最终输出的完整链路
 6. **关键设计决策** — 架构层面的重要选择和原因
+7. **语言切换** — 顶部链接到 `README-en.md`
 
-同步到根目录 README.md 时，模块链接使用 `./docs/architecture/` 前缀。
+### docs/architecture/README-en.md（英文）
+
+结构与中文版完全对应，纯英文。顶部链接到 `README.md`。
+
+### 根目录 README.md 同步
+
+架构文档技能**不负责**同步根目录 README.md 的链接。根目录 README.md 和 README-en.md 的文档链接由 `/site-gen` 技能统一维护。
 
 ---
 

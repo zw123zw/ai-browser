@@ -1,6 +1,8 @@
 # Content Script 架构文档
 
-## 模块概述
+> English version: [content-script-en.md](./content-script-en.md)
+
+## 1. 模块概述
 
 Content Script 是扩展注入到每个网页的前端入口，负责在 Shadow DOM 中挂载 Vue 3 应用、监听页面事件（URL 变化、DOM 变化、文本选择）、初始化翻译/笔记功能、管理语音引擎生命周期、以及跨标签页任务续接。它是用户与扩展交互的第一层界面。
 
@@ -23,7 +25,7 @@ Content Script 是扩展注入到每个网页的前端入口，负责在 Shadow 
 
 根组件 `App.vue` 持有全局状态（抽屉开关、设置弹框、笔记弹框、语音管理），通过 props/events 向下传递。组件树从 `FloatingButton` 和 `ChatDrawer` 开始，`ChatDrawer` 内部根据 `activeMode` 切换 `ChatPanel` 和 `VoicePanel`。
 
-## 架构设计
+## 2. 架构设计
 
 ### 组件树
 
@@ -36,11 +38,12 @@ graph TD
     VP["VoicePanel.vue<br/>语音助手面板"]
     ML["MessageList.vue<br/>消息列表：滚动管理 + 右键菜单"]
     MI["MessageItem.vue<br/>单条消息：Markdown + 文件卡片"]
-    IB["InputBar.vue<br/>输入栏：文本 + 附件 + 模型选择"]
+    IB["InputBar.vue<br/>输入栏：文本 + 附件 + 模型选择 + / 指令菜单"]
     EC["EmptyChat.vue<br/>空状态：问候语 + 建议卡片"]
     FC["FileCard.vue<br/>文件卡片：图表渲染 + 下载"]
     FPM["FilePreviewModal.vue<br/>文件预览弹窗"]
     SM["SettingsModal.vue<br/>设置弹窗：AI/通用/语音/用户 四 Tab"]
+    SF["SecretField.vue<br/>密钥字段：掩码显示 + 编辑态"]
     CD2["ConfirmDialog.vue<br/>确认弹窗"]
     TC["ToastContainer.vue<br/>Toast 提示容器"]
     MCM["MessageContextMenu.vue<br/>消息右键菜单"]
@@ -74,6 +77,8 @@ graph TD
     MI --> FC
     MI --> FPM
 
+    SM --> SF
+
     IB -.->|"emit: send/abort/switch-voice"| CP
     ML -.->|"emit: scroll-to-bottom"| CP
 ```
@@ -85,14 +90,14 @@ graph LR
     UP["usePipeline()<br/>输入流水线"]
     UT["useToast()<br/>Toast 提示"]
 
-    UP --> IS["isProcessing<br/>ref<boolean>"]
-    UP --> WIP["waitingInputPrompt<br/>ref<string | null>"]
+    UP --> IS["isProcessing<br/>ref&lt;boolean&gt;"]
+    UP --> WIP["waitingInputPrompt<br/>ref&lt;string | null&gt;"]
     UP --> PI["processInput(text, reasoning?)"]
     UP --> AB["abort()"]
     UP --> PI2["provideInput(text)"]
     UP --> RQT["resumeQueuedTask(task)"]
 
-    UT --> TO["toasts<br/>reactive<Toast[]>"]
+    UT --> TO["toasts<br/>reactive&lt;Toast[]&gt;"]
     UT --> SH["show(msg, type, duration)"]
     UT --> DS["dismiss(id)"]
 
@@ -104,7 +109,7 @@ graph LR
     ML2["MessageList"] --> UT
 ```
 
-## 核心类型定义
+## 3. 核心类型定义
 
 ### 组件 Props / Emits 接口
 
@@ -212,6 +217,18 @@ interface NoteBookmarkDialogProps {
 // EmptyChat
 // emits: { (e: 'pick', text: string): void }
 
+// SecretField
+interface SecretFieldProps {
+  modelValue: string;     // 当前值（真实密钥）
+  editing?: boolean;      // 是否正在编辑（由父组件控制）
+  placeholder?: string;   // 输入框占位符
+}
+// emits: {
+//   (e: 'update:modelValue', value: string): void;
+//   (e: 'edit'): void;
+//   (e: 'cancel'): void;
+// }
+
 // ToastContainer — 无 props/emits，直接使用 useToast() composable
 ```
 
@@ -243,7 +260,7 @@ interface UseToastReturn {
 }
 ```
 
-## 实现细节
+## 4. 实现细节
 
 ### App.vue — 根组件
 
@@ -274,7 +291,7 @@ function startBgVoice() {
 ```
 
 语音启停的触发条件：
-- `voiceStore.settings.alwaysOnVoice` 变化（常驻模式开关）
+- `settingsStore.settings.voiceAlwaysOn` 变化（常驻模式开关）
 - `open` 变化（抽屉开关，非常驻模式下随抽屉启停）
 - `voiceStore.settingsVersion` 变化（设置变更重建引擎）
 - 页面可见性变化（`visibilitychange`、`focus`/`blur`）
@@ -285,34 +302,43 @@ function startBgVoice() {
 同一时刻只有一个标签页持有麦克风，通过 `chrome.storage.local` 的 `aib-mic-lock` 键实现：
 
 ```typescript
-const MIC_LOCK_KEY = 'aib-mic-lock'
+const MIC_LOCK_KEY = 'aib-mic-lock' as const
 
 function claimMic() {
-  chrome.storage.local.set({ [MIC_LOCK_KEY]: myTabId })
+  chrome.storage.local.set({ [MIC_LOCK_KEY]: myTabId }).catch(() => {})
 }
 
 function unclaimMic() {
   chrome.storage.local.get(MIC_LOCK_KEY).then(stored => {
     if (stored[MIC_LOCK_KEY] === myTabId) {
-      chrome.storage.local.remove(MIC_LOCK_KEY)
+      chrome.storage.local.remove(MIC_LOCK_KEY).catch(() => {})
     }
-  })
+  }).catch(() => {})
 }
 ```
 
 **3. TTS 播报**
 
-Watch 最后一条 assistant 消息的变化，当消息 `status === 'done'` 且 `bgManager.isActive` 时，提取播报文本（过滤掉命令执行状态消息），调用 `bgManager.speak()`。使用 `spokenMsgIds` Set 防止重复播报。
+Watch 最后一条 assistant 消息的变化，当消息 `status === 'done'` 且 `bgManager.isActive` 时，提取播报文本（过滤掉命令执行状态消息），调用 `bgManager.speak()`。使用 `spokenMsgIds` Set 防止重复播报（上限 100 条，超过时淘汰前 50 条）。
+
+播报条件通过 `VoiceManager` 的 `getBroadcastCondition` 回调判断：麦克风打开（`bgManager?.isActive`）就播报。
 
 **4. 自动笔记事件桥接**
 
 Content Script 入口（index.ts）通过 `window.dispatchEvent` 发送自定义事件，App.vue 监听并更新会话消息：
 
-- `aib-auto-note-start` — 插入占位消息（`status: 'streaming'`）
-- `aib-auto-note-delta` — 流式更新消息内容
-- `aib-auto-note-result` — 最终更新（`status: 'done'`）
-- `aib-auto-note-aborted` — 标记为 `status: 'aborted'`
-- `aib-auto-send-command` — 打开抽屉并发送命令（如 `/note`）
+| 事件 | 作用 |
+|------|------|
+| `aib-auto-note-start` | 插入占位消息（`status: 'streaming'`） |
+| `aib-auto-note-delta` | 流式更新消息内容 |
+| `aib-auto-note-result` | 最终更新（`status: 'done'`） |
+| `aib-auto-note-aborted` | 标记为 `status: 'aborted'` |
+| `aib-auto-send-command` | 打开抽屉并发送命令（如 `/note`） |
+| `aib-bookmark-note` | 打开笔记收藏弹框 |
+| `aib-toggle-note-viewer` | 切换笔记查看弹框 |
+| `aib-close-drawer` | 关闭聊天抽屉 |
+| `aib-mode-changed` | 模式切换（管理麦克风启停） |
+| `aib-show-voice-guide` | 显示语音使用指南弹框 |
 
 **5. 主题与国际化**
 
@@ -340,13 +366,18 @@ App.vue 在 `onMounted` 中注册大量事件监听器，在 `onUnmounted` 中�
 | `focus`/`blur` | window | 焦点变化时启停引擎 |
 | `beforeunload` | window | 释放麦克风锁 |
 
+**7. 跨标签页抽屉状态同步**
+
+抽屉展开状态通过 `drawerOpenStorage` 持久化到 `chrome.storage.local`，同时通过 `chrome.runtime.sendMessage` 通知 Background 广播给其他标签页。`aib-drawer-sync` 消息用于接收其他标签页的状态变化，使用 `syncingFromRemote` 标志避免循环同步。
+
 ### ChatDrawer.vue — 聊天抽屉
 
 **核心功能**:
-- **双模式切换**: `activeMode` 在 `'chat'` 和 `'voice'` 之间切换，持久化到 `chrome.storage.local` 的 `aib-voice-mode` 键
+- **双模式切换**: `activeMode` 通过 `settingsStore.settings.voiceMode` 管理，自动持久化 + 跨标签页同步。切换时通过 `window.dispatchEvent(new CustomEvent('aib-mode-changed'))` 通知 App.vue 管理麦克风启停
 - **宽度拖拽**: 左侧拖拽条支持调整抽屉宽度，范围 `[60px, window.innerWidth * 0.95]`，保存到 `settingsStore.settings.drawerWidth`
 - **跨标签页宽度同步**: Watch `settingsStore.settings.drawerWidth` 变化，非拖拽状态下自动更新
 - **清除对话**: 通过 `ConfirmDialog` 确认后，先 `abortPipeline()` 中止进行中的请求，再 `store.clearCurrent()` 清除会话
+- **笔记入口**: 笔记模式开启时显示笔记按钮，点击 dispatch `aib-toggle-note-viewer` 事件
 
 ### ChatPanel.vue — 文字聊天面板
 
@@ -358,18 +389,20 @@ App.vue 在 `onMounted` 中注册大量事件监听器，在 `onUnmounted` 中�
 - **深度思考**: `reasoning` 为 true 时添加前缀 `[请按深度思考的方式作答...]`
 - **停止操作**: `onAbort` 依次调用 `convStore.abort()`、`pipeline.abort()`、dispatch `aib-stop-auto-note` 事件
 - **文件预览**: InputBar 的 `preview` 事件提升到 ChatPanel 级别渲染 `FilePreviewModal`，避免 fixed 定位在滚动容器内失效
+- **空状态**: 无消息时展示 `EmptyChat` 组件，建议卡片点击直接发送到 AI
 
 ### InputBar.vue — 输入栏
 
 **核心功能**:
 - **自动高度**: textarea 高度根据内容自动调整，最大 200px
 - **文件附件**: 支持文件选择、粘贴图片/链接。粘贴链接时自动 fetch 内容，图片直接添加为附件，非图片同时上传内容和粘贴链接文本
-- **本地文件**: 粘贴 `file:///` 或 Windows 路径时，通过 Background 代理读取（Content Script 无法直接 fetch `file://`）
-- **OCR**: 图片附件异步触发 OCR，进度通过 `ocrProgressMap` 追踪
+- **本地文件**: 粘贴 `file:///` 或 Windows 路径（`E:\xxx`）时，通过 Background 代理读取（Content Script 无法直接 fetch `file://`）。`toFetchableUrl()` 统一处理各种 URL 格式
+- **OCR**: 图片附件异步触发 OCR，进度通过 `ocrProgressMap` 追踪，显示为覆盖层进度条
 - **模型选择**: 下拉菜单切换当前会话的模型
-- **/ 指令选择器**: 输入 `/` 时弹出指令菜单，支持键盘导航（Up/Down/Tab/Enter/Escape）
-- **输入历史**: Up/Down 键导航历史记录，从 `inputHistoryStorage` 加载
-- **发送/停止按钮**: 流式输出时显示停止按钮，否则显示发送按钮
+- **/ 指令选择器**: 输入 `/` 时弹出指令菜单，基于 `CAPABILITY_DOMAIN_LIST` 过滤。支持键盘导航（ArrowUp/ArrowDown/Tab/Enter/Escape），选中后自动填入 `/{cmdId} ` 并聚焦输入框。仅在 `automationEnabled` 时启用
+- **输入历史**: Up/Down 键导航历史记录，从 `settingsStore.settings.inputHistory` 加载。首次进入历史模式时保存当前草稿，到达末尾时恢复
+- **发送/停止按钮**: 流式输出时显示停止按钮（方块图标），否则显示发送按钮（箭头图标）
+- **键盘事件隔离**: 普通输入字符 `stopPropagation()`，防止触发页面快捷键（如 GitHub 的 `s`、`/`）
 
 ### MessageList.vue — 消息列表
 
@@ -393,22 +426,45 @@ App.vue 在 `onMounted` 中注册大量事件监听器，在 `onUnmounted` 中�
 ### VoicePanel.vue — 语音助手面板
 
 **核心功能**:
-- **状态指示**: 根据 `voiceStore.sessionState` 显示不同状态（idle/wake/command/processing/speaking）
+- **状态指示**: 根据 `voiceStore.sessionState` 显示不同状态（idle/wake/command/processing/speaking），顶部状态栏显示状态点（带动画脉冲）+ 状态文字 + 临时识别文本
 - **波纹动画**: wake 和 command 状态下显示三圈波纹扩散动画
 - **消息列表复用**: 复用 `MessageList` 组件展示对话历史
+- **空状态**: 无消息时显示麦克风图标 + 唤醒词提示
 - **新消息自动滚动**: Watch 消息数量变化，延迟 200ms 滚动到底部
+- **底部麦克风指示器**: 圆形麦克风图标，激活时高亮 + 发光阴影
 
 ### SettingsModal.vue — 设置弹窗
 
 **四个 Tab**:
-1. **AI 配置**: 模型列表管理（新增/编辑/删除/导入/导出）、供应商预设快速填充、API Key 配置
-2. **通用配置**: 主题选择、快捷键录制、网页自动化开关、划词行为、翻译模式/目标语言、笔记模式
-3. **语音配置**: 引擎类型选择（Web Speech/讯飞/百度/腾讯）、API Key 配置、唤醒词、常驻语音、TTS 播报参数
-4. **用户配置**: License 激活、上下文消息数、缓存管理、日志下载、语言切换
+
+1. **AI 配置**: 模型列表管理（新增/编辑/删除/导入/导出）、供应商预设快速填充、API Key 配置（使用 `SecretField` 组件掩码显示）
+2. **通用配置**: 主题选择（5 预设网格）、快捷键录制、网页自动化开关（切换需确认弹窗）、划词行为、翻译模式/目标语言、笔记模式
+3. **语音配置**: 引擎类型选择（Web Speech/讯飞/百度/腾讯）、AppId/ApiKey/ApiSecret 配置（均使用 `SecretField` 组件）、唤醒词、常驻语音、TTS 播报参数（速率/音量滑块）、行为参数（缓冲超时/空闲超时滑块）
+4. **用户配置**: License 激活、上下文消息数、缓存管理（带进度条）、日志下载（仅测试包可见）、语言切换、版本号+链接
 
 **特殊功能**:
-- 内嵌使用文档查看器（Markdown 渲染 + 侧边栏导航）
+- 内嵌使用文档查看器（Markdown 渲染 + 侧边栏 TOC 导航 + 滚动高亮）
 - 自动化开关切换需确认弹窗（开启/关闭都需要确认）
+- 供应商预设支持 10 家（OpenAI、Anthropic、DeepSeek、MiMo、通义千问、Kimi、智谱清言、文心一言、MiniMax、硅基流动）
+- 导入模型时校验 provider 白名单，跳过无效项
+
+### SecretField.vue — 密钥字段组件
+
+**功能概述**: 为密码/密钥字段提供「显示态 + 编辑态」双态切换，避免敏感信息明文暴露。
+
+**显示态**:
+- 有值时显示 `••••••••` 掩码文字
+- 显示「修改」按钮，点击切换到编辑态
+
+**编辑态**:
+- 显示空白输入框（不回填旧值），自动聚焦
+- 「保存」按钮：非空值写入新值，空值则保持旧值不变
+- 「取消」按钮：清空输入并退回显示态
+- 支持 Enter 保存、Escape 取消
+
+**父组件协调**: `editing` prop 由父组件控制（如 `editingSecretField === 'modelApiKey'`），确保同一时刻只有一个密钥字段处于编辑态。切换编辑字段或切换模型/引擎时自动重置。
+
+**样式**: CSS 类名 `aib-secret-field`、`aib-secret-mask`、`aib-secret-input` 定义在 `src/styles/global.css` 中，使用 `aib-btn-outline` 和 `aib-btn-ghost` 按钮变体。
 
 ### EmptyChat.vue — 空状态
 
@@ -420,7 +476,7 @@ App.vue 在 `onMounted` 中注册大量事件监听器，在 `onUnmounted` 中�
 
 ### ToastContainer.vue — Toast 提示
 
-直接使用 `useToast()` composable 的 `toasts` 响应式数组，`transition-group` 实现进出动画。点击可手动关闭。
+直接使用 `useToast()` composable 的 `toasts` 响应式数组，`transition-group` 实现进出动画。点击可手动关闭。每种类型（info/success/warning/error）有对应的 SVG 图标。
 
 ### FileCard.vue — 文件卡片
 
@@ -560,6 +616,10 @@ function show(message: string, type: ToastType = 'info', duration = 3000): strin
 2. **点击翻译 (click)**: `initClickTranslate(translateService, getTranslateSettings, getCurrentModelId)` 初始化
 3. **自动翻译 (auto)**: 页面加载后首次触发 + `settingsStorage.watch()` 监听模式切换 + URL 变化时重新触发 + `MutationObserver` 监听 DOM 变化
 
+**笔记功能**:
+
+自动笔记通过 `/note` 命令触发，在 pipeline 中统一处理。页面首次加载时自动发送 `/note` 命令。URL 变化时取消正在执行的自动笔记并重置标记。
+
 **笔记跳转**:
 
 ```typescript
@@ -576,7 +636,7 @@ function handleNoteJump() {
 
 页面加载后检查 `queuedTaskStorage`，任务存在且未过期（30s 内）时，动态导入 `usePipeline` 并调用 `resumeQueuedTask()`。
 
-## 数据流
+## 5. 数据流
 
 ### 用户发送消息流程
 
@@ -691,7 +751,62 @@ sequenceDiagram
     NBD->>NBD: emit('close')
 ```
 
-## 配置与扩展
+### / 指令菜单流程
+
+```mermaid
+sequenceDiagram
+    participant U as 用户
+    participant IB as InputBar
+    participant CL as CAPABILITY_DOMAIN_LIST
+
+    U->>IB: 输入 "/"
+    IB->>IB: commandMenuOpen = true
+    IB->>CL: 过滤匹配指令
+    CL-->>IB: filteredCommands
+
+    U->>IB: ArrowUp/ArrowDown 导航
+    IB->>IB: commandMenuIndex 更新
+
+    U->>IB: Enter/Tab 选择
+    IB->>IB: text = "/{cmdId} "
+    IB->>IB: commandMenuOpen = false
+    IB->>IB: 聚焦 textarea
+
+    U->>IB: Escape 关闭
+    IB->>IB: commandMenuOpen = false
+```
+
+### SecretField 状态切换流程
+
+```mermaid
+sequenceDiagram
+    participant U as 用户
+    participant SF as SecretField
+    participant SM as SettingsModal
+
+    U->>SF: 点击"修改"
+    SF->>SM: emit('edit')
+    SM->>SM: editingSecretField = 'modelApiKey'
+    SM->>SF: editing = true
+    SF->>SF: 显示输入框 + 自动聚焦
+
+    alt 保存新值
+        U->>SF: 输入新密钥 + Enter/点击保存
+        SF->>SM: emit('update:modelValue', newValue)
+        SF->>SM: emit('cancel')
+        SM->>SM: editingSecretField = null
+    else 保存空值（保持旧值）
+        U->>SF: 留空 + Enter/点击保存
+        SF->>SM: emit('cancel')  // 不触发 update
+        SM->>SM: editingSecretField = null
+    else 取消
+        U->>SF: Escape/点击取消
+        SF->>SM: emit('cancel')
+        SM->>SM: editingSecretField = null
+    end
+```
+
+## 6. 配置与扩展
 
 ### 添加新组件
 
@@ -721,7 +836,24 @@ sequenceDiagram
 
 `matches: ['<all_urls>']` 在所有页面生效。如需限制特定页面，修改此配置。
 
-## 已知限制
+### SecretField 复用
+
+`SecretField` 组件可直接在任何需要掩码显示密钥的场景复用：
+
+```vue
+<SecretField
+  :model-value="form.apiKey"
+  :editing="editingSecretField === 'myKey'"
+  placeholder="sk-..."
+  @update:model-value="form.apiKey = $event"
+  @edit="editingSecretField = 'myKey'"
+  @cancel="editingSecretField = null"
+/>
+```
+
+父组件需维护一个 `editingSecretField` ref 来协调多个 SecretField 实例的编辑态互斥。
+
+## 7. 已知限制
 
 1. **Shadow DOM 事件穿透**: `mouseup` 事件需要检查 `isInExtensionUI()` 避免扩展内部操作干扰。Chrome 中跨 Shadow 边界的事件 `e.target` 被重定向为 shadow host，需同时检查 `getRootNode()` 和 `shadowRoot`。
 
@@ -742,3 +874,5 @@ sequenceDiagram
 9. **图表渲染**: FileCard 的 ECharts 渲染依赖动态 import，首次渲染有加载延迟。ResizeObserver 在组件卸载时正确清理，但 Shadow DOM 内的尺寸变化可能有边界情况。
 
 10. **设置弹窗体量**: SettingsModal 单文件超过 2400 行（含样式），包含四个 Tab 的全部逻辑。样式使用 scoped CSS，但未提取为独立文件。
+
+11. **SecretField 编辑态互斥**: 同一时刻只有一个 SecretField 可处于编辑态（由父组件 `editingSecretField` ref 控制）。如果父组件未正确管理，可能出现多个字段同时编辑的情况。
