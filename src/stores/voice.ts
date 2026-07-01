@@ -44,8 +44,8 @@ export const useVoiceStore = defineStore('aib-voice', () => {
       enableTts: s.voiceEnableTts ?? true,
       ttsRate: s.voiceTtsRate ?? 1.8,
       ttsVolume: s.voiceTtsVolume ?? 0.8,
-      bufferTimeout: s.voiceBufferTimeout ?? 1500,
-      idleTimeout: s.voiceIdleTimeout ?? 3000,
+      bufferTimeout: s.voiceBufferTimeout ?? 2000,
+      idleTimeout: s.voiceIdleTimeout ?? 4000,
     }
   }
 

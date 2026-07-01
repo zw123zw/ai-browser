@@ -79,8 +79,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   voiceEnableTts: true,
   voiceTtsRate: 1.8,
   voiceTtsVolume: 0.8,
-  voiceBufferTimeout: 1500,
-  voiceIdleTimeout: 3000,
+  voiceBufferTimeout: 2000,
+  voiceIdleTimeout: 4000,
   voiceMode: 'chat',
 
   // 用户数据默认值

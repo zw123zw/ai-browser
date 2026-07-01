@@ -17,8 +17,8 @@ import type { VoiceEngine, VoiceEngineStatus } from './engines/types'
 
 const log = new Logger('VoiceManager')
 
-const DEFAULT_COMMAND_TIMEOUT = 1500
-const DEFAULT_IDLE_TIMEOUT = 3000
+const DEFAULT_COMMAND_TIMEOUT = 2000
+const DEFAULT_IDLE_TIMEOUT = 4000
 /** 唤醒冷却时间：防止同一句话重复触发 */
 const WAKE_COOLDOWN = 3000
 
