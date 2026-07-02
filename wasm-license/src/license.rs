@@ -143,8 +143,7 @@ pub fn verify_code(code: &str, fingerprint: &str, now: u64) -> String {
         }
     }
 
-    // Verify Ed25519 signature (from part3 last 4 bytes + implicit)
-    // For now, use HMAC verification (Ed25519 will be added with key generation)
+    // Verify HMAC signature
     let version_str = format!("{}.{}", version_major, version_minor);
     let verify_key = crypto::derive_key(&format!("verify-{}-{}", version_str, BUILD_SEED));
     let fp_for_sig = if is_unbound { "none" } else { fingerprint };
@@ -156,10 +155,17 @@ pub fn verify_code(code: &str, fingerprint: &str, now: u64) -> String {
         fp_for_sig
     );
 
-    // Signature is embedded in the code structure
-    // For the simplified version, we verify the code integrity
     let sig_data = crypto::hmac_sign(&verify_key, data_to_verify.as_bytes());
     let sig_part = &sig_data[..4];
+
+    // Debug: log verification details
+    web_sys::console::log_1(&format!("[Wasm] version_str: {}", version_str).into());
+    web_sys::console::log_1(&format!("[Wasm] expire_ts: {}", expire_ts).into());
+    web_sys::console::log_1(&format!("[Wasm] fp_hash: {}", hex_encode(fp_hash_from_code)).into());
+    web_sys::console::log_1(&format!("[Wasm] fp_for_sig: {}", fp_for_sig).into());
+    web_sys::console::log_1(&format!("[Wasm] data_to_verify: {}", data_to_verify).into());
+    web_sys::console::log_1(&format!("[Wasm] expected_sig: {}", hex_encode(sig_part)).into());
+    web_sys::console::log_1(&format!("[Wasm] actual_sig: {}", hex_encode(&part3[4..8])).into());
 
     // Verify signature matches (part3 last bytes)
     if part3.len() >= 8 && part3[4..8] != *sig_part {
