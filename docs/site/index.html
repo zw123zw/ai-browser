@@ -41,11 +41,10 @@ body::after{content:'';position:fixed;top:0;left:0;width:100%;height:4px;backgro
 .stat-num{color:var(--cyan);font-weight:700;font-size:15px}
 
 /* Language visibility */
-.lang-en{display:none}
-body.en .lang-zh{display:none}
-body.en .lang-en{display:block}
-body.en .lang-en-flex{display:flex}
-body.en .lang-en-inline{display:inline}
+.lang-en{display:none!important}
+body.en .lang-zh{display:none!important}
+body.en .lang-en{display:block!important}
+body.en .btn.lang-en{display:inline-block!important}
 
 /* ===== HERO ===== */
 .hero{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:80px 24px;position:relative}
@@ -174,20 +173,20 @@ body.en .lang-en-inline{display:inline}
   </div>
   <div class="hero-buttons">
     <a class="btn btn-primary lang-zh" href="#" target="_blank">⬇ 下载插件</a>
-    <a class="btn btn-primary lang-en" href="#" target="_blank" style="display:none">⬇ Download</a>
+    <a class="btn btn-primary lang-en" href="#" target="_blank">⬇ Download</a>
     <a class="btn btn-secondary lang-zh" href="guide.html">📖 使用指南</a>
-    <a class="btn btn-secondary lang-en" href="guide.html" style="display:none">📖 User Guide</a>
+    <a class="btn btn-secondary lang-en" href="guide.html">📖 User Guide</a>
   </div>
   <!-- Stats -->
   <div class="stats-bar">
     <div class="stat-item">
       <span class="lang-zh">👁️ 访问</span>
-      <span class="lang-en" style="display:none">👁️ Visits</span>
+      <span class="lang-en">👁️ Visits</span>
       <span class="stat-num" id="visitCount">--</span>
     </div>
     <div class="stat-item">
       <span class="lang-zh">⬇️ 下载</span>
-      <span class="lang-en" style="display:none">⬇️ Downloads</span>
+      <span class="lang-en">⬇️ Downloads</span>
       <span class="stat-num" id="downloadCount">--</span>
     </div>
   </div>
@@ -197,97 +196,97 @@ body.en .lang-en-inline{display:inline}
 <section class="section">
   <div class="container">
     <h2 class="section-title fade-in lang-zh">核心功能</h2>
-    <h2 class="section-title fade-in lang-en" style="display:none">Features</h2>
+    <h2 class="section-title fade-in lang-en">Features</h2>
     <div class="feature-tags fade-in">
       <span class="feature-tag lang-zh">🗣️ 语音控制</span>
-      <span class="feature-tag lang-en" style="display:none">🗣️ Voice Control</span>
+      <span class="feature-tag lang-en">🗣️ Voice Control</span>
       <span class="feature-tag lang-zh">⚡ 网页自动化</span>
-      <span class="feature-tag lang-en" style="display:none">⚡ Automation</span>
+      <span class="feature-tag lang-en">⚡ Automation</span>
       <span class="feature-tag lang-zh">💬 AI 对话</span>
-      <span class="feature-tag lang-en" style="display:none">💬 AI Chat</span>
+      <span class="feature-tag lang-en">💬 AI Chat</span>
       <span class="feature-tag lang-zh">🌐 智能翻译</span>
-      <span class="feature-tag lang-en" style="display:none">🌐 Translation</span>
+      <span class="feature-tag lang-en">🌐 Translation</span>
       <span class="feature-tag lang-zh">📝 笔记收藏</span>
-      <span class="feature-tag lang-en" style="display:none">📝 Notes</span>
+      <span class="feature-tag lang-en">📝 Notes</span>
       <span class="feature-tag lang-zh">📎 文件解析</span>
-      <span class="feature-tag lang-en" style="display:none">📎 File Parsing</span>
+      <span class="feature-tag lang-en">📎 File Parsing</span>
       <span class="feature-tag lang-zh">📊 图表生成</span>
-      <span class="feature-tag lang-en" style="display:none">📊 Charts</span>
+      <span class="feature-tag lang-en">📊 Charts</span>
       <span class="feature-tag lang-zh">🎨 10 款主题</span>
-      <span class="feature-tag lang-en" style="display:none">🎨 10 Themes</span>
+      <span class="feature-tag lang-en">🎨 10 Themes</span>
     </div>
     <div class="features-grid">
       <!-- AI Chat -->
       <div class="feature-card fade-in">
         <span class="feature-icon">💬</span>
         <h3 class="lang-zh">AI 多模型对话</h3>
-        <h3 class="lang-en" style="display:none">AI Multi-Model Chat</h3>
+        <h3 class="lang-en">AI Multi-Model Chat</h3>
         <p class="lang-zh">支持 14 个 AI 提供商，GPT-4o、Claude、Gemini、DeepSeek、通义千问、Kimi 等一键切换。流式输出，深度思考，文件附件，粘贴图片自动 OCR。</p>
-        <p class="lang-en" style="display:none">14 AI providers — GPT-4o, Claude, Gemini, DeepSeek, Qwen, Kimi, and more. One-click switching, streaming output, deep thinking, file attachments, auto OCR on pasted images.</p>
+        <p class="lang-en">14 AI providers — GPT-4o, Claude, Gemini, DeepSeek, Qwen, Kimi, and more. One-click switching, streaming output, deep thinking, file attachments, auto OCR on pasted images.</p>
       </div>
       <!-- Automation -->
       <div class="feature-card fade-in">
         <span class="feature-icon">⚡</span>
         <h3 class="lang-zh">网页自动化</h3>
-        <h3 class="lang-en" style="display:none">Browser Automation</h3>
+        <h3 class="lang-en">Browser Automation</h3>
         <p class="lang-zh">自然语言控制浏览器 — 点击、输入、滚动、搜索、导航、上传文件、控制视频。支持 iframe 和 Shadow DOM 内元素操作，20+ 快捷命令。</p>
-        <p class="lang-en" style="display:none">Control your browser with natural language — click, type, scroll, search, navigate, upload files, control videos. Works inside iframes and Shadow DOM. 20+ slash commands.</p>
+        <p class="lang-en">Control your browser with natural language — click, type, scroll, search, navigate, upload files, control videos. Works inside iframes and Shadow DOM. 20+ slash commands.</p>
       </div>
       <!-- Voice -->
       <div class="feature-card fade-in">
         <span class="feature-icon">🎤</span>
         <h3 class="lang-zh">语音控制</h3>
-        <h3 class="lang-en" style="display:none">Voice Control</h3>
+        <h3 class="lang-en">Voice Control</h3>
         <p class="lang-zh">四种语音引擎（Web Speech、讯飞、百度、腾讯），唤醒词唤醒，连续对话，语音播报。常驻语音模式，关了侧边栏也能用。</p>
-        <p class="lang-en" style="display:none">Four speech engines (Web Speech, iFlytek, Baidu, Tencent). Wake word activation, continuous conversation, voice readback. Always-on mode keeps listening even when sidebar is closed.</p>
+        <p class="lang-en">Four speech engines (Web Speech, iFlytek, Baidu, Tencent). Wake word activation, continuous conversation, voice readback. Always-on mode keeps listening even when sidebar is closed.</p>
       </div>
       <!-- Analysis -->
       <div class="feature-card fade-in">
         <span class="feature-icon">🔍</span>
         <h3 class="lang-zh">网页分析</h3>
-        <h3 class="lang-en" style="display:none">Page Analysis</h3>
+        <h3 class="lang-en">Page Analysis</h3>
         <p class="lang-zh">三层递进分析（提取→分析→洞察），智能识别页面主题和关键信息，自动生成结构化摘要，支持表格数据提取和一键导出。</p>
-        <p class="lang-en" style="display:none">Three-layer analysis (Extract → Analyze → Insight). Smart page topic detection, structured summaries, table data extraction, one-click export.</p>
+        <p class="lang-en">Three-layer analysis (Extract → Analyze → Insight). Smart page topic detection, structured summaries, table data extraction, one-click export.</p>
       </div>
       <!-- Translation -->
       <div class="feature-card fade-in">
         <span class="feature-icon">🌍</span>
         <h3 class="lang-zh">智能翻译</h3>
-        <h3 class="lang-en" style="display:none">Smart Translation</h3>
+        <h3 class="lang-en">Smart Translation</h3>
         <p class="lang-zh">划词翻译、自动翻译、点击翻译三种模式，8 种目标语言，代码三层保护机制，关闭自动翻译后译文自动恢复原文。</p>
-        <p class="lang-en" style="display:none">Selection, auto, and click-to-translate modes. 8 target languages. Three-layer code protection. Turning off auto-translate restores all original text instantly.</p>
+        <p class="lang-en">Selection, auto, and click-to-translate modes. 8 target languages. Three-layer code protection. Turning off auto-translate restores all original text instantly.</p>
       </div>
       <!-- Notes -->
       <div class="feature-card fade-in">
         <span class="feature-icon">📝</span>
         <h3 class="lang-zh">智能笔记</h3>
-        <h3 class="lang-en" style="display:none">Smart Notes</h3>
+        <h3 class="lang-en">Smart Notes</h3>
         <p class="lang-zh">右键 AI 回复收藏、翻译结果收藏、自动笔记。笔记查看器支持编辑、跳转来源、导出 Markdown/ZIP，导入自动合并去重。</p>
-        <p class="lang-en" style="display:none">Right-click to bookmark AI replies and translations. Auto-notes on page load. Notebook viewer with editing, source jumping, export to Markdown/ZIP, import with auto-dedup.</p>
+        <p class="lang-en">Right-click to bookmark AI replies and translations. Auto-notes on page load. Notebook viewer with editing, source jumping, export to Markdown/ZIP, import with auto-dedup.</p>
       </div>
       <!-- Files -->
       <div class="feature-card fade-in">
         <span class="feature-icon">📎</span>
         <h3 class="lang-zh">文件处理</h3>
-        <h3 class="lang-en" style="display:none">File Handling</h3>
+        <h3 class="lang-en">File Handling</h3>
         <p class="lang-zh">图片 OCR（中英文）、PDF 逐页提取、Word/Excel 解析、60+ 代码语言高亮。粘贴图片/URL/本地路径均可自动识别。</p>
-        <p class="lang-en" style="display:none">Image OCR (Chinese & English), PDF page-by-page extraction, Word/Excel parsing, 60+ code languages with syntax highlighting. Paste images, URLs, or local paths — auto-detected.</p>
+        <p class="lang-en">Image OCR (Chinese & English), PDF page-by-page extraction, Word/Excel parsing, 60+ code languages with syntax highlighting. Paste images, URLs, or local paths — auto-detected.</p>
       </div>
       <!-- Charts -->
       <div class="feature-card fade-in">
         <span class="feature-icon">📊</span>
         <h3 class="lang-zh">图表与报告</h3>
-        <h3 class="lang-en" style="display:none">Charts & Reports</h3>
+        <h3 class="lang-en">Charts & Reports</h3>
         <p class="lang-zh">AI 生成柱状图、折线图、饼图、雷达图。下载 PNG（2x）和 JSON。对话中直接生成 Excel、PDF、JSON 文件，一键下载。</p>
-        <p class="lang-en" style="display:none">AI generates bar, line, pie, and radar charts. Download as PNG (2x) or JSON. Generate Excel, PDF, and JSON files right in the conversation — one click to download.</p>
+        <p class="lang-en">AI generates bar, line, pie, and radar charts. Download as PNG (2x) or JSON. Generate Excel, PDF, and JSON files right in the conversation — one click to download.</p>
       </div>
       <!-- Data -->
       <div class="feature-card fade-in">
         <span class="feature-icon">📥</span>
         <h3 class="lang-zh">数据提取</h3>
-        <h3 class="lang-en" style="display:none">Data Extraction</h3>
+        <h3 class="lang-en">Data Extraction</h3>
         <p class="lang-zh">从网页中智能提取结构化数据，支持表格、列表、商品信息等。一键导出为 JSON 或 Excel 格式。</p>
-        <p class="lang-en" style="display:none">Extract structured data from any web page — tables, lists, product info, and more. Export as JSON or Excel with one click.</p>
+        <p class="lang-en">Extract structured data from any web page — tables, lists, product info, and more. Export as JSON or Excel with one click.</p>
       </div>
     </div>
   </div>
@@ -297,7 +296,7 @@ body.en .lang-en-inline{display:inline}
 <section class="section">
   <div class="container">
     <h2 class="section-title fade-in lang-zh">支持的 AI 提供商</h2>
-    <h2 class="section-title fade-in lang-en" style="display:none">Supported AI Providers</h2>
+    <h2 class="section-title fade-in lang-en">Supported AI Providers</h2>
   </div>
   <div class="providers-wrap fade-in">
     <div class="providers-fade providers-fade-l"></div>
@@ -340,30 +339,30 @@ body.en .lang-en-inline{display:inline}
 <section class="section">
   <div class="container">
     <h2 class="section-title fade-in lang-zh">快速开始</h2>
-    <h2 class="section-title fade-in lang-en" style="display:none">Quick Start</h2>
+    <h2 class="section-title fade-in lang-en">Quick Start</h2>
     <div class="steps">
       <div class="step fade-in">
         <div class="step-num">1</div>
         <h3 class="lang-zh">安装扩展</h3>
-        <h3 class="lang-en" style="display:none">Install</h3>
+        <h3 class="lang-en">Install</h3>
         <p class="lang-zh">下载 CRX 包，在 Chrome 扩展页加载已解压的扩展程序</p>
-        <p class="lang-en" style="display:none">Download the zip, load unpacked in Chrome extensions page</p>
+        <p class="lang-en">Download the zip, load unpacked in Chrome extensions page</p>
         <div class="step-line"></div>
       </div>
       <div class="step fade-in">
         <div class="step-num">2</div>
         <h3 class="lang-zh">配置模型</h3>
-        <h3 class="lang-en" style="display:none">Configure</h3>
+        <h3 class="lang-en">Configure</h3>
         <p class="lang-zh">选择提供商预设，填入 API Key，一键保存</p>
-        <p class="lang-en" style="display:none">Pick a provider preset, enter your API Key, save</p>
+        <p class="lang-en">Pick a provider preset, enter your API Key, save</p>
         <div class="step-line"></div>
       </div>
       <div class="step fade-in">
         <div class="step-num">3</div>
         <h3 class="lang-zh">开始使用</h3>
-        <h3 class="lang-en" style="display:none">Start Using</h3>
+        <h3 class="lang-en">Start Using</h3>
         <p class="lang-zh">点击浮动按钮或快捷键打开侧边栏，与 AI 对话</p>
-        <p class="lang-en" style="display:none">Click the floating button or press the shortcut to open the sidebar</p>
+        <p class="lang-en">Click the floating button or press the shortcut to open the sidebar</p>
       </div>
     </div>
   </div>
@@ -373,7 +372,7 @@ body.en .lang-en-inline{display:inline}
 <footer class="footer">
   <p>
     <a href="guide.html" class="lang-zh">使用指南</a>
-    <a href="guide.html" class="lang-en" style="display:none">User Guide</a>
+    <a href="guide.html" class="lang-en">User Guide</a>
     <a href="mailto:xiaoling6668882026@outlook.com">xiaoling6668882026@outlook.com</a>
   </p>
   <p style="margin-top:8px">© 2026 小灵 LingBot · MIT License · v2.0.2</p>
@@ -382,12 +381,10 @@ body.en .lang-en-inline{display:inline}
 <script>
 // ===== Language Switch =====
 function switchLang(lang){
-  document.body.classList.toggle('lang-en',lang==='en');
   document.body.className=lang==='en'?'en':'';
   document.querySelectorAll('.lang-btn').forEach(b=>{
     b.classList.toggle('active',b.dataset.lang===lang);
   });
-  // Update typewriter
   window._lang=lang;
   localStorage.setItem('lang',lang);
 }
