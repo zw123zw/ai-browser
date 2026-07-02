@@ -42,9 +42,16 @@ let licenseStatus: {
  */
 export async function initWasm(): Promise<void> {
   try {
-    // Load wasm glue JS via chrome.runtime URL (extension-safe path)
+    // Load wasm glue JS via fetch + eval (Chrome extension compatible)
     const glueUrl = chrome.runtime.getURL('wasm/wasm_license.js');
-    const wasm = await import(/* webpackIgnore: true */ glueUrl);
+    const glueResp = await fetch(glueUrl);
+    const glueCode = await glueResp.text();
+
+    // Create a module from the glue code
+    const blob = new Blob([glueCode], { type: 'application/javascript' });
+    const blobUrl = URL.createObjectURL(blob);
+    const wasm = await import(blobUrl);
+    URL.revokeObjectURL(blobUrl);
 
     // Load wasm binary manually (avoid MIME type issue in Chrome extensions)
     const wasmUrl = chrome.runtime.getURL('wasm/wasm_license_bg.wasm');

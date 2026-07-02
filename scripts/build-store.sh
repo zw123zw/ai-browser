@@ -40,22 +40,11 @@ BUILD_SEED=$(openssl rand -hex 32)
 echo "$BUILD_SEED" > .build-seed
 echo "  Build seed: ${BUILD_SEED:0:16}..."
 
-# Step 2: Increment patch version
+# Step 2: Read version from package.json
 echo ""
-echo "[2/7] Incrementing version..."
-CURRENT_VERSION=$(node -p "require('./package.json').version")
-IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT_VERSION"
-NEW_PATCH=$((PATCH + 1))
-NEW_VERSION="${MAJOR}.${MINOR}.${NEW_PATCH}"
-
-# Update package.json
-node -e "
-  const pkg = require('./package.json');
-  pkg.version = '${NEW_VERSION}';
-  require('fs').writeFileSync('./package.json', JSON.stringify(pkg, null, 2) + '\n');
-"
-
-echo "  Version: ${CURRENT_VERSION} → ${NEW_VERSION}"
+echo "[2/7] Reading version..."
+NEW_VERSION=$(node -p "require('./package.json').version")
+echo "  Version: ${NEW_VERSION}"
 
 # Step 3: Build wasm
 echo ""

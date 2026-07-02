@@ -2,7 +2,7 @@
   "name": "lingbot-browser",
   "description": "小灵 LingBot - AI 语音浏览器助手 | AI Voice Browser Assistant",
   "private": true,
-  "version": "2.0.1",
+  "version": "2.0.2",
   "type": "module",
   "author": {
     "name": "zw123zw",
