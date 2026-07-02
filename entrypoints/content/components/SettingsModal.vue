@@ -1208,6 +1208,15 @@ function importModels(e: Event) {
               </div>
             </div>
 
+            <!-- 版本号 + 链接 -->
+            <div class="aib-version-footer">
+              v{{ appVersion }}
+              <span class="aib-version-sep">·</span>
+              <a href="https://github.com/zw123zw/ai-browser" target="_blank" class="aib-version-link">官网</a>
+              <span class="aib-version-sep">·</span>
+              <a href="mailto:xiaoling6668882026@outlook.com" class="aib-version-link">联系邮箱（xiaoling6668882026@outlook.com）</a>
+            </div>
+
           </div>
 
           <!-- ========== 语音设置 ========== -->
@@ -1410,14 +1419,6 @@ function importModels(e: Event) {
               <button class="aib-btn aib-btn-footer-primary" @click="saveVoice">{{ t('settings.general.save') }}</button>
             </div>
           </div>
-        </div>
-        <!-- 版本号 + 链接（固定底部） -->
-        <div class="aib-version-footer">
-          v{{ appVersion }}
-          <span class="aib-version-sep">·</span>
-          <a href="https://github.com/zw123zw/ai-browser" target="_blank" class="aib-version-link">官网</a>
-          <span class="aib-version-sep">·</span>
-          <a href="mailto:xiaoling6668882026@outlook.com" class="aib-version-link">联系邮箱（xiaoling6668882026@outlook.com）</a>
         </div>
       </div>
     </div>

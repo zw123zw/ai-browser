@@ -58,7 +58,8 @@ body.en .btn.lang-en{display:inline-block!important}
 .hero-brand{display:inline-block;font-size:clamp(14px,1.8vw,18px);color:var(--cyan);margin-bottom:20px;font-weight:600;letter-spacing:4px;padding:8px 24px;border:1px solid rgba(0,229,255,.4);border-radius:6px;background:rgba(0,229,255,.05);box-shadow:0 0 20px rgba(0,229,255,.1),inset 0 0 20px rgba(0,229,255,.03)}
 .hero-meta{display:flex;gap:16px;align-items:center;justify-content:center;flex-wrap:wrap;margin-bottom:48px}
 .hero-tag{padding:6px 18px;border:1px solid rgba(0,229,255,.3);border-radius:20px;font-size:15px;color:var(--cyan);background:rgba(0,229,255,.05)}
-.hero-buttons{display:flex;gap:20px;flex-wrap:wrap;justify-content:center}
+.hero-buttons{display:flex;gap:16px;flex-wrap:wrap;justify-content:center;align-items:stretch}
+.hero-buttons .btn,.hero-buttons .btn-sm{min-width:160px;text-align:center;flex:0 0 auto}
 .btn{padding:16px 40px;border-radius:8px;font-size:18px;font-weight:600;cursor:pointer;border:none;transition:all .3s;position:relative;overflow:hidden}
 .btn-primary{background:linear-gradient(135deg,var(--cyan),var(--blue));color:#000;box-shadow:var(--glow-cyan)}
 .btn-primary:hover{transform:translateY(-2px);box-shadow:0 0 30px rgba(0,229,255,.6),0 0 80px rgba(0,229,255,.2);color:#000}
@@ -66,6 +67,8 @@ body.en .btn.lang-en{display:inline-block!important}
 .btn-secondary:hover{background:rgba(0,229,255,.1);transform:translateY(-2px);box-shadow:var(--glow-cyan);color:var(--cyan)}
 .btn::after{content:'';position:absolute;top:-50%;left:-50%;width:200%;height:200%;background:linear-gradient(transparent,rgba(255,255,255,.05),transparent);transform:rotate(45deg);transition:left .5s}
 .btn:hover::after{left:100%}
+.btn-sm{padding:10px 24px;border-radius:8px;font-size:14px;font-weight:500;cursor:pointer;border:1px solid rgba(0,229,255,.3);background:rgba(0,229,255,.05);color:var(--cyan);transition:all .3s;position:relative;overflow:hidden;text-decoration:none;display:inline-block}
+.btn-sm:hover{background:rgba(0,229,255,.15);border-color:var(--cyan);transform:translateY(-2px);box-shadow:0 0 15px rgba(0,229,255,.2);color:var(--cyan)}
 
 /* ===== FEATURES ===== */
 .section{padding:80px 0}
@@ -115,12 +118,6 @@ body.en .btn.lang-en{display:inline-block!important}
 /* Reduced motion */
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 
-/* Dropdown */
-.dropdown{position:relative;display:inline-block}
-.dropdown-menu{display:none;position:absolute;top:100%;left:50%;transform:translateX(-50%);margin-top:8px;min-width:240px;background:rgba(15,20,40,.95);border:1px solid rgba(0,229,255,.3);border-radius:8px;backdrop-filter:blur(10px);z-index:50;overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,.4)}
-.dropdown-menu.show{display:block}
-.dropdown-item{display:block;padding:12px 20px;font-size:14px;color:var(--text);text-decoration:none;transition:all .2s}
-.dropdown-item:hover{background:rgba(0,229,255,.1);color:var(--cyan)}
 
 /* Responsive */
 @media(max-width:640px){
@@ -179,19 +176,14 @@ body.en .btn.lang-en{display:inline-block!important}
     <span class="hero-tag">Manifest V3</span>
   </div>
   <div class="hero-buttons">
-    <!-- Download dropdown -->
-    <div class="dropdown">
-      <a class="btn btn-primary lang-zh" href="javascript:void(0)" onclick="toggleDropdown(this)">⬇ 下载插件 ▾</a>
-      <a class="btn btn-primary lang-en" href="javascript:void(0)" onclick="toggleDropdown(this)">⬇ Download ▾</a>
-      <div class="dropdown-menu">
-        <a class="dropdown-item lang-zh" href="https://xiaoling-5za.pages.dev/" target="_blank">⬇ Cloudflare R2 下载</a>
-        <a class="dropdown-item lang-zh" href="https://www.lanzou.com/" target="_blank">📦 蓝奏云备用下载</a>
-        <a class="dropdown-item lang-zh" href="https://chrome.google.com/webstore" target="_blank">🌐 Chrome 商店安装</a>
-        <a class="dropdown-item lang-en" href="https://chrome.google.com/webstore" target="_blank">⬇ Install from Chrome Web Store</a>
-        <a class="dropdown-item lang-en" href="https://xiaoling-5za.pages.dev/" target="_blank">📦 Download ZIP (R2)</a>
-        <a class="dropdown-item lang-en" href="https://www.lanzou.com/" target="_blank">📦 Download ZIP (Lanzou)</a>
-      </div>
-    </div>
+    <!-- Chinese -->
+    <a class="btn btn-primary lang-zh" href="https://xiaoling-5za.pages.dev/" target="_blank">⬇ 下载插件</a>
+    <a class="btn btn-sm lang-zh" href="https://www.lanzou.com/" target="_blank">蓝奏云</a>
+    <a class="btn btn-sm lang-zh" href="https://chrome.google.com/webstore" target="_blank">Chrome 商店</a>
+    <!-- English -->
+    <a class="btn btn-primary lang-en" href="https://chrome.google.com/webstore" target="_blank">⬇ Chrome Web Store</a>
+    <a class="btn btn-sm lang-en" href="https://xiaoling-5za.pages.dev/" target="_blank">Download ZIP</a>
+    <a class="btn btn-sm lang-en" href="https://www.lanzou.com/" target="_blank">Lanzou</a>
     <!-- Guide -->
     <a class="btn btn-secondary lang-zh" href="guide.html">📖 使用指南</a>
     <a class="btn btn-secondary lang-en" href="guide.html">📖 User Guide</a>
@@ -398,17 +390,6 @@ body.en .btn.lang-en{display:inline-block!important}
 </footer>
 
 <script>
-// ===== Dropdown =====
-function toggleDropdown(el){
-  const menu=el.parentElement.querySelector('.dropdown-menu');
-  menu.classList.toggle('show');
-}
-document.addEventListener('click',e=>{
-  if(!e.target.closest('.dropdown')){
-    document.querySelectorAll('.dropdown-menu').forEach(m=>m.classList.remove('show'));
-  }
-});
-
 // ===== Language Switch =====
 function switchLang(lang){
   document.body.className=lang==='en'?'en':'';
