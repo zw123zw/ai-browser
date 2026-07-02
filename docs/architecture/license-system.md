@@ -39,6 +39,8 @@
 ```mermaid
 graph TB
     subgraph UI["UI 组件层"]
+        Expired["App.vue 过期弹框<br/>内联激活码输入"]
+        Tags["ChatDrawer<br/>授权状态标签"]
         Settings["SettingsModal<br/>激活码输入"]
         Features["功能组件<br/>ChatDrawer / VoicePanel / ..."]
     end
@@ -69,7 +71,9 @@ graph TB
     Store --> Loader
     Loader --> Wasm
     Wasm --> Storage
-    Settings -->|输入激活码| WL
+    Expired -->|内联激活码| LS
+    Tags -->|读取 isTrial / isActivated / isExpired| LS
+    Settings -->|输入激活码| LS
     Features -->|检查权限| LS
     WL -->|读取加密 blob| CSL
     WL -->|写入加密 blob| CSL
@@ -84,6 +88,8 @@ graph TB
     │
     ▼
 App.vue onMounted()
+    │
+    ├─ 等待 500ms（避免与其他 store 的响应式冲突）
     │
     ├─ licenseStore.init()
     │   │
@@ -191,6 +197,69 @@ App.vue onMounted()
     │
     └─ UI 根据 status 决定是否显示激活提示
 ```
+
+---
+
+## UI 集成
+
+### App.vue — 过期弹框与延迟初始化
+
+**延迟初始化**：授权系统在 `onMounted` 中通过 `setTimeout(500ms)` 延迟初始化，避免与其他 store（settings、conversations、notes）的响应式循环。
+
+```typescript
+setTimeout(async () => {
+  await licenseStore.init();
+  if (licenseStore.status === 'expired') {
+    showExpired.value = true;
+  }
+}, 500);
+```
+
+**过期弹框**：当 `licenseStore.status === 'expired'` 且用户点击悬浮球时，显示内联激活弹框（非独立弹窗），包含：
+- 激活码输入框（`placeholder: "输入激活码 AIB-XXXX-XXXX-XXXX"`）
+- 激活按钮 → `licenseStore.activate(code)`
+- 错误提示文本
+
+**悬浮球拦截**：`toggle()` 函数检查授权状态，过期时拦截抽屉展开，改为显示激活弹框：
+
+```typescript
+function toggle() {
+  if (licenseStore.status === 'expired') {
+    showExpired.value = true;
+    return;
+  }
+  open.value = !open.value;
+}
+```
+
+### ChatDrawer.vue — 授权状态标签
+
+聊天抽屉头部品牌行显示授权状态标签，紧跟品牌名右侧：
+
+| 状态 | 标签样式 | 文案 |
+|------|---------|------|
+| `isTrial` | 紫色渐变背景 + 紫色边框 | `试用 {daysLeft}天` |
+| `isActivated` | 绿色渐变背景 + 绿色边框 | `{daysLeft}天` |
+| `isExpired` | 红色渐变背景 + 红色边框 | `已过期` |
+
+```vue
+<span v-if="licenseStore.isTrial" class="aib-license-tag aib-license-tag--trial">
+  试用 {{ licenseStore.daysLeft }}天
+</span>
+<span v-else-if="licenseStore.isActivated" class="aib-license-tag aib-license-tag--active">
+  {{ licenseStore.daysLeft }}天
+</span>
+<span v-else-if="licenseStore.status === 'expired'" class="aib-license-tag aib-license-tag--expired">
+  已过期
+</span>
+```
+
+### SettingsModal.vue — 用户 Tab 激活
+
+用户配置 Tab 中包含激活码输入区域：
+- 输入框 + 激活按钮（`aib-btn-activate` 样式）
+- 调用 `licenseStore.activate(code)` 验证
+- 成功/失败通过 Toast 提示
 
 ---
 

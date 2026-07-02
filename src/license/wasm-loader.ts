@@ -42,26 +42,11 @@ let licenseStatus: {
  */
 export async function initWasm(): Promise<void> {
   try {
-    // Load wasm glue JS via fetch + eval (Chrome extension compatible)
+    // Load wasm glue JS directly via chrome.runtime URL
     const glueUrl = chrome.runtime.getURL('wasm/wasm_license.js');
     console.log('[WasmLoader] Loading glue from:', glueUrl);
 
-    const glueResp = await fetch(glueUrl);
-    console.log('[WasmLoader] Glue fetch status:', glueResp.status, glueResp.ok);
-
-    if (!glueResp.ok) {
-      throw new Error(`Failed to fetch wasm glue: ${glueResp.status}`);
-    }
-
-    const glueCode = await glueResp.text();
-    console.log('[WasmLoader] Glue code length:', glueCode.length);
-
-    // Create a module from the glue code
-    const blob = new Blob([glueCode], { type: 'application/javascript' });
-    const blobUrl = URL.createObjectURL(blob);
-    const wasm = await import(blobUrl);
-    URL.revokeObjectURL(blobUrl);
-
+    const wasm = await import(glueUrl);
     console.log('[WasmLoader] Glue imported, default type:', typeof wasm.default);
 
     // Load wasm binary manually (avoid MIME type issue in Chrome extensions)
@@ -78,7 +63,7 @@ export async function initWasm(): Promise<void> {
     const bytes = await resp.arrayBuffer();
     console.log('[WasmLoader] Binary size:', bytes.byteLength, 'bytes');
 
-    // Initialize with manual bytes (bypasses instantiateStreaming MIME check)
+    // Initialize with manual bytes
     await wasm.default(bytes);
     wasmModule = wasm;
     console.log('[WasmLoader] Wasm initialized successfully');
@@ -163,7 +148,7 @@ export async function initTrial(): Promise<{
 }> {
   const wasm = getWasm();
   const fingerprint = await generateFingerprint(wasm);
-  const now = Date.now();
+  const now = BigInt(Date.now());
 
   const resultJson = wasm.init_trial(fingerprint, now);
   const result = JSON.parse(resultJson);
@@ -192,7 +177,7 @@ export async function activateCode(code: string): Promise<{
 }> {
   const wasm = getWasm();
   const fingerprint = await generateFingerprint(wasm);
-  const now = Date.now();
+  const now = BigInt(Date.now());
 
   const resultJson = wasm.verify_code(code, fingerprint, now);
   const result = JSON.parse(resultJson);
@@ -226,7 +211,7 @@ export async function checkLicense(): Promise<{
     return initTrial();
   }
 
-  const now = Date.now();
+  const now = BigInt(Date.now());
   const resultJson = wasm.check_license(blob, now);
   const result = JSON.parse(resultJson);
 
@@ -259,7 +244,7 @@ export async function tick(
 
   try {
     // Track usage
-    const usageJson = wasm.track_usage(blob, action, Date.now());
+    const usageJson = wasm.track_usage(blob, action, BigInt(Date.now()));
     const usage = JSON.parse(usageJson);
 
     // Update usage storage

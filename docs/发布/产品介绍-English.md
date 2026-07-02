@@ -168,6 +168,6 @@ Search **LingBot** on the Chrome Web Store and install with one click.
 ## Contact
 
 - Website: https://xiaoling-5za.pages.dev/
-- Email: lingbot@outlook.com
+- Email: xiaoling6668882026@outlook.com
 
 Questions or suggestions? We'd love to hear from you.

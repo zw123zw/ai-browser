@@ -39,6 +39,8 @@ The system handles five core responsibilities:
 ```mermaid
 graph TB
     subgraph UI["UI Component Layer"]
+        Expired["App.vue Expired Overlay<br/>Inline activation code input"]
+        Tags["ChatDrawer<br/>License status tags"]
         Settings["SettingsModal<br/>Activation code input"]
         Features["Feature Components<br/>ChatDrawer / VoicePanel / ..."]
     end
@@ -69,7 +71,9 @@ graph TB
     Store --> Loader
     Loader --> Wasm
     Wasm --> Storage
-    Settings -->|Input activation code| WL
+    Expired -->|Inline activation code| LS
+    Tags -->|Read isTrial / isActivated / isExpired| LS
+    Settings -->|Input activation code| LS
     Features -->|Check permissions| LS
     WL -->|Read encrypted blob| CSL
     WL -->|Write encrypted blob| CSL
@@ -84,6 +88,8 @@ User installs extension
     │
     ▼
 App.vue onMounted()
+    │
+    ├─ Wait 500ms (avoid reactive conflicts with other stores)
     │
     ├─ licenseStore.init()
     │   │
@@ -191,6 +197,69 @@ User performs action (send message / voice / automation)
     │
     └─ UI decides whether to show activation prompt based on status
 ```
+
+---
+
+## UI Integration
+
+### App.vue — Expired Overlay & Delayed Initialization
+
+**Delayed Initialization**: The license system initializes via `setTimeout(500ms)` in `onMounted` to avoid reactive loops with other stores (settings, conversations, notes).
+
+```typescript
+setTimeout(async () => {
+  await licenseStore.init();
+  if (licenseStore.status === 'expired') {
+    showExpired.value = true;
+  }
+}, 500);
+```
+
+**Expired Overlay**: When `licenseStore.status === 'expired'` and the user clicks the FAB, an inline activation overlay is shown (not a separate modal), containing:
+- Activation code input (`placeholder: "输入激活码 AIB-XXXX-XXXX-XXXX"`)
+- Activate button → `licenseStore.activate(code)`
+- Error message text
+
+**FAB Interception**: The `toggle()` function checks license status; when expired, it intercepts drawer opening and shows the activation overlay instead:
+
+```typescript
+function toggle() {
+  if (licenseStore.status === 'expired') {
+    showExpired.value = true;
+    return;
+  }
+  open.value = !open.value;
+}
+```
+
+### ChatDrawer.vue — License Status Tags
+
+The chat drawer header brand row displays license status tags immediately to the right of the brand name:
+
+| Status | Tag Style | Text |
+|--------|-----------|------|
+| `isTrial` | Purple gradient + purple border | `试用 {daysLeft}天` |
+| `isActivated` | Green gradient + green border | `{daysLeft}天` |
+| `isExpired` | Red gradient + red border | `已过期` |
+
+```vue
+<span v-if="licenseStore.isTrial" class="aib-license-tag aib-license-tag--trial">
+  试用 {{ licenseStore.daysLeft }}天
+</span>
+<span v-else-if="licenseStore.isActivated" class="aib-license-tag aib-license-tag--active">
+  {{ licenseStore.daysLeft }}天
+</span>
+<span v-else-if="licenseStore.status === 'expired'" class="aib-license-tag aib-license-tag--expired">
+  已过期
+</span>
+```
+
+### SettingsModal.vue — User Tab Activation
+
+The User configuration tab includes an activation code input area:
+- Input field + activate button (`aib-btn-activate` style)
+- Calls `licenseStore.activate(code)` for verification
+- Success/failure shown via Toast notifications
 
 ---
 

@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="description" content="AI 语音浏览器助手 - 支持语音控制 + 网页自动化 + 多模型切换">
-<meta name="keywords" content="browser-extension, chrome-extension, ai, voice, automation, wxt, vue3, manifest-v3">
+<meta name="description" content="AI 语音浏览器助手 - 语音控制浏览器 + 网页自动化 + 14 个 AI 模型 + 智能翻译 + 笔记管理">
+<meta name="keywords" content="browser-extension, chrome-extension, ai, voice, automation, translation, notes, wxt, vue3, manifest-v3">
 <title>小灵 LingBot - AI Voice Browser Assistant</title>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -142,7 +142,7 @@ body::after{content:'';position:fixed;top:0;left:0;width:100%;height:4px;backgro
   <h1 class="hero-name">AI Voice Browser Assistant</h1>
   <p class="hero-subtitle" id="heroSubtitle"><span class="cursor"></span></p>
   <div class="hero-meta">
-    <span class="hero-tag">v1.8.3</span>
+    <span class="hero-tag">v2.0.2</span>
     <span class="hero-tag">MIT License</span>
     <span class="hero-tag">Chrome Extension</span>
     <span class="hero-tag">Manifest V3</span>
@@ -159,55 +159,55 @@ body::after{content:'';position:fixed;top:0;left:0;width:100%;height:4px;backgro
     <h2 class="section-title fade-in">核心功能</h2>
     <!-- Feature tags inspired by welcome page -->
     <div class="feature-tags fade-in">
-      <span class="feature-tag">🗣️ 语音对话</span>
+      <span class="feature-tag">🗣️ 语音控制</span>
       <span class="feature-tag">⚡ 网页自动化</span>
-      <span class="feature-tag">🔍 网页分析</span>
+      <span class="feature-tag">💬 AI 对话</span>
       <span class="feature-tag">🌐 智能翻译</span>
-      <span class="feature-tag">📝 智能笔记</span>
-      <span class="feature-tag">👁️ OCR 识别</span>
-      <span class="feature-tag">📥 数据提取</span>
-      <span class="feature-tag">📋 报告生成</span>
+      <span class="feature-tag">📝 笔记收藏</span>
+      <span class="feature-tag">📎 文件解析</span>
+      <span class="feature-tag">📊 图表生成</span>
+      <span class="feature-tag">🎨 10 款主题</span>
     </div>
     <div class="features-grid">
       <div class="feature-card fade-in">
         <span class="feature-icon">💬</span>
         <h3>AI 多模型对话</h3>
-        <p>支持 11 个 AI 提供商，GPT-4o、Claude、Gemini、DeepSeek 等主流大模型一键切换，流式输出，深度思考。</p>
+        <p>支持 14 个 AI 提供商，GPT-4o、Claude、Gemini、DeepSeek、通义千问、Kimi 等一键切换。流式输出，深度思考，文件附件，粘贴图片自动 OCR。</p>
       </div>
       <div class="feature-card fade-in">
         <span class="feature-icon">⚡</span>
         <h3>网页自动化</h3>
-        <p>自然语言控制浏览器 — 点击、输入、滚动、搜索、导航。AI 自动分析页面结构，逐步执行操作。</p>
+        <p>自然语言控制浏览器 — 点击、输入、滚动、搜索、导航、上传文件、控制视频。支持 iframe 和 Shadow DOM 内元素操作，20+ 快捷命令。</p>
       </div>
       <div class="feature-card fade-in">
         <span class="feature-icon">🎤</span>
         <h3>语音控制</h3>
-        <p>双引擎语音识别（本地 Sherpa-ONNX + Web Speech API），中英双语，连续对话，语音播报。</p>
+        <p>四种语音引擎（Web Speech、讯飞、百度、腾讯），唤醒词唤醒，连续对话，语音播报。常驻语音模式，关了侧边栏也能用。</p>
       </div>
       <div class="feature-card fade-in">
         <span class="feature-icon">🔍</span>
         <h3>网页分析</h3>
-        <p>智能分析当前页面内容，提取核心信息，生成结构化摘要。支持表格数据提取和关键信息定位。</p>
+        <p>三层递进分析（提取→分析→洞察），智能识别页面主题和关键信息，自动生成结构化摘要，支持表格数据提取和一键导出。</p>
       </div>
       <div class="feature-card fade-in">
         <span class="feature-icon">🌍</span>
         <h3>智能翻译</h3>
-        <p>划词翻译、自动翻译、点击翻译三种模式，8 种目标语言，代码智能保护，技术文档无障碍阅读。</p>
+        <p>划词翻译、自动翻译、点击翻译三种模式，8 种目标语言，代码三层保护机制，关闭自动翻译后译文自动恢复原文。</p>
       </div>
       <div class="feature-card fade-in">
         <span class="feature-icon">📝</span>
         <h3>智能笔记</h3>
-        <p>对话内容一键保存为笔记，支持 Markdown 格式导出。自动整理关键信息，构建个人知识库。</p>
+        <p>右键 AI 回复收藏、翻译结果收藏、自动笔记。笔记查看器支持编辑、跳转来源、导出 Markdown/ZIP，导入自动合并去重。</p>
       </div>
       <div class="feature-card fade-in">
         <span class="feature-icon">📎</span>
         <h3>文件处理</h3>
-        <p>图片 OCR、PDF 提取、Word/Excel 解析、60+ 代码语言高亮。上传即分析，AI 读懂你的文件。</p>
+        <p>图片 OCR（中英文）、PDF 逐页提取、Word/Excel 解析、60+ 代码语言高亮。粘贴图片/URL/本地路径均可自动识别。</p>
       </div>
       <div class="feature-card fade-in">
         <span class="feature-icon">📊</span>
         <h3>图表与报告</h3>
-        <p>AI 生成柱状图、折线图、饼图、雷达图，内联渲染。一键导出 PNG/JSON，自动生成文件报告。</p>
+        <p>AI 生成柱状图、折线图、饼图、雷达图。下载 PNG（2x）和 JSON。对话中直接生成 Excel、PDF、JSON 文件，一键下载。</p>
       </div>
       <div class="feature-card fade-in">
         <span class="feature-icon">📥</span>
@@ -231,10 +231,13 @@ body::after{content:'';position:fixed;top:0;left:0;width:100%;height:4px;backgro
       <span class="provider-item">Anthropic</span>
       <span class="provider-item">Google Gemini</span>
       <span class="provider-item">DeepSeek</span>
+      <span class="provider-item">MiMo</span>
       <span class="provider-item">Qwen 通义千问</span>
       <span class="provider-item">Kimi Moonshot</span>
       <span class="provider-item">智谱 ChatGLM</span>
       <span class="provider-item">文心一言</span>
+      <span class="provider-item">MiniMax</span>
+      <span class="provider-item">硅基流动 SiliconFlow</span>
       <span class="provider-item">豆包 Doubao</span>
       <span class="provider-item">Grok xAI</span>
       <span class="provider-item">自定义 API</span>
@@ -243,10 +246,13 @@ body::after{content:'';position:fixed;top:0;left:0;width:100%;height:4px;backgro
       <span class="provider-item">Anthropic</span>
       <span class="provider-item">Google Gemini</span>
       <span class="provider-item">DeepSeek</span>
+      <span class="provider-item">MiMo</span>
       <span class="provider-item">Qwen 通义千问</span>
       <span class="provider-item">Kimi Moonshot</span>
       <span class="provider-item">智谱 ChatGLM</span>
       <span class="provider-item">文心一言</span>
+      <span class="provider-item">MiniMax</span>
+      <span class="provider-item">硅基流动 SiliconFlow</span>
       <span class="provider-item">豆包 Doubao</span>
       <span class="provider-item">Grok xAI</span>
       <span class="provider-item">自定义 API</span>
@@ -286,7 +292,7 @@ body::after{content:'';position:fixed;top:0;left:0;width:100%;height:4px;backgro
     <a href="guide.html">使用指南</a>
     <a href="mailto:xiaoling6668882026@outlook.com">联系我们：xiaoling6668882026@outlook.com</a>
   </p>
-  <p style="margin-top:8px">© 2026 小灵 LingBot · MIT License · v1.8.3</p>
+  <p style="margin-top:8px">© 2026 小灵 LingBot · MIT License · v2.0.2</p>
 </footer>
 
 <script>
@@ -317,7 +323,7 @@ body::after{content:'';position:fixed;top:0;left:0;width:100%;height:4px;backgro
 // Typewriter effect
 (function(){
   const el=document.getElementById('heroSubtitle');
-  const text='AI 语音浏览器助手';
+  const text='用语音或文字，指挥 AI 帮你操作浏览器';
   const cursor=el.querySelector('.cursor');
   let i=0;
   function type(){

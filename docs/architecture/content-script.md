@@ -370,6 +370,38 @@ App.vue 在 `onMounted` 中注册大量事件监听器，在 `onUnmounted` 中�
 
 抽屉展开状态通过 `drawerOpenStorage` 持久化到 `chrome.storage.local`，同时通过 `chrome.runtime.sendMessage` 通知 Background 广播给其他标签页。`aib-drawer-sync` 消息用于接收其他标签页的状态变化，使用 `syncingFromRemote` 标志避免循环同步。
 
+**8. 授权系统集成**
+
+App.vue 初始化 `useLicenseStore` 并管理授权过期弹框：
+
+- **延迟初始化**：`onMounted` 中通过 `setTimeout(500ms)` 延迟调用 `licenseStore.init()`，避免与其他 store 的响应式冲突
+- **过期弹框**：`showExpired` ref 控制内联激活弹框的显示，包含激活码输入框和激活按钮
+- **悬浮球拦截**：`toggle()` 函数检查 `licenseStore.status === 'expired'`，过期时拦截抽屉展开，改为显示激活弹框
+- **激活处理**：`handleActivate()` 调用 `licenseStore.activate(code)`，成功关闭弹框，失败显示错误提示
+
+```typescript
+const licenseStore = useLicenseStore();
+const showExpired = ref(false);
+const activateCodeInput = ref('');
+const activateError = ref('');
+
+function toggle() {
+  if (licenseStore.status === 'expired') {
+    showExpired.value = true;
+    return;
+  }
+  open.value = !open.value;
+}
+
+// 延迟初始化，避免响应式循环
+setTimeout(async () => {
+  await licenseStore.init();
+  if (licenseStore.status === 'expired') {
+    showExpired.value = true;
+  }
+}, 500);
+```
+
 ### ChatDrawer.vue — 聊天抽屉
 
 **核心功能**:
@@ -378,6 +410,7 @@ App.vue 在 `onMounted` 中注册大量事件监听器，在 `onUnmounted` 中�
 - **跨标签页宽度同步**: Watch `settingsStore.settings.drawerWidth` 变化，非拖拽状态下自动更新
 - **清除对话**: 通过 `ConfirmDialog` 确认后，先 `abortPipeline()` 中止进行中的请求，再 `store.clearCurrent()` 清除会话
 - **笔记入口**: 笔记模式开启时显示笔记按钮，点击 dispatch `aib-toggle-note-viewer` 事件
+- **授权状态标签**: 头部品牌行显示授权状态标签（`useLicenseStore`），紧跟品牌名右侧。`isTrial` 显示紫色"试用 N天"，`isActivated` 显示绿色"N天"，`isExpired` 显示红色"已过期"
 
 ### ChatPanel.vue — 文字聊天面板
 
@@ -440,7 +473,7 @@ App.vue 在 `onMounted` 中注册大量事件监听器，在 `onUnmounted` 中�
 1. **AI 配置**: 模型列表管理（新增/编辑/删除/导入/导出）、供应商预设快速填充、API Key 配置（使用 `SecretField` 组件掩码显示）
 2. **通用配置**: 主题选择（5 预设网格）、快捷键录制、网页自动化开关（切换需确认弹窗）、划词行为、翻译模式/目标语言、笔记模式
 3. **语音配置**: 引擎类型选择（Web Speech/讯飞/百度/腾讯）、AppId/ApiKey/ApiSecret 配置（均使用 `SecretField` 组件）、唤醒词、常驻语音、TTS 播报参数（速率/音量滑块）、行为参数（缓冲超时/空闲超时滑块）
-4. **用户配置**: License 激活、上下文消息数、缓存管理（带进度条）、日志下载（仅测试包可见）、语言切换、版本号+链接
+4. **用户配置**: License 激活（输入框 + 激活按钮，调用 `licenseStore.activate()`，成功/失败通过 Toast 提示）、上下文消息数、缓存管理（带进度条）、日志下载（仅测试包可见）、语言切换、版本号+链接
 
 **特殊功能**:
 - 内嵌使用文档查看器（Markdown 渲染 + 侧边栏 TOC 导航 + 滚动高亮）

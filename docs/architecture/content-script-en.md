@@ -370,6 +370,38 @@ App.vue registers numerous event listeners in `onMounted` and cleans them up in 
 
 Drawer open state is persisted to `chrome.storage.local` via `drawerOpenStorage`, and simultaneously broadcast to other tabs via `chrome.runtime.sendMessage`. The `aib-drawer-sync` message receives state changes from other tabs, using a `syncingFromRemote` flag to prevent circular sync.
 
+**8. License System Integration**
+
+App.vue initializes `useLicenseStore` and manages the license expiration overlay:
+
+- **Delayed Initialization**: `licenseStore.init()` is called via `setTimeout(500ms)` in `onMounted` to avoid reactive conflicts with other stores
+- **Expired Overlay**: `showExpired` ref controls an inline activation overlay with activation code input and activate button
+- **FAB Interception**: `toggle()` checks `licenseStore.status === 'expired'`; when expired, it intercepts drawer opening and shows the activation overlay instead
+- **Activation Handling**: `handleActivate()` calls `licenseStore.activate(code)`; on success closes the overlay, on failure shows error text
+
+```typescript
+const licenseStore = useLicenseStore();
+const showExpired = ref(false);
+const activateCodeInput = ref('');
+const activateError = ref('');
+
+function toggle() {
+  if (licenseStore.status === 'expired') {
+    showExpired.value = true;
+    return;
+  }
+  open.value = !open.value;
+}
+
+// Delayed initialization to avoid reactive loops
+setTimeout(async () => {
+  await licenseStore.init();
+  if (licenseStore.status === 'expired') {
+    showExpired.value = true;
+  }
+}, 500);
+```
+
 ### ChatDrawer.vue — Chat Drawer
 
 **Core Features**:
@@ -378,6 +410,7 @@ Drawer open state is persisted to `chrome.storage.local` via `drawerOpenStorage`
 - **Cross-Tab Width Sync**: Watches `settingsStore.settings.drawerWidth` changes, auto-updates when not dragging
 - **Clear Conversation**: After confirmation via `ConfirmDialog`, calls `abortPipeline()` to abort in-flight requests, then `store.clearCurrent()` to clear the session
 - **Notes Entry**: When note mode is enabled, shows a notes button that dispatches `aib-toggle-note-viewer` on click
+- **License Status Tags**: Header brand row displays license status tags (`useLicenseStore`), immediately to the right of the brand name. `isTrial` shows purple "试用 N天", `isActivated` shows green "N天", `isExpired` shows red "已过期"
 
 ### ChatPanel.vue — Text Chat Panel
 
@@ -440,7 +473,7 @@ Drawer open state is persisted to `chrome.storage.local` via `drawerOpenStorage`
 1. **AI Config**: Model list management (add/edit/delete/import/export), provider preset quick-fill, API Key configuration (uses `SecretField` component for masked display)
 2. **General Config**: Theme selection (5 preset grid), shortcut recording, web automation toggle (requires confirmation dialog), selection behavior, translate mode/target language, note mode
 3. **Voice Config**: Engine type selection (Web Speech/iFlytek/Baidu/Tencent), AppId/ApiKey/ApiSecret configuration (all using `SecretField` component), wake word, always-on voice, TTS broadcast parameters (rate/volume sliders), behavior parameters (buffer timeout/idle timeout sliders)
-4. **User Config**: License activation, max context messages, cache management (with progress bar), log download (visible only in debug builds), language switch, version + links
+4. **User Config**: License activation (input field + activate button, calls `licenseStore.activate()`, success/failure shown via Toast), max context messages, cache management (with progress bar), log download (visible only in debug builds), language switch, version + links
 
 **Special Features**:
 - Embedded documentation viewer (Markdown rendering + sidebar TOC navigation + scroll highlighting)

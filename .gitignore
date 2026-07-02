@@ -9,7 +9,6 @@ build/
 .output/
 .wxt/
 coverage/
-.output-store/
 
 # Logs
 *.log
