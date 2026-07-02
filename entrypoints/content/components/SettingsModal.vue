@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue';
-import { useLicenseStore } from '@/src/stores/license';
 import { v4 as uuid } from 'uuid';
 import MarkdownIt from 'markdown-it';
 import { useSettingsStore } from '@/src/stores/settings';
@@ -54,20 +53,8 @@ const cacheBarClass = computed(() => {
   return '';
 });
 
-const licenseStore = useLicenseStore();
-
 async function activateLicense() {
-  if (!licenseKey.value || licenseKey.value.trim().length < 10) {
-    toast.error(t('settings.user.licenseInvalid'));
-    return;
-  }
-  const result = await licenseStore.activate(licenseKey.value.trim());
-  if (result.success) {
-    toast.success(t('settings.user.activateSuccess'));
-    licenseKey.value = '';
-  } else {
-    toast.error(result.error || t('settings.user.activateFailed'));
-  }
+  toast.info(t('settings.user.activateNotOpen'));
 }
 
 async function handleClearCache() {
@@ -1103,23 +1090,6 @@ function importModels(e: Event) {
 
           <!-- ========== 用户配置 ========== -->
           <div v-show="tab === 'user'" class="aib-modal-body">
-
-            <!-- 授权卡片 -->
-            <div class="aib-license-card">
-              <div class="aib-license-header">
-                <img src="/icon.png" class="aib-license-logo" />
-                <div>
-                  <div class="aib-license-title">小灵 AI 语音助手</div>
-                  <div class="aib-license-status">
-                    <span v-if="licenseStore.isTrial" class="aib-license-badge aib-license-badge--trial">试用期</span>
-                    <span v-else-if="licenseStore.isActivated" class="aib-license-badge aib-license-badge--active">已激活</span>
-                    <span v-else class="aib-license-badge aib-license-badge--expired">已过期</span>
-                    <span v-if="licenseStore.isTrial || licenseStore.isActivated" class="aib-license-days">剩余 {{ licenseStore.daysLeft }} 天</span>
-                  </div>
-                </div>
-              </div>
-              <p class="aib-license-desc">输入激活码解锁全部功能，支持语音控制、网页自动化等高级特性。</p>
-            </div>
 
             <div class="aib-form-row">
               <label>{{ t('settings.user.license') }}</label>
