@@ -30,6 +30,23 @@ body::after{content:'';position:fixed;top:0;left:0;width:100%;height:4px;backgro
 /* Container */
 .container{max-width:1100px;margin:0 auto;padding:0 24px;position:relative;z-index:2}
 
+/* Language toggle */
+.lang-toggle{position:fixed;top:20px;right:20px;z-index:100;display:flex;gap:4px;padding:4px;border-radius:8px;border:1px solid rgba(0,229,255,.3);background:rgba(10,14,26,.9);backdrop-filter:blur(10px)}
+.lang-btn{padding:6px 14px;border-radius:6px;border:none;background:transparent;color:var(--text-soft);font-size:13px;cursor:pointer;transition:all .3s}
+.lang-btn.active{background:rgba(0,229,255,.15);color:var(--cyan);box-shadow:0 0 10px rgba(0,229,255,.2)}
+
+/* Stats bar */
+.stats-bar{display:flex;gap:24px;justify-content:center;margin-top:20px;font-size:13px;color:var(--text-soft)}
+.stat-item{display:flex;align-items:center;gap:6px}
+.stat-num{color:var(--cyan);font-weight:700;font-size:15px}
+
+/* Language visibility */
+.lang-en{display:none}
+body.en .lang-zh{display:none}
+body.en .lang-en{display:block}
+body.en .lang-en-flex{display:flex}
+body.en .lang-en-inline{display:inline}
+
 /* ===== HERO ===== */
 .hero{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:80px 24px;position:relative}
 .hero-logo{width:100px;height:100px;margin-bottom:28px;animation:pulse-glow 3s ease-in-out infinite}
@@ -108,10 +125,18 @@ body::after{content:'';position:fixed;top:0;left:0;width:100%;height:4px;backgro
   .steps{flex-direction:column;align-items:center}
   .step-line{display:none!important}
   .hero-buttons{flex-direction:column;align-items:center}
+  .lang-toggle{top:10px;right:10px}
+  .stats-bar{gap:16px;flex-wrap:wrap}
 }
 </style>
 </head>
 <body>
+
+<!-- Language Toggle -->
+<div class="lang-toggle">
+  <button class="lang-btn active" data-lang="zh" onclick="switchLang('zh')">中文</button>
+  <button class="lang-btn" data-lang="en" onclick="switchLang('en')">EN</button>
+</div>
 
 <canvas id="starfield"></canvas>
 <div class="hex-grid"></div>
@@ -148,71 +173,121 @@ body::after{content:'';position:fixed;top:0;left:0;width:100%;height:4px;backgro
     <span class="hero-tag">Manifest V3</span>
   </div>
   <div class="hero-buttons">
-    <a class="btn btn-primary" href="#" target="_blank">⬇ 下载插件</a>
-    <a class="btn btn-secondary" href="guide.html">📖 使用指南</a>
+    <a class="btn btn-primary lang-zh" href="#" target="_blank">⬇ 下载插件</a>
+    <a class="btn btn-primary lang-en" href="#" target="_blank" style="display:none">⬇ Download</a>
+    <a class="btn btn-secondary lang-zh" href="guide.html">📖 使用指南</a>
+    <a class="btn btn-secondary lang-en" href="guide.html" style="display:none">📖 User Guide</a>
+  </div>
+  <!-- Stats -->
+  <div class="stats-bar">
+    <div class="stat-item">
+      <span class="lang-zh">👁️ 访问</span>
+      <span class="lang-en" style="display:none">👁️ Visits</span>
+      <span class="stat-num" id="visitCount">--</span>
+    </div>
+    <div class="stat-item">
+      <span class="lang-zh">⬇️ 下载</span>
+      <span class="lang-en" style="display:none">⬇️ Downloads</span>
+      <span class="stat-num" id="downloadCount">--</span>
+    </div>
   </div>
 </section>
 
 <!-- FEATURES -->
 <section class="section">
   <div class="container">
-    <h2 class="section-title fade-in">核心功能</h2>
-    <!-- Feature tags inspired by welcome page -->
+    <h2 class="section-title fade-in lang-zh">核心功能</h2>
+    <h2 class="section-title fade-in lang-en" style="display:none">Features</h2>
     <div class="feature-tags fade-in">
-      <span class="feature-tag">🗣️ 语音控制</span>
-      <span class="feature-tag">⚡ 网页自动化</span>
-      <span class="feature-tag">💬 AI 对话</span>
-      <span class="feature-tag">🌐 智能翻译</span>
-      <span class="feature-tag">📝 笔记收藏</span>
-      <span class="feature-tag">📎 文件解析</span>
-      <span class="feature-tag">📊 图表生成</span>
-      <span class="feature-tag">🎨 10 款主题</span>
+      <span class="feature-tag lang-zh">🗣️ 语音控制</span>
+      <span class="feature-tag lang-en" style="display:none">🗣️ Voice Control</span>
+      <span class="feature-tag lang-zh">⚡ 网页自动化</span>
+      <span class="feature-tag lang-en" style="display:none">⚡ Automation</span>
+      <span class="feature-tag lang-zh">💬 AI 对话</span>
+      <span class="feature-tag lang-en" style="display:none">💬 AI Chat</span>
+      <span class="feature-tag lang-zh">🌐 智能翻译</span>
+      <span class="feature-tag lang-en" style="display:none">🌐 Translation</span>
+      <span class="feature-tag lang-zh">📝 笔记收藏</span>
+      <span class="feature-tag lang-en" style="display:none">📝 Notes</span>
+      <span class="feature-tag lang-zh">📎 文件解析</span>
+      <span class="feature-tag lang-en" style="display:none">📎 File Parsing</span>
+      <span class="feature-tag lang-zh">📊 图表生成</span>
+      <span class="feature-tag lang-en" style="display:none">📊 Charts</span>
+      <span class="feature-tag lang-zh">🎨 10 款主题</span>
+      <span class="feature-tag lang-en" style="display:none">🎨 10 Themes</span>
     </div>
     <div class="features-grid">
+      <!-- AI Chat -->
       <div class="feature-card fade-in">
         <span class="feature-icon">💬</span>
-        <h3>AI 多模型对话</h3>
-        <p>支持 14 个 AI 提供商，GPT-4o、Claude、Gemini、DeepSeek、通义千问、Kimi 等一键切换。流式输出，深度思考，文件附件，粘贴图片自动 OCR。</p>
+        <h3 class="lang-zh">AI 多模型对话</h3>
+        <h3 class="lang-en" style="display:none">AI Multi-Model Chat</h3>
+        <p class="lang-zh">支持 14 个 AI 提供商，GPT-4o、Claude、Gemini、DeepSeek、通义千问、Kimi 等一键切换。流式输出，深度思考，文件附件，粘贴图片自动 OCR。</p>
+        <p class="lang-en" style="display:none">14 AI providers — GPT-4o, Claude, Gemini, DeepSeek, Qwen, Kimi, and more. One-click switching, streaming output, deep thinking, file attachments, auto OCR on pasted images.</p>
       </div>
+      <!-- Automation -->
       <div class="feature-card fade-in">
         <span class="feature-icon">⚡</span>
-        <h3>网页自动化</h3>
-        <p>自然语言控制浏览器 — 点击、输入、滚动、搜索、导航、上传文件、控制视频。支持 iframe 和 Shadow DOM 内元素操作，20+ 快捷命令。</p>
+        <h3 class="lang-zh">网页自动化</h3>
+        <h3 class="lang-en" style="display:none">Browser Automation</h3>
+        <p class="lang-zh">自然语言控制浏览器 — 点击、输入、滚动、搜索、导航、上传文件、控制视频。支持 iframe 和 Shadow DOM 内元素操作，20+ 快捷命令。</p>
+        <p class="lang-en" style="display:none">Control your browser with natural language — click, type, scroll, search, navigate, upload files, control videos. Works inside iframes and Shadow DOM. 20+ slash commands.</p>
       </div>
+      <!-- Voice -->
       <div class="feature-card fade-in">
         <span class="feature-icon">🎤</span>
-        <h3>语音控制</h3>
-        <p>四种语音引擎（Web Speech、讯飞、百度、腾讯），唤醒词唤醒，连续对话，语音播报。常驻语音模式，关了侧边栏也能用。</p>
+        <h3 class="lang-zh">语音控制</h3>
+        <h3 class="lang-en" style="display:none">Voice Control</h3>
+        <p class="lang-zh">四种语音引擎（Web Speech、讯飞、百度、腾讯），唤醒词唤醒，连续对话，语音播报。常驻语音模式，关了侧边栏也能用。</p>
+        <p class="lang-en" style="display:none">Four speech engines (Web Speech, iFlytek, Baidu, Tencent). Wake word activation, continuous conversation, voice readback. Always-on mode keeps listening even when sidebar is closed.</p>
       </div>
+      <!-- Analysis -->
       <div class="feature-card fade-in">
         <span class="feature-icon">🔍</span>
-        <h3>网页分析</h3>
-        <p>三层递进分析（提取→分析→洞察），智能识别页面主题和关键信息，自动生成结构化摘要，支持表格数据提取和一键导出。</p>
+        <h3 class="lang-zh">网页分析</h3>
+        <h3 class="lang-en" style="display:none">Page Analysis</h3>
+        <p class="lang-zh">三层递进分析（提取→分析→洞察），智能识别页面主题和关键信息，自动生成结构化摘要，支持表格数据提取和一键导出。</p>
+        <p class="lang-en" style="display:none">Three-layer analysis (Extract → Analyze → Insight). Smart page topic detection, structured summaries, table data extraction, one-click export.</p>
       </div>
+      <!-- Translation -->
       <div class="feature-card fade-in">
         <span class="feature-icon">🌍</span>
-        <h3>智能翻译</h3>
-        <p>划词翻译、自动翻译、点击翻译三种模式，8 种目标语言，代码三层保护机制，关闭自动翻译后译文自动恢复原文。</p>
+        <h3 class="lang-zh">智能翻译</h3>
+        <h3 class="lang-en" style="display:none">Smart Translation</h3>
+        <p class="lang-zh">划词翻译、自动翻译、点击翻译三种模式，8 种目标语言，代码三层保护机制，关闭自动翻译后译文自动恢复原文。</p>
+        <p class="lang-en" style="display:none">Selection, auto, and click-to-translate modes. 8 target languages. Three-layer code protection. Turning off auto-translate restores all original text instantly.</p>
       </div>
+      <!-- Notes -->
       <div class="feature-card fade-in">
         <span class="feature-icon">📝</span>
-        <h3>智能笔记</h3>
-        <p>右键 AI 回复收藏、翻译结果收藏、自动笔记。笔记查看器支持编辑、跳转来源、导出 Markdown/ZIP，导入自动合并去重。</p>
+        <h3 class="lang-zh">智能笔记</h3>
+        <h3 class="lang-en" style="display:none">Smart Notes</h3>
+        <p class="lang-zh">右键 AI 回复收藏、翻译结果收藏、自动笔记。笔记查看器支持编辑、跳转来源、导出 Markdown/ZIP，导入自动合并去重。</p>
+        <p class="lang-en" style="display:none">Right-click to bookmark AI replies and translations. Auto-notes on page load. Notebook viewer with editing, source jumping, export to Markdown/ZIP, import with auto-dedup.</p>
       </div>
+      <!-- Files -->
       <div class="feature-card fade-in">
         <span class="feature-icon">📎</span>
-        <h3>文件处理</h3>
-        <p>图片 OCR（中英文）、PDF 逐页提取、Word/Excel 解析、60+ 代码语言高亮。粘贴图片/URL/本地路径均可自动识别。</p>
+        <h3 class="lang-zh">文件处理</h3>
+        <h3 class="lang-en" style="display:none">File Handling</h3>
+        <p class="lang-zh">图片 OCR（中英文）、PDF 逐页提取、Word/Excel 解析、60+ 代码语言高亮。粘贴图片/URL/本地路径均可自动识别。</p>
+        <p class="lang-en" style="display:none">Image OCR (Chinese & English), PDF page-by-page extraction, Word/Excel parsing, 60+ code languages with syntax highlighting. Paste images, URLs, or local paths — auto-detected.</p>
       </div>
+      <!-- Charts -->
       <div class="feature-card fade-in">
         <span class="feature-icon">📊</span>
-        <h3>图表与报告</h3>
-        <p>AI 生成柱状图、折线图、饼图、雷达图。下载 PNG（2x）和 JSON。对话中直接生成 Excel、PDF、JSON 文件，一键下载。</p>
+        <h3 class="lang-zh">图表与报告</h3>
+        <h3 class="lang-en" style="display:none">Charts & Reports</h3>
+        <p class="lang-zh">AI 生成柱状图、折线图、饼图、雷达图。下载 PNG（2x）和 JSON。对话中直接生成 Excel、PDF、JSON 文件，一键下载。</p>
+        <p class="lang-en" style="display:none">AI generates bar, line, pie, and radar charts. Download as PNG (2x) or JSON. Generate Excel, PDF, and JSON files right in the conversation — one click to download.</p>
       </div>
+      <!-- Data -->
       <div class="feature-card fade-in">
         <span class="feature-icon">📥</span>
-        <h3>数据提取</h3>
-        <p>从网页中智能提取结构化数据，支持表格、列表、商品信息等。一键导出为 JSON 或 Excel 格式。</p>
+        <h3 class="lang-zh">数据提取</h3>
+        <h3 class="lang-en" style="display:none">Data Extraction</h3>
+        <p class="lang-zh">从网页中智能提取结构化数据，支持表格、列表、商品信息等。一键导出为 JSON 或 Excel 格式。</p>
+        <p class="lang-en" style="display:none">Extract structured data from any web page — tables, lists, product info, and more. Export as JSON or Excel with one click.</p>
       </div>
     </div>
   </div>
@@ -221,7 +296,8 @@ body::after{content:'';position:fixed;top:0;left:0;width:100%;height:4px;backgro
 <!-- PROVIDERS -->
 <section class="section">
   <div class="container">
-    <h2 class="section-title fade-in">支持的 AI 提供商</h2>
+    <h2 class="section-title fade-in lang-zh">支持的 AI 提供商</h2>
+    <h2 class="section-title fade-in lang-en" style="display:none">Supported AI Providers</h2>
   </div>
   <div class="providers-wrap fade-in">
     <div class="providers-fade providers-fade-l"></div>
@@ -263,24 +339,31 @@ body::after{content:'';position:fixed;top:0;left:0;width:100%;height:4px;backgro
 <!-- QUICKSTART -->
 <section class="section">
   <div class="container">
-    <h2 class="section-title fade-in">快速开始</h2>
+    <h2 class="section-title fade-in lang-zh">快速开始</h2>
+    <h2 class="section-title fade-in lang-en" style="display:none">Quick Start</h2>
     <div class="steps">
       <div class="step fade-in">
         <div class="step-num">1</div>
-        <h3>安装扩展</h3>
-        <p>下载 CRX 包，在 Chrome 扩展页加载已解压的扩展程序</p>
+        <h3 class="lang-zh">安装扩展</h3>
+        <h3 class="lang-en" style="display:none">Install</h3>
+        <p class="lang-zh">下载 CRX 包，在 Chrome 扩展页加载已解压的扩展程序</p>
+        <p class="lang-en" style="display:none">Download the zip, load unpacked in Chrome extensions page</p>
         <div class="step-line"></div>
       </div>
       <div class="step fade-in">
         <div class="step-num">2</div>
-        <h3>配置模型</h3>
-        <p>选择提供商预设，填入 API Key，一键保存</p>
+        <h3 class="lang-zh">配置模型</h3>
+        <h3 class="lang-en" style="display:none">Configure</h3>
+        <p class="lang-zh">选择提供商预设，填入 API Key，一键保存</p>
+        <p class="lang-en" style="display:none">Pick a provider preset, enter your API Key, save</p>
         <div class="step-line"></div>
       </div>
       <div class="step fade-in">
         <div class="step-num">3</div>
-        <h3>开始使用</h3>
-        <p>点击浮动按钮或快捷键打开侧边栏，与 AI 对话</p>
+        <h3 class="lang-zh">开始使用</h3>
+        <h3 class="lang-en" style="display:none">Start Using</h3>
+        <p class="lang-zh">点击浮动按钮或快捷键打开侧边栏，与 AI 对话</p>
+        <p class="lang-en" style="display:none">Click the floating button or press the shortcut to open the sidebar</p>
       </div>
     </div>
   </div>
@@ -289,14 +372,65 @@ body::after{content:'';position:fixed;top:0;left:0;width:100%;height:4px;backgro
 <!-- FOOTER -->
 <footer class="footer">
   <p>
-    <a href="guide.html">使用指南</a>
-    <a href="mailto:xiaoling6668882026@outlook.com">联系我们：xiaoling6668882026@outlook.com</a>
+    <a href="guide.html" class="lang-zh">使用指南</a>
+    <a href="guide.html" class="lang-en" style="display:none">User Guide</a>
+    <a href="mailto:xiaoling6668882026@outlook.com">xiaoling6668882026@outlook.com</a>
   </p>
   <p style="margin-top:8px">© 2026 小灵 LingBot · MIT License · v2.0.2</p>
 </footer>
 
 <script>
-// Starfield particles
+// ===== Language Switch =====
+function switchLang(lang){
+  document.body.classList.toggle('lang-en',lang==='en');
+  document.body.className=lang==='en'?'en':'';
+  document.querySelectorAll('.lang-btn').forEach(b=>{
+    b.classList.toggle('active',b.dataset.lang===lang);
+  });
+  // Update typewriter
+  window._lang=lang;
+  localStorage.setItem('lang',lang);
+}
+
+// Auto-detect language
+(function(){
+  const saved=localStorage.getItem('lang');
+  if(saved){switchLang(saved);return}
+  const nav=(navigator.language||navigator.userLanguage||'zh').toLowerCase();
+  switchLang(nav.startsWith('zh')?'zh':'en');
+})();
+
+// ===== Typewriter (bilingual) =====
+(function(){
+  const el=document.getElementById('heroSubtitle');
+  const texts={zh:'用语音或文字，指挥 AI 帮你操作浏览器',en:'Control your browser with AI — by voice or text'};
+  const cursor=el.querySelector('.cursor');
+  let i=0,typing=true;
+  function getText(){return texts[window._lang||'zh']}
+  function clearText(){
+    const nodes=el.childNodes;
+    for(let j=nodes.length-1;j>=0;j--){if(nodes[j].nodeType===3)nodes[j].remove()}
+    i=0;
+  }
+  function type(){
+    const text=getText();
+    if(i<text.length){cursor.before(document.createTextNode(text[i]));i++;setTimeout(type,120+Math.random()*60)}
+    else{setTimeout(erase,2000)}
+  }
+  function erase(){
+    if(i>0){const nodes=el.childNodes;for(let j=nodes.length-1;j>=0;j--){if(nodes[j].nodeType===3){nodes[j].remove();i--;break}}setTimeout(erase,60)}
+    else{setTimeout(type,500)}
+  }
+  // Restart typewriter on language switch
+  const origSwitch=window.switchLang;
+  window.switchLang=function(lang){
+    origSwitch(lang);
+    clearText();setTimeout(type,300);
+  };
+  setTimeout(type,800);
+})();
+
+// ===== Starfield particles =====
 (function(){
   const c=document.getElementById('starfield'),ctx=c.getContext('2d');
   let w,h,stars=[];
@@ -304,58 +438,46 @@ body::after{content:'';position:fixed;top:0;left:0;width:100%;height:4px;backgro
   resize();addEventListener('resize',resize);
   function draw(){
     ctx.clearRect(0,0,w,h);
-    for(const s of stars){
-      s.a+=s.da;if(s.a>.9||s.a<.1)s.da=-s.da;
-      ctx.beginPath();ctx.arc(s.x,s.y,s.r,0,Math.PI*2);
-      ctx.fillStyle=`rgba(0,229,255,${s.a})`;ctx.fill();
-    }
+    for(const s of stars){s.a+=s.da;if(s.a>.9||s.a<.1)s.da=-s.da;ctx.beginPath();ctx.arc(s.x,s.y,s.r,0,Math.PI*2);ctx.fillStyle=`rgba(0,229,255,${s.a})`;ctx.fill()}
     requestAnimationFrame(draw);
   }
   draw();
 })();
 
-// Mouse glow
+// ===== Mouse glow =====
 (function(){
   const g=document.getElementById('mouseGlow');
   document.addEventListener('mousemove',e=>{g.style.left=e.clientX+'px';g.style.top=e.clientY+'px'});
 })();
 
-// Typewriter effect
-(function(){
-  const el=document.getElementById('heroSubtitle');
-  const text='用语音或文字，指挥 AI 帮你操作浏览器';
-  const cursor=el.querySelector('.cursor');
-  let i=0;
-  function type(){
-    if(i<text.length){
-      cursor.before(document.createTextNode(text[i]));
-      i++;
-      setTimeout(type,120+Math.random()*60);
-    }else{
-      setTimeout(erase,2000);
-    }
-  }
-  function erase(){
-    if(i>0){
-      const nodes=el.childNodes;
-      for(let j=nodes.length-1;j>=0;j--){
-        if(nodes[j].nodeType===3){nodes[j].remove();i--;break}
-      }
-      setTimeout(erase,60);
-    }else{
-      setTimeout(type,500);
-    }
-  }
-  setTimeout(type,800);
-})();
-
-// Scroll fade-in
+// ===== Scroll fade-in =====
 (function(){
   const els=document.querySelectorAll('.fade-in');
   const io=new IntersectionObserver((entries)=>{
     entries.forEach(e=>{if(e.isIntersecting){e.target.classList.add('visible');io.unobserve(e.target)}});
   },{threshold:.15});
   els.forEach(el=>io.observe(el));
+})();
+
+// ===== Visit & Download Counter =====
+(function(){
+  const API_BASE='https://lingbot-stats.lingbot.workers.dev';
+  // Record visit
+  fetch(API_BASE+'/api/visit',{method:'POST'}).catch(()=>{});
+  // Load counts
+  fetch(API_BASE+'/api/stats').then(r=>r.json()).then(d=>{
+    document.getElementById('visitCount').textContent=d.visits||'--';
+    document.getElementById('downloadCount').textContent=d.downloads||'--';
+  }).catch(()=>{
+    document.getElementById('visitCount').textContent='--';
+    document.getElementById('downloadCount').textContent='--';
+  });
+  // Track download clicks
+  document.querySelectorAll('.btn-primary').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      fetch(API_BASE+'/api/download',{method:'POST'}).catch(()=>{});
+    });
+  });
 })();
 </script>
 </body>

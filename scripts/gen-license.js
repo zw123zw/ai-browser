@@ -67,7 +67,17 @@ function loadPrivateKey() {
   return readFileSync(PRIVATE_KEY_PATH, 'utf-8').trim();
 }
 
-function loadBuildSeed() {
+function loadBuildSeed(releaseDir) {
+  // If release dir specified, read .build-seed from there
+  if (releaseDir) {
+    const releaseSeedPath = join(releaseDir, '.build-seed');
+    if (existsSync(releaseSeedPath)) {
+      return readFileSync(releaseSeedPath, 'utf-8').trim();
+    }
+    console.error(`Build seed not found in ${releaseSeedPath}`);
+    process.exit(1);
+  }
+  // Default: read from project root
   if (existsSync(BUILD_SEED_PATH)) {
     return readFileSync(BUILD_SEED_PATH, 'utf-8').trim();
   }
@@ -158,15 +168,17 @@ if (hasFlag('reset')) {
   process.exit(0);
 }
 
-const version = getArg('version') || JSON.parse(readFileSync(join(import.meta.dirname, '..', 'package.json'), 'utf-8')).version;
+const version = JSON.parse(readFileSync(join(import.meta.dirname, '..', 'package.json'), 'utf-8')).version;
 const count = parseInt(getArg('count') || '1');
 const days = parseInt(getArg('days') || '30');
 const fingerprint = getArg('fingerprint');
 const output = getArg('output');
+const releaseDir = getArg('release');
 
-console.log(`Version: ${version} ${getArg('version') ? '(指定)' : '(自动读取 package.json)'}`);
+console.log(`Version: ${version} (package.json)`);
+if (releaseDir) console.log(`Release dir: ${releaseDir}`);
 
-const buildSeed = loadBuildSeed();
+const buildSeed = loadBuildSeed(releaseDir);
 const privateKey = loadPrivateKey();
 
 console.log(`Generating ${count} activation codes...`);

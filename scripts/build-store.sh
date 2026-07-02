@@ -85,10 +85,15 @@ else
   echo "  Warning: $BUILD_DIR not found, skipping"
 fi
 
-# Step 6: Package zip
+# Step 6: Package zip + Generate activation codes
 echo ""
 echo "[6/7] Packaging zip..."
 ZIP_NAME="lingbot-v${NEW_VERSION}-${BUILD_SEED_SHORT}.zip"
+RELEASE_DIR=".output/release-v${NEW_VERSION}-${BUILD_TIME}-${BUILD_SEED_SHORT}"
+
+mkdir -p "$RELEASE_DIR"
+# Save build seed to release folder
+echo "$BUILD_SEED" > "$RELEASE_DIR/.build-seed"
 
 if [ -d "$BUILD_DIR" ]; then
   node -e "
@@ -97,7 +102,7 @@ if [ -d "$BUILD_DIR" ]; then
     const JSZip = require('jszip');
     const zip = new JSZip();
     const buildDir = '${BUILD_DIR}';
-    const zipPath = '.output/${ZIP_NAME}';
+    const zipPath = '${RELEASE_DIR}/${ZIP_NAME}';
     function addDir(dir, prefix) {
       for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
         const fullPath = path.join(dir, entry.name);
@@ -113,7 +118,7 @@ if [ -d "$BUILD_DIR" ]; then
     zip.generateAsync({ type: 'nodebuffer' }).then(buf => {
       fs.writeFileSync(zipPath, buf);
       console.log('  Package: ' + zipPath + ' (' + (buf.length/1024/1024).toFixed(1) + 'MB)');
-      // 删除构建目录，只保留 zip
+      // 删除构建目录
       fs.rmSync(buildDir, { recursive: true, force: true });
       console.log('  Cleaned: ' + buildDir);
     });
@@ -122,16 +127,23 @@ else
   echo "  Warning: $BUILD_DIR not found, skipping packaging"
 fi
 
+# Step 7: Generate activation codes
+echo ""
+echo "[7/7] Generating activation codes..."
+LICENSE_FILE="${RELEASE_DIR}/licenses-v${NEW_VERSION}.csv"
+node scripts/gen-license.js --count=100 --days=30 --output="${LICENSE_FILE}"
+
 echo ""
 echo "=========================================="
 echo "  Build Complete!"
 echo "=========================================="
 echo "  Version: ${NEW_VERSION}"
 echo "  Build seed: ${BUILD_SEED_SHORT}"
-echo "  Directory: ${BUILD_DIR}"
-echo "  Package: .output/${ZIP_NAME}"
+echo "  Release: ${RELEASE_DIR}/"
+echo "    ├── ${ZIP_NAME}"
+echo "    └── licenses-v${NEW_VERSION}.csv"
 echo ""
 echo "Next steps:"
 echo "  1. Test the extension in Chrome"
-echo "  2. Upload to Chrome Web Store Developer Dashboard"
-echo "  3. Generate activation codes: node scripts/gen-license.js --version ${NEW_VERSION} --count 100 --days 30"
+echo "  2. Upload ${ZIP_NAME} to Chrome Web Store"
+echo "  3. Upload licenses-v${NEW_VERSION}.csv to Gumroad/爱发电"
