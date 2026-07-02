@@ -158,17 +158,13 @@ if (hasFlag('reset')) {
   process.exit(0);
 }
 
-const version = getArg('version');
+const version = getArg('version') || JSON.parse(readFileSync(join(import.meta.dirname, '..', 'package.json'), 'utf-8')).version;
 const count = parseInt(getArg('count') || '1');
 const days = parseInt(getArg('days') || '30');
 const fingerprint = getArg('fingerprint');
 const output = getArg('output');
 
-if (!version) {
-  console.error('Missing --version argument');
-  console.error('Usage: node gen-license.js --version=1.8.4 --count=100 --days=30');
-  process.exit(1);
-}
+console.log(`Version: ${version} ${getArg('version') ? '(指定)' : '(自动读取 package.json)'}`);
 
 const buildSeed = loadBuildSeed();
 const privateKey = loadPrivateKey();
