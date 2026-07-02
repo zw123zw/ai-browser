@@ -3017,3 +3017,56 @@ table {
 .aib-expired-btn:hover {
   background: #4338ca;
 }
+
+.aib-expired-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  background: none;
+  border: none;
+  font-size: 18px;
+  color: #999;
+  cursor: pointer;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+}
+
+.aib-expired-close:hover {
+  background: rgba(0, 0, 0, 0.06);
+  color: #333;
+}
+
+.aib-expired-input-group {
+  display: flex;
+  gap: 0;
+  margin-bottom: 8px;
+}
+
+.aib-expired-input {
+  flex: 1;
+  padding: 10px 12px;
+  border: 1px solid #e5e7eb;
+  border-right: none;
+  border-radius: 8px 0 0 8px;
+  font-size: 13px;
+  outline: none;
+  font-family: inherit;
+}
+
+.aib-expired-input:focus {
+  border-color: #4f46e5;
+}
+
+.aib-expired-error {
+  color: #ef4444;
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+.aib-expired-card {
+  position: relative;
+}

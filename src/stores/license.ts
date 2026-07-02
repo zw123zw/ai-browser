@@ -30,9 +30,6 @@ export const useLicenseStore = defineStore('aib-license', () => {
   /** Days remaining */
   const daysLeft = ref<number>(0);
 
-  /** Whether license is expired */
-  const expired = ref<boolean>(false);
-
   /** Whether wasm module is loaded */
   const initialized = ref<boolean>(false);
 
@@ -54,7 +51,7 @@ export const useLicenseStore = defineStore('aib-license', () => {
   const isActivated = computed(() => status.value === 'active');
 
   /** Whether expired */
-  const isExpired = computed(() => status.value === 'expired' || expired.value);
+  const isExpired = computed(() => status.value === 'expired');
 
   /** Status display text */
   const statusText = computed(() => {
@@ -91,7 +88,6 @@ export const useLicenseStore = defineStore('aib-license', () => {
 
       status.value = result.status;
       daysLeft.value = result.daysLeft;
-      expired.value = result.expired;
       initialized.value = true;
 
       log.info('License initialized', {
@@ -120,7 +116,6 @@ export const useLicenseStore = defineStore('aib-license', () => {
       if (result.valid) {
         status.value = result.status || 'active';
         daysLeft.value = result.daysLeft || 0;
-        expired.value = false;
         log.info('License activated', { daysLeft: result.daysLeft });
         return { success: true };
       } else {
@@ -157,7 +152,6 @@ export const useLicenseStore = defineStore('aib-license', () => {
       const result = await checkLicense();
       status.value = result.status;
       daysLeft.value = result.daysLeft;
-      expired.value = result.expired;
     } catch (err) {
       log.error('Refresh failed', err);
     }
@@ -170,7 +164,6 @@ export const useLicenseStore = defineStore('aib-license', () => {
     await clearLicense();
     status.value = 'unknown';
     daysLeft.value = 0;
-    expired.value = false;
     initialized.value = false;
   }
 
