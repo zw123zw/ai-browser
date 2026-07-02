@@ -504,17 +504,19 @@ onMounted(async () => {
     log.error('Store 初始化失败:', error);
   }
 
-  // 初始化授权系统（Wasm 加载 + 试用期/有效期检查）
-  try {
-    await licenseStore.init();
-    log.info('授权系统初始化完成', { status: licenseStore.status, daysLeft: licenseStore.daysLeft });
-    // 只有明确过期时才显示激活弹框
-    if (licenseStore.status === 'expired') {
-      showExpired.value = true;
+  // 初始化授权系统（延迟，避免与其他 store 的响应式冲突）
+  setTimeout(async () => {
+    try {
+      await licenseStore.init();
+      log.info('授权系统初始化完成', { status: licenseStore.status, daysLeft: licenseStore.daysLeft });
+      // 只有明确过期时才显示激活弹框
+      if (licenseStore.status === 'expired') {
+        showExpired.value = true;
+      }
+    } catch (error) {
+      log.error('授权系统初始化失败:', error);
     }
-  } catch (error) {
-    log.error('授权系统初始化失败:', error);
-  }
+  }, 500);
 
   initI18n(settingsStore.settings.locale || 'zh-CN');
   applyTheme();
