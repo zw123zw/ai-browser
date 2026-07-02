@@ -171,7 +171,6 @@ export const useLicenseStore = defineStore('aib-license', () => {
     // State
     status,
     daysLeft,
-    expired,
     initialized,
     loading,
     error,
