@@ -25,7 +25,7 @@ package.json                            (项目根目录，项目信息同步)
 ```
 
 > **本技能生成 `assets/guide-zh.md` 和 `assets/guide-en.md`，并同步 `index.html`、`README.md`、`README-en.md` 和 `package.json` 中的项目信息。**
-> 生成后执行 `cp -r docs/site/assets/* public/` 完成拷贝（guide 文件 + 图片资源）。
+> 生成后执行 `cp -r docs/site/assets public/assets` 完成拷贝（guide 文件 + 图片资源）。
 > **注意：** guide 文件放在 `docs/site/assets/` 下，不在 `docs/site/` 根目录。拷贝操作由本技能完成，打包脚本不负责。
 
 ## 触发命令
@@ -160,7 +160,7 @@ After installing the extension, click the toolbar icon to get started.
 7. 检测已删除功能（有章节但源文件已不存在）→ 移除该章节
 8. 同步更新 guide-en.md 中对应的英文章节
 9. 生成文件保存到 docs/site/assets/（guide-zh.md + guide-en.md）
-10. 拷贝整个 assets 到 public/：`cp -r docs/site/assets/* public/`
+10. 拷贝整个 assets 到 public/：`cp -r docs/site/assets public/assets`
 ```
 
 ### 变化检测方式
@@ -186,7 +186,7 @@ find src/ entrypoints/ -name "*.ts" -o -name "*.vue" -newer docs/site/assets/gui
 未变更章节：W 个（跳过）
 
 文档：docs/site/assets/guide-zh.md + guide-en.md
-同步：cp -r docs/site/assets/* public/（guide + 图片一起拷贝）
+同步：cp -r docs/site/assets public/assets（guide + 图片一起拷贝）
 ```
 
 ---
@@ -263,7 +263,7 @@ find src/ entrypoints/ -name "*.ts" -o -name "*.vue" -newer docs/site/assets/gui
 
 1. **先生成 `docs/site/assets/guide-zh.md`**（纯中文）
 2. **再生成 `docs/site/assets/guide-en.md`**（纯英文，结构与中文版完全对应）
-3. **拷贝整个 assets 到 public/**：`cp -r docs/site/assets/* public/`
+3. **拷贝整个 assets 到 public/**：`cp -r docs/site/assets public/assets`
 
 > ⚠️ 拷贝操作由本技能完成，打包脚本不负责拷贝。
 
