@@ -1,4 +1,7 @@
 import { defineConfig } from 'wxt';
+import { readFileSync } from 'fs';
+
+const pkg = JSON.parse(readFileSync('./package.json', 'utf-8'));
 
 // 参考: https://wxt.dev/api/config.html
 export default defineConfig({
@@ -8,6 +11,9 @@ export default defineConfig({
   vite: () => ({
     esbuild: { charset: 'ascii' },
     build: { cssMinify: 'esbuild' },
+    define: {
+      __APP_VERSION__: JSON.stringify(pkg.version),
+    },
   }),
   manifest: {
     name: '小灵 - AI 语音浏览器助手',

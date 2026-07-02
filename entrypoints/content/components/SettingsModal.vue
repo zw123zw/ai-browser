@@ -21,7 +21,7 @@ const voiceStore = useVoiceStore();
 const toast = useToast();
 const { t, locale, setLocale } = useI18n();
 
-const appVersion = '1.8.3';
+const appVersion = __APP_VERSION__;
 
 // ========== License & 缓存 ==========
 const licenseKey = ref('');
@@ -1208,14 +1208,6 @@ function importModels(e: Event) {
               </div>
             </div>
 
-            <!-- 版本号 + 链接 -->
-            <div class="aib-version-footer">
-              v{{ appVersion }}
-              <span class="aib-version-sep">·</span>
-              <a href="https://github.com/zw123zw/ai-browser" target="_blank" class="aib-version-link">官网</a>
-              <span class="aib-version-sep">·</span>
-              <a href="mailto:xiaoling6668882026@outlook.com" class="aib-version-link">联系邮箱（xiaoling6668882026@outlook.com）</a>
-            </div>
           </div>
 
           <!-- ========== 语音设置 ========== -->
@@ -1418,6 +1410,14 @@ function importModels(e: Event) {
               <button class="aib-btn aib-btn-footer-primary" @click="saveVoice">{{ t('settings.general.save') }}</button>
             </div>
           </div>
+        </div>
+        <!-- 版本号 + 链接（固定底部） -->
+        <div class="aib-version-footer">
+          v{{ appVersion }}
+          <span class="aib-version-sep">·</span>
+          <a href="https://github.com/zw123zw/ai-browser" target="_blank" class="aib-version-link">官网</a>
+          <span class="aib-version-sep">·</span>
+          <a href="mailto:xiaoling6668882026@outlook.com" class="aib-version-link">联系邮箱（xiaoling6668882026@outlook.com）</a>
         </div>
       </div>
     </div>
@@ -2360,15 +2360,15 @@ function importModels(e: Event) {
 .aib-docs-content blockquote { border-left: 4px solid var(--aib-primary-soft); padding: 10px 16px; margin: 8px 0 16px; background: var(--aib-primary-glow); border-radius: 0 8px 8px 0; font-size: 14px; color: var(--aib-text-soft); }
 .aib-docs-content img { max-width: 100%; border-radius: 8px; margin: 10px 0; }
 
-/* 版本号 + 链接 */
+/* 版本号 + 链接（固定底部） */
 .aib-version-footer {
-  padding-top: 16px;
-  margin-top: 8px;
+  padding: 12px 16px;
   border-top: 1px solid var(--aib-border);
   font-size: 12px;
   color: var(--aib-text-soft);
   text-align: center;
   opacity: 0.7;
+  flex-shrink: 0;
 }
 
 .aib-version-sep {

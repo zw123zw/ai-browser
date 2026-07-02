@@ -1,5 +1,8 @@
 // 通用类型定义
 
+/** Vite 注入的版本号 */
+declare const __APP_VERSION__: string;
+
 /** 附件类型分类 */
 export type AttachmentType = 'image' | 'text' | 'code' | 'pdf' | 'word' | 'excel' | 'binary';
 

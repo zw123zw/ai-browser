@@ -130,23 +130,24 @@ function generateCode(version, days, fingerprint, buildSeed, privateKey) {
   const expireBytes = Buffer.alloc(4);
   expireBytes.writeUInt32BE(Math.min(expireTsLow, 0xFFFFFFFF), 0);
 
-  // Calculate fingerprint hash
-  const fpHash = createHash('sha256').update(fingerprint || 'default').digest();
-  const fpHashShort = fpHash.slice(0, 4);
+  // Calculate fingerprint hash (all zeros = not bound to device)
+  const fpHash = fingerprint
+    ? createHash('sha256').update(fingerprint).digest().slice(0, 4)
+    : Buffer.alloc(4, 0);  // 4 bytes of zeros = no device binding
 
   // Generate HMAC signature
   const versionStr = `${versionMajor}.${versionMinor}`;
   const hmacKey = createHash('sha256')
     .update(`verify-${versionStr}-${buildSeed}-${privateKey}`)
     .digest();
-  const dataToSign = `${versionStr}|${expireTs}|${fpHashShort.toString('hex')}|${fingerprint || 'default'}`;
+  const dataToSign = `${versionStr}|${expireTs}|${fpHash.toString('hex')}|${fingerprint || 'none'}`;
   const signature = createHmac('sha256', hmacKey).update(dataToSign).digest();
   const sigShort = signature.slice(0, 4);
 
   // Build code parts
   const part1Buffer = Buffer.from([versionMajor, versionMinor, expireMonth & 0xFF, randomBytes(1)[0]]);
   const part2Buffer = expireBytes;
-  const part3Buffer = Buffer.concat([fpHashShort, sigShort]);
+  const part3Buffer = Buffer.concat([fpHash, sigShort]);
 
   // Encode as base32
   const part1 = base32Encode(part1Buffer);

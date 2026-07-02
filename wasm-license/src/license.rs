@@ -134,22 +134,26 @@ pub fn verify_code(code: &str, fingerprint: &str, now: u64) -> String {
     // Extract fingerprint_hash from part3 (4 bytes)
     let fp_hash_from_code = &part3[..4];
 
-    // Verify fingerprint binding
-    let fp_hash = crypto::sha256(fingerprint.as_bytes());
-    if fp_hash[..4] != *fp_hash_from_code {
-        return r#"{"valid":false,"error":"设备不匹配"}"#.to_string();
+    // Verify fingerprint binding (skip if all zeros = not bound to device)
+    let is_unbound = fp_hash_from_code.iter().all(|&b| b == 0);
+    if !is_unbound {
+        let fp_hash = crypto::sha256(fingerprint.as_bytes());
+        if fp_hash[..4] != *fp_hash_from_code {
+            return r#"{"valid":false,"error":"设备不匹配"}"#.to_string();
+        }
     }
 
     // Verify Ed25519 signature (from part3 last 4 bytes + implicit)
     // For now, use HMAC verification (Ed25519 will be added with key generation)
     let version_str = format!("{}.{}", version_major, version_minor);
     let verify_key = crypto::derive_key(&format!("verify-{}-{}", version_str, BUILD_SEED));
+    let fp_for_sig = if is_unbound { "none" } else { fingerprint };
     let data_to_verify = format!(
         "{}|{}|{}|{}",
         version_str,
         expire_ts,
-        hex_encode(&fp_hash[..4]),
-        fingerprint
+        hex_encode(fp_hash_from_code),
+        fp_for_sig
     );
 
     // Signature is embedded in the code structure
