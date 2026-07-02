@@ -23,8 +23,6 @@ echo "  Time: ${BUILD_TIME}"
 # Clean
 rm -rf .output
 
-# Guide files and assets are synced by /site-gen skill, not here
-
 # Build with logging enabled
 echo ""
 echo "[1/2] Building extension (VITE_LOG_ENABLED=true)..."

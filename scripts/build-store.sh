@@ -67,7 +67,6 @@ echo "  Wasm build complete"
 # Step 4: Build extension
 echo ""
 echo "[4/7] Building extension..."
-# Guide files and assets are synced by /site-gen skill, not here
 BUILD_SEED_SHORT="${BUILD_SEED:0:8}"
 BUILD_DIR=".output/lingbot-v${NEW_VERSION}-${BUILD_TIME}-${BUILD_SEED_SHORT}"
 npx wxt build

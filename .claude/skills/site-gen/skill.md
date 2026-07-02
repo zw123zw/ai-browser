@@ -10,23 +10,23 @@ description: "扫描项目代码和 PRD，生成中英文使用指南（guide-zh
 ## 输出文件
 
 ```
-docs/site/                         public/
-├── guide-zh.md   ──────────────→  guide-zh.md     (中文，App 内文档 + Web 站)
-├── guide-en.md   ──────────────→  guide-en.md     (英文，App 内文档 + Web 站)
-├── guide.html                     (渲染壳，手动维护，自动加载对应语言 MD)
-├── index.html                     (首页，项目信息同步)
-└── assets/       ──────────────→  assets/          (截图/图片资源，整个文件夹拷贝)
-    └── img/
-        └── *.png
+docs/site/                              public/
+├── guide.html                          (渲染壳，引用 assets/guide-*.md)
+├── index.html                          (首页，项目信息同步)
+└── assets/       ──────────────────→   (整个文件夹拷贝到 public/)
+    ├── guide-zh.md   ──────────────→   guide-zh.md   (中文，App 内文档 + Web 站)
+    ├── guide-en.md   ──────────────→   guide-en.md   (英文，App 内文档 + Web 站)
+    └── img/                            img/            (截图/图片资源)
+        └── *.png                           └── *.png
 
-README.md                          (中文版，项目信息 + 文档链接同步)
-README-en.md                       (英文版，项目信息 + 文档链接同步)
-package.json                       (项目根目录，项目信息同步)
+README.md                               (中文版，项目信息 + 文档链接同步)
+README-en.md                            (英文版，项目信息 + 文档链接同步)
+package.json                            (项目根目录，项目信息同步)
 ```
 
-> **本技能生成 `guide-zh.md` 和 `guide-en.md`，并同步 `index.html`、`README.md`、`README-en.md` 和 `package.json` 中的项目信息。**
-> 生成后自动复制 guide 文件 + assets 文件夹到 `public/` 目录（供 App 内 `chrome.runtime.getURL` 访问）。
-> **注意：** 打包脚本（build-store.sh / build-all.sh）不再负责拷贝，全部由本技能完成。
+> **本技能生成 `assets/guide-zh.md` 和 `assets/guide-en.md`，并同步 `index.html`、`README.md`、`README-en.md` 和 `package.json` 中的项目信息。**
+> 生成后执行 `cp -r docs/site/assets/* public/` 完成拷贝（guide 文件 + 图片资源）。
+> **注意：** guide 文件放在 `docs/site/assets/` 下，不在 `docs/site/` 根目录。拷贝操作由本技能完成，打包脚本不负责。
 
 ## 触发命令
 
@@ -127,7 +127,7 @@ After installing the extension, click the toolbar icon to get started.
 
 ### 首次检测
 
-检查 `docs/site/guide-zh.md` 是否存在：
+检查 `docs/site/assets/guide-zh.md` 是否存在：
 - **不存在** → 全量生成
 - **存在** → 增量更新
 
@@ -159,8 +159,8 @@ After installing the extension, click the toolbar icon to get started.
 6. 检测新增模块（有源文件但无对应章节）→ 读取所有源文件，追加新章节
 7. 检测已删除功能（有章节但源文件已不存在）→ 移除该章节
 8. 同步更新 guide-en.md 中对应的英文章节
-9. 复制 guide-zh.md + guide-en.md 到 public/
-10. 复制 docs/site/assets/ 到 public/assets/（增量同步图片资源）
+9. 生成文件保存到 docs/site/assets/（guide-zh.md + guide-en.md）
+10. 拷贝整个 assets 到 public/：`cp -r docs/site/assets/* public/`
 ```
 
 ### 变化检测方式
@@ -171,7 +171,7 @@ git diff --name-only HEAD -- src/ entrypoints/ 2>/dev/null
 git diff --name-only --cached -- src/ entrypoints/ 2>/dev/null
 git ls-files --others --exclude-standard -- src/ entrypoints/ 2>/dev/null
 # fallback: 文件 mtime
-find src/ entrypoints/ -name "*.ts" -o -name "*.vue" -newer docs/site/guide-zh.md
+find src/ entrypoints/ -name "*.ts" -o -name "*.vue" -newer docs/site/assets/guide-zh.md
 ```
 
 ### 增量报告
@@ -185,8 +185,8 @@ find src/ entrypoints/ -name "*.ts" -o -name "*.vue" -newer docs/site/guide-zh.m
 删除章节：Z 个（如有）
 未变更章节：W 个（跳过）
 
-文档：docs/site/guide-zh.md + guide-en.md
-同步：public/guide-zh.md + guide-en.md + assets/
+文档：docs/site/assets/guide-zh.md + guide-en.md
+同步：cp -r docs/site/assets/* public/（guide + 图片一起拷贝）
 ```
 
 ---
@@ -204,7 +204,7 @@ git tag --sort=-creatordate | head -1
 
 ### Step 1: 判断模式
 
-检查 `docs/site/guide-zh.md` 是否存在：
+检查 `docs/site/assets/guide-zh.md` 是否存在：
 - 不存在 → **全量模式**，执行 Step 2a
 - 存在 → **增量模式**，执行 Step 2b
 
@@ -239,10 +239,10 @@ git tag --sort=-creatordate | head -1
 git diff --name-only HEAD -- src/ entrypoints/ 2>/dev/null
 git diff --name-only --cached -- src/ entrypoints/ 2>/dev/null
 git ls-files --others --exclude-standard -- src/ entrypoints/ 2>/dev/null
-find src/ entrypoints/ -name "*.ts" -o -name "*.vue" -newer docs/site/guide-zh.md
+find src/ entrypoints/ -name "*.ts" -o -name "*.vue" -newer docs/site/assets/guide-zh.md
 ```
 
-1. 读取现有 `docs/site/guide-zh.md`，按 `##` 标题拆分为章节
+1. 读取现有 `docs/site/assets/guide-zh.md`，按 `##` 标题拆分为章节
 2. 匹配章节映射表，确定需要更新的章节
 3. ★ **读取变化章节对应的【所有】源文件**（不是只读变化的文件）
 4. 检测新增模块/已删除模块
@@ -261,12 +261,11 @@ find src/ entrypoints/ -name "*.ts" -o -name "*.vue" -newer docs/site/guide-zh.m
 
 ### Step 3: 生成 guide-zh.md + guide-en.md + 同步到 public/
 
-1. **先生成 guide-zh.md**（纯中文）
-2. **再生成 guide-en.md**（纯英文，结构与中文版完全对应）
-3. **复制 guide 文件到 public/**：`cp docs/site/guide-zh.md docs/site/guide-en.md public/`
-4. **复制 assets 到 public/**：`cp -r docs/site/assets public/assets`（截图/图片资源，整个文件夹同步）
+1. **先生成 `docs/site/assets/guide-zh.md`**（纯中文）
+2. **再生成 `docs/site/assets/guide-en.md`**（纯英文，结构与中文版完全对应）
+3. **拷贝整个 assets 到 public/**：`cp -r docs/site/assets/* public/`
 
-> ⚠️ 这一步替代了 build-store.sh / build-all.sh 中的拷贝逻辑。打包脚本不再负责拷贝文档。
+> ⚠️ 拷贝操作由本技能完成，打包脚本不负责拷贝。
 
 ---
 

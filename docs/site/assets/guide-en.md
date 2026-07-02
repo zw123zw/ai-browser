@@ -2,7 +2,7 @@
 
 > AI Voice Browser Assistant
 
-**Version:** v1.8.3 | **License:** MIT
+**Version:** v2.0.2 | **License:** MIT
 
 ---
 
@@ -786,4 +786,4 @@ Type `/` → menu appears → ↑↓ to navigate → Tab/Enter to select → Esc
 
 ---
 
-> **LingBot** v1.8.3 | MIT License
+> **LingBot** v2.0.2 | MIT License

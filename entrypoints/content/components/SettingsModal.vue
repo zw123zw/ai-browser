@@ -106,8 +106,8 @@ const docsContentEl = ref<HTMLElement | null>(null);
 
 const md = new MarkdownIt({ html: false, linkify: true, typographer: true });
 
-import guideZh from '@/docs/site/guide-zh.md?raw';
-import guideEn from '@/docs/site/guide-en.md?raw';
+import guideZh from '@/docs/site/assets/guide-zh.md?raw';
+import guideEn from '@/docs/site/assets/guide-en.md?raw';
 
 function openDocs() {
   showDocs.value = true;
