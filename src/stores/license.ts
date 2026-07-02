@@ -42,16 +42,28 @@ export const useLicenseStore = defineStore('aib-license', () => {
   // ── Computed ──
 
   /** Whether license is active (trial or activated) */
-  const isActive = computed(() => status.value === 'trial' || status.value === 'active');
+  const isActive = computed(() => {
+    console.log('[license] isActive computed, status:', status.value);
+    return status.value === 'trial' || status.value === 'active';
+  });
 
   /** Whether trial period */
-  const isTrial = computed(() => status.value === 'trial');
+  const isTrial = computed(() => {
+    console.log('[license] isTrial computed, status:', status.value);
+    return status.value === 'trial';
+  });
 
   /** Whether activated (paid) */
-  const isActivated = computed(() => status.value === 'active');
+  const isActivated = computed(() => {
+    console.log('[license] isActivated computed, status:', status.value);
+    return status.value === 'active';
+  });
 
   /** Whether expired */
-  const isExpired = computed(() => status.value === 'expired');
+  const isExpired = computed(() => {
+    console.log('[license] isExpired computed, status:', status.value);
+    return status.value === 'expired';
+  });
 
   /** Status display text */
   const statusText = computed(() => {
@@ -74,6 +86,7 @@ export const useLicenseStore = defineStore('aib-license', () => {
    * Call this on app startup (App.vue onMounted)
    */
   async function init(): Promise<void> {
+    console.log('[license] init called, initialized:', initialized.value);
     if (initialized.value) return;
 
     loading.value = true;
