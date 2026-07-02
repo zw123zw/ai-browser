@@ -86,7 +86,7 @@ fi
 # Step 6: Package zip + Generate activation codes
 echo ""
 echo "[6/7] Packaging zip..."
-ZIP_NAME="lingbot-v${NEW_VERSION}-${BUILD_SEED_SHORT}.zip"
+ZIP_NAME="lingbot-v${NEW_VERSION}-${BUILD_TIME}.zip"
 RELEASE_DIR=".output/release-v${NEW_VERSION}-${BUILD_TIME}-${BUILD_SEED_SHORT}"
 
 mkdir -p "$RELEASE_DIR"

@@ -68,7 +68,7 @@ echo "  Test build complete"
 # Step 6: Package both zips
 echo ""
 echo "[5/6] Packaging zips..."
-PROD_ZIP="lingbot-v${VERSION}-${BUILD_SEED_SHORT}.zip"
+PROD_ZIP="lingbot-v${VERSION}-${BUILD_TIME}.zip"
 TEST_ZIP="lingbot-debug-v${VERSION}-${BUILD_TIME}.zip"
 
 node -e "

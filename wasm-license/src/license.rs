@@ -159,16 +159,16 @@ pub fn verify_code(code: &str, fingerprint: &str, now: u64) -> String {
     let sig_data = crypto::hmac_sign(&verify_key, data_to_verify.as_bytes());
     let sig_part = &sig_data[..4];
 
-    // Debug: log verification details
-    web_sys::console::log_1(&format!("[Wasm] BUILD_SEED: {}", BUILD_SEED).into());
-    web_sys::console::log_1(&format!("[Wasm] key_seed: {}", key_seed).into());
-    web_sys::console::log_1(&format!("[Wasm] data_to_verify: {}", data_to_verify).into());
-    web_sys::console::log_1(&format!("[Wasm] expected_sig: {}", hex_encode(sig_part)).into());
-    web_sys::console::log_1(&format!("[Wasm] actual_sig: {}", hex_encode(&part3[4..8])).into());
-
     // Verify signature matches (part3 last bytes)
     if part3.len() >= 8 && part3[4..8] != *sig_part {
-        return r#"{"valid":false,"error":"签名验证失败"}"#.to_string();
+        let debug_info = format!(
+            "签名验证失败|key_seed:{}|data:{}|expected:{}|actual:{}",
+            key_seed,
+            data_to_verify,
+            hex_encode(sig_part),
+            hex_encode(&part3[4..8])
+        );
+        return format!(r#"{{"valid":false,"error":"{}"}}"#, debug_info);
     }
 
     // Create active license blob
