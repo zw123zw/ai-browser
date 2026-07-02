@@ -166,7 +166,7 @@ const output = getArg('output');
 
 if (!version) {
   console.error('Missing --version argument');
-  console.error('Usage: node gen-license.js --version 1.8.4 --count 100 --days 30');
+  console.error('Usage: node gen-license.js --version=1.8.4 --count=100 --days=30');
   process.exit(1);
 }
 
@@ -184,16 +184,12 @@ for (let i = 0; i < count; i++) {
   codes.push(code);
 }
 
-if (output) {
-  // Write to CSV
-  const csv = ['code,version,expire', ...codes.map(c => {
-    const expireDate = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-    return `${c},${version},${expireDate}`;
-  })].join('\n');
-  writeFileSync(output, csv, 'utf-8');
-  console.log(`\n${count} codes written to ${output}`);
-} else {
-  // Print to console
-  console.log('\nGenerated codes:');
-  codes.forEach(c => console.log(c));
-}
+// Default output: docs/发布/licenses-v{version}.csv
+const outputFile = output || `docs/发布/licenses-v${version}.csv`;
+
+const csv = ['code,version,expire', ...codes.map(c => {
+  const expireDate = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+  return `${c},${version},${expireDate}`;
+})].join('\n');
+writeFileSync(outputFile, csv, 'utf-8');
+console.log(`\n${count} codes written to ${outputFile}`);

@@ -42,8 +42,9 @@ let licenseStatus: {
  */
 export async function initWasm(): Promise<void> {
   try {
-    // Dynamic import of wasm-bindgen generated JS glue
-    const wasm = await import('../../public/wasm/wasm_license.js');
+    // Load wasm glue JS via chrome.runtime URL (extension-safe path)
+    const glueUrl = chrome.runtime.getURL('wasm/wasm_license.js');
+    const wasm = await import(/* webpackIgnore: true */ glueUrl);
 
     // Load wasm binary manually (avoid MIME type issue in Chrome extensions)
     const wasmUrl = chrome.runtime.getURL('wasm/wasm_license_bg.wasm');
