@@ -145,7 +145,8 @@ pub fn verify_code(code: &str, fingerprint: &str, now: u64) -> String {
 
     // Verify HMAC signature
     let version_str = format!("{}.{}", version_major, version_minor);
-    let verify_key = crypto::derive_key(&format!("verify-{}-{}", version_str, BUILD_SEED));
+    let key_seed = format!("verify-{}-{}", version_str, BUILD_SEED);
+    let verify_key = crypto::derive_key(&key_seed);
     let fp_for_sig = if is_unbound { "none" } else { fingerprint };
     let data_to_verify = format!(
         "{}|{}|{}|{}",
@@ -159,10 +160,8 @@ pub fn verify_code(code: &str, fingerprint: &str, now: u64) -> String {
     let sig_part = &sig_data[..4];
 
     // Debug: log verification details
-    web_sys::console::log_1(&format!("[Wasm] version_str: {}", version_str).into());
-    web_sys::console::log_1(&format!("[Wasm] expire_ts: {}", expire_ts).into());
-    web_sys::console::log_1(&format!("[Wasm] fp_hash: {}", hex_encode(fp_hash_from_code)).into());
-    web_sys::console::log_1(&format!("[Wasm] fp_for_sig: {}", fp_for_sig).into());
+    web_sys::console::log_1(&format!("[Wasm] BUILD_SEED: {}", BUILD_SEED).into());
+    web_sys::console::log_1(&format!("[Wasm] key_seed: {}", key_seed).into());
     web_sys::console::log_1(&format!("[Wasm] data_to_verify: {}", data_to_verify).into());
     web_sys::console::log_1(&format!("[Wasm] expected_sig: {}", hex_encode(sig_part)).into());
     web_sys::console::log_1(&format!("[Wasm] actual_sig: {}", hex_encode(&part3[4..8])).into());

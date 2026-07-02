@@ -10,19 +10,23 @@ description: "扫描项目代码和 PRD，生成中英文使用指南（guide-zh
 ## 输出文件
 
 ```
-docs/site/                  public/
-├── guide-zh.md   ────────→ guide-zh.md   (中文，App 内文档 + Web 站)
-├── guide-en.md   ────────→ guide-en.md   (英文，App 内文档 + Web 站)
-├── guide.html              (渲染壳，手动维护，自动加载对应语言 MD)
-└── index.html              (首页，项目信息同步)
+docs/site/                         public/
+├── guide-zh.md   ──────────────→  guide-zh.md     (中文，App 内文档 + Web 站)
+├── guide-en.md   ──────────────→  guide-en.md     (英文，App 内文档 + Web 站)
+├── guide.html                     (渲染壳，手动维护，自动加载对应语言 MD)
+├── index.html                     (首页，项目信息同步)
+└── assets/       ──────────────→  assets/          (截图/图片资源，整个文件夹拷贝)
+    └── img/
+        └── *.png
 
-README.md                   (中文版，项目信息 + 文档链接同步)
-README-en.md                (英文版，项目信息 + 文档链接同步)
-package.json                (项目根目录，项目信息同步)
+README.md                          (中文版，项目信息 + 文档链接同步)
+README-en.md                       (英文版，项目信息 + 文档链接同步)
+package.json                       (项目根目录，项目信息同步)
 ```
 
 > **本技能生成 `guide-zh.md` 和 `guide-en.md`，并同步 `index.html`、`README.md`、`README-en.md` 和 `package.json` 中的项目信息。**
-> 生成后自动复制到 `public/` 目录（供 App 内 `chrome.runtime.getURL` 访问）。
+> 生成后自动复制 guide 文件 + assets 文件夹到 `public/` 目录（供 App 内 `chrome.runtime.getURL` 访问）。
+> **注意：** 打包脚本（build-store.sh / build-all.sh）不再负责拷贝，全部由本技能完成。
 
 ## 触发命令
 
@@ -156,6 +160,7 @@ After installing the extension, click the toolbar icon to get started.
 7. 检测已删除功能（有章节但源文件已不存在）→ 移除该章节
 8. 同步更新 guide-en.md 中对应的英文章节
 9. 复制 guide-zh.md + guide-en.md 到 public/
+10. 复制 docs/site/assets/ 到 public/assets/（增量同步图片资源）
 ```
 
 ### 变化检测方式
@@ -181,7 +186,7 @@ find src/ entrypoints/ -name "*.ts" -o -name "*.vue" -newer docs/site/guide-zh.m
 未变更章节：W 个（跳过）
 
 文档：docs/site/guide-zh.md + guide-en.md
-同步：public/guide-zh.md + guide-en.md
+同步：public/guide-zh.md + guide-en.md + assets/
 ```
 
 ---
@@ -254,11 +259,14 @@ find src/ entrypoints/ -name "*.ts" -o -name "*.vue" -newer docs/site/guide-zh.m
 - ❌ 错误：只读 `pipeline.ts` → 重写章节
 - ✅ 正确：读取 `src/input/` 下所有 `.ts` + `src/composables/usePipeline.ts` → 重写章节
 
-### Step 3: 生成 guide-zh.md + guide-en.md
+### Step 3: 生成 guide-zh.md + guide-en.md + 同步到 public/
 
 1. **先生成 guide-zh.md**（纯中文）
 2. **再生成 guide-en.md**（纯英文，结构与中文版完全对应）
-3. **复制到 public/**：`cp docs/site/guide-zh.md public/ && cp docs/site/guide-en.md public/`
+3. **复制 guide 文件到 public/**：`cp docs/site/guide-zh.md docs/site/guide-en.md public/`
+4. **复制 assets 到 public/**：`cp -r docs/site/assets public/assets`（截图/图片资源，整个文件夹同步）
+
+> ⚠️ 这一步替代了 build-store.sh / build-all.sh 中的拷贝逻辑。打包脚本不再负责拷贝文档。
 
 ---
 

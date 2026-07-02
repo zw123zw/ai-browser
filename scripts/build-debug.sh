@@ -23,9 +23,7 @@ echo "  Time: ${BUILD_TIME}"
 # Clean
 rm -rf .output
 
-# Copy guides
-cp docs/site/guide-zh.md public/guide-zh.md
-cp docs/site/guide-en.md public/guide-en.md
+# Guide files and assets are synced by /site-gen skill, not here
 
 # Build with logging enabled
 echo ""

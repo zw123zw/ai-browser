@@ -13,9 +13,17 @@
  * - Part 3: fingerprint_hash low 4 bytes + HMAC signature (base32)
  */
 
-import { createHash, createHmac, randomBytes } from 'crypto';
+import { createHash, createHmac, randomBytes, pbkdf2Sync } from 'crypto';
 import { writeFileSync, readFileSync, existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
+
+// Must match wasm crypto.rs constants
+const PBKDF2_ITERATIONS = 100000;
+const PBKDF2_SALT = 'aib-license-salt-v1';
+
+function deriveKey(seed) {
+  return pbkdf2Sync(seed, PBKDF2_SALT, PBKDF2_ITERATIONS, 32, 'sha256');
+}
 
 // ── Constants ──
 
@@ -135,14 +143,21 @@ function generateCode(version, days, fingerprint, buildSeed, privateKey) {
     ? createHash('sha256').update(fingerprint).digest().slice(0, 4)
     : Buffer.alloc(4, 0);  // 4 bytes of zeros = no device binding
 
-  // Generate HMAC signature
+  // Generate HMAC signature (must match wasm key derivation)
   const versionStr = `${versionMajor}.${versionMinor}`;
-  const hmacKey = createHash('sha256')
-    .update(`verify-${versionStr}-${buildSeed}-${privateKey}`)
-    .digest();
-  const dataToSign = `${versionStr}|${expireTs}|${fpHash.toString('hex')}|${fingerprint || 'none'}`;
+  const keySeed = `verify-${versionStr}-${buildSeed}`;
+  const hmacKey = deriveKey(keySeed);
+  const fpHex = fpHash.toString('hex');
+  const fpForSig = fingerprint || 'none';
+  const dataToSign = `${versionStr}|${expireTs}|${fpHex}|${fpForSig}`;
   const signature = createHmac('sha256', hmacKey).update(dataToSign).digest();
   const sigShort = signature.slice(0, 4);
+
+  // Debug logging
+  console.log('[GenLicense] keySeed:', keySeed);
+  console.log('[GenLicense] dataToSign:', dataToSign);
+  console.log('[GenLicense] fpHex:', fpHex);
+  console.log('[GenLicense] sigShort:', sigShort.toString('hex'));
 
   // Build code parts
   const part1Buffer = Buffer.from([versionMajor, versionMinor, expireMonth & 0xFF, randomBytes(1)[0]]);
