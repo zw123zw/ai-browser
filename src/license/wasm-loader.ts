@@ -180,6 +180,7 @@ export async function activateCode(code: string): Promise<{
   const now = BigInt(Date.now());
 
   const resultJson = wasm.verify_code(code, fingerprint, now);
+  console.log('[WasmLoader] verify_code result:', resultJson);
   const result = JSON.parse(resultJson);
 
   if (result.valid) {

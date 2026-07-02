@@ -786,4 +786,4 @@ Type `/` → menu appears → ↑↓ to navigate → Tab/Enter to select → Esc
 
 ---
 
-> **LingBot** v2.0.2 | MIT License
+> **LingBot** | MIT License

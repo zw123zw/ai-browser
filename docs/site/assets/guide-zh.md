@@ -790,4 +790,4 @@ AI 通过 `[FILE]` 标签嵌入可下载文件：文本、CSV、Excel、JSON、P
 
 ---
 
-> **小灵 LingBot** v1.8.3 | MIT License
+> **小灵 LingBot** | MIT License
