@@ -134,14 +134,16 @@ const drawerClass = computed(() => ({ 'aib-open': props.open }));
         <!-- 文字模式：始终显示品牌 logo -->
         <template v-else>
           <div class="aib-header-brand">
-            <span class="aib-brand">
-              <span class="aib-brand-ai">{{ locale === 'zh-CN' ? t('app.name') : t('app.fullName') }}</span>
-              <span class="aib-brand-shine" />
-            </span>
+            <div class="aib-brand-row">
+              <span class="aib-brand">
+                <span class="aib-brand-ai">{{ locale === 'zh-CN' ? t('app.name') : t('app.fullName') }}</span>
+                <span class="aib-brand-shine" />
+              </span>
+              <span v-if="licenseStore.isTrial" class="aib-license-tag aib-license-tag--trial">试用 {{ licenseStore.daysLeft }}天</span>
+              <span v-else-if="licenseStore.isActivated" class="aib-license-tag aib-license-tag--active">{{ licenseStore.daysLeft }}天</span>
+              <span v-else-if="licenseStore.status === 'expired'" class="aib-license-tag aib-license-tag--expired">已过期</span>
+            </div>
             <span class="aib-brand-sub">{{ t('app.subtitle') }}</span>
-            <span v-if="licenseStore.isTrial" class="aib-license-tag aib-license-tag--trial">试用 {{ licenseStore.daysLeft }}天</span>
-            <span v-else-if="licenseStore.isActivated" class="aib-license-tag aib-license-tag--active">{{ licenseStore.daysLeft }}天</span>
-            <span v-else-if="licenseStore.status === 'expired'" class="aib-license-tag aib-license-tag--expired">已过期</span>
           </div>
         </template>
       </div>
@@ -260,26 +262,34 @@ const drawerClass = computed(() => ({ 'aib-open': props.open }));
 
 /* 授权状态标签 */
 .aib-license-tag {
+  display: inline-flex;
+  align-items: center;
   font-size: 10px;
   font-weight: 600;
-  padding: 1px 6px;
-  border-radius: 4px;
-  margin-left: 6px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  margin-left: 8px;
   white-space: nowrap;
+  line-height: 1;
+  letter-spacing: 0.3px;
+  vertical-align: middle;
 }
 
 .aib-license-tag--trial {
-  background: var(--aib-primary-soft);
-  color: var(--aib-primary);
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.12) 0%, rgba(139, 92, 246, 0.06) 100%);
+  color: #7c3aed;
+  border: 1px solid rgba(139, 92, 246, 0.2);
 }
 
 .aib-license-tag--active {
-  background: rgba(34, 197, 94, 0.15);
-  color: #22c55e;
+  background: linear-gradient(135deg, rgba(34, 197, 94, 0.12) 0%, rgba(34, 197, 94, 0.06) 100%);
+  color: #16a34a;
+  border: 1px solid rgba(34, 197, 94, 0.2);
 }
 
 .aib-license-tag--expired {
-  background: rgba(239, 68, 68, 0.15);
-  color: #ef4444;
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.12) 0%, rgba(239, 68, 68, 0.06) 100%);
+  color: #dc2626;
+  border: 1px solid rgba(239, 68, 68, 0.2);
 }
 </style>

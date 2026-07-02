@@ -283,6 +283,12 @@ table {
   display: flex;
   flex-direction: column;
   gap: 1px;
+  justify-content: center;
+}
+.aib-brand-row {
+  display: flex;
+  align-items: center;
+  gap: 0;
 }
 .aib-brand {
   position: relative;
