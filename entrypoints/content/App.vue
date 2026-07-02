@@ -223,7 +223,7 @@ const activateError = ref('');
 
 function toggle() {
   // 过期时点击悬浮球，显示激活弹框
-  if (licenseStore.isExpired) {
+  if (licenseStore.status === 'expired') {
     showExpired.value = true;
     return;
   }
@@ -508,8 +508,8 @@ onMounted(async () => {
   try {
     await licenseStore.init();
     log.info('授权系统初始化完成', { status: licenseStore.status, daysLeft: licenseStore.daysLeft });
-    // 过期则自动显示激活弹框
-    if (licenseStore.isExpired) {
+    // 只有明确过期时才显示激活弹框
+    if (licenseStore.status === 'expired') {
       showExpired.value = true;
     }
   } catch (error) {
@@ -605,7 +605,7 @@ onUnmounted(() => {
     <ToastContainer />
 
     <!-- 授权过期提示 -->
-    <div v-if="licenseStore.isExpired && showExpired" class="aib-expired-overlay">
+    <div v-if="licenseStore.status === 'expired' && showExpired" class="aib-expired-overlay">
       <div class="aib-expired-card">
         <button class="aib-expired-close" @click="showExpired = false">✕</button>
         <div class="aib-expired-icon">⏰</div>

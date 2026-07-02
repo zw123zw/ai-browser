@@ -44,7 +44,14 @@ export async function initWasm(): Promise<void> {
   try {
     // Dynamic import of wasm-bindgen generated JS glue
     const wasm = await import('../../public/wasm/wasm_license.js');
-    await wasm.default(); // Initialize wasm module
+
+    // Load wasm binary manually (avoid MIME type issue in Chrome extensions)
+    const wasmUrl = chrome.runtime.getURL('wasm/wasm_license_bg.wasm');
+    const resp = await fetch(wasmUrl);
+    const bytes = await resp.arrayBuffer();
+
+    // Initialize with manual bytes (bypasses instantiateStreaming MIME check)
+    await wasm.default(bytes);
     wasmModule = wasm;
     log.info('Wasm module initialized');
   } catch (err) {

@@ -86,18 +86,27 @@ export const useLicenseStore = defineStore('aib-license', () => {
       // Check existing license or init trial
       const result = await checkLicense();
 
-      status.value = result.status;
-      daysLeft.value = result.daysLeft;
+      // If corrupted (old build data), clear and re-init trial
+      if (result.status === 'corrupted') {
+        log.warn('License data corrupted, reinitializing trial');
+        await clearLicense();
+        const trial = await checkLicense(); // Will call initTrial
+        status.value = trial.status;
+        daysLeft.value = trial.daysLeft;
+      } else {
+        status.value = result.status;
+        daysLeft.value = result.daysLeft;
+      }
       initialized.value = true;
 
-      log.info('License initialized', {
-        status: result.status,
-        daysLeft: result.daysLeft,
-        expired: result.expired,
-      });
+      log.info('License initialized', { status: status.value, daysLeft: daysLeft.value });
     } catch (err) {
       error.value = String(err);
       log.error('License initialization failed', err);
+      // Wasm failed to load - don't block the app, allow trial
+      status.value = 'trial';
+      daysLeft.value = 7;
+      initialized.value = true;
     } finally {
       loading.value = false;
     }
