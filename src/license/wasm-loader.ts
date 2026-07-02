@@ -44,8 +44,17 @@ export async function initWasm(): Promise<void> {
   try {
     // Load wasm glue JS via fetch + eval (Chrome extension compatible)
     const glueUrl = chrome.runtime.getURL('wasm/wasm_license.js');
+    console.log('[WasmLoader] Loading glue from:', glueUrl);
+
     const glueResp = await fetch(glueUrl);
+    console.log('[WasmLoader] Glue fetch status:', glueResp.status, glueResp.ok);
+
+    if (!glueResp.ok) {
+      throw new Error(`Failed to fetch wasm glue: ${glueResp.status}`);
+    }
+
     const glueCode = await glueResp.text();
+    console.log('[WasmLoader] Glue code length:', glueCode.length);
 
     // Create a module from the glue code
     const blob = new Blob([glueCode], { type: 'application/javascript' });
@@ -53,17 +62,28 @@ export async function initWasm(): Promise<void> {
     const wasm = await import(blobUrl);
     URL.revokeObjectURL(blobUrl);
 
+    console.log('[WasmLoader] Glue imported, default type:', typeof wasm.default);
+
     // Load wasm binary manually (avoid MIME type issue in Chrome extensions)
     const wasmUrl = chrome.runtime.getURL('wasm/wasm_license_bg.wasm');
+    console.log('[WasmLoader] Loading binary from:', wasmUrl);
+
     const resp = await fetch(wasmUrl);
+    console.log('[WasmLoader] Binary fetch status:', resp.status, resp.ok);
+
+    if (!resp.ok) {
+      throw new Error(`Failed to fetch wasm binary: ${resp.status}`);
+    }
+
     const bytes = await resp.arrayBuffer();
+    console.log('[WasmLoader] Binary size:', bytes.byteLength, 'bytes');
 
     // Initialize with manual bytes (bypasses instantiateStreaming MIME check)
     await wasm.default(bytes);
     wasmModule = wasm;
-    log.info('Wasm module initialized');
+    console.log('[WasmLoader] Wasm initialized successfully');
   } catch (err) {
-    log.error('Failed to initialize wasm module', err);
+    console.error('[WasmLoader] Failed to init wasm:', err);
     throw err;
   }
 }

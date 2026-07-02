@@ -2,106 +2,156 @@
 
 > Tell AI what to do in your browser — by voice or text.
 
+Website: https://xiaoling-5za.pages.dev/
+
 ---
 
 ## What is it
 
-LingBot is a Chrome extension that adds a floating button to every web page. Click it to open a sidebar where you can:
+LingBot is a Chrome extension. Once installed, a small button appears on every web page — click it, the sidebar opens, and your AI assistant is ready.
 
-- **Chat with AI** that can see the page you're browsing
-- **Control your browser by voice** — say "open Google and search for weather" and it happens
-- **Translate web pages** — selection, auto-translate on scroll, or click-to-translate
-- **Take notes** — bookmark web content to a notebook, export as Markdown/ZIP
-- **Parse files** — upload PDF/Word/Excel/images and ask AI questions about them
+You can chat with it, or just speak your instructions. It can see the page you're browsing, help you translate, search, take notes, operate the page, upload files, fill forms, and click buttons.
+
+In short: **you talk, it acts.**
 
 ---
 
-## Key Features
+## Features
 
-### 🤖 AI Chat
+### 🤖 AI Chat — It sees what you're looking at
 
-Connects to 11 major AI providers (OpenAI, Claude, DeepSeek, Qwen, Gemini, Doubao, Ernie, and more). Streaming output, file attachments, image support.
+LingBot connects to 14 major AI providers: OpenAI, Claude, Gemini, DeepSeek, Qwen, Kimi, Zhipu, Ernie, Doubao, MiniMax, SiliconFlow, Grok, and more. Use whichever you like — no vendor lock-in.
 
-**What makes it different**: LingBot's AI can see the web page you're on. Ask "what's this page about?" and it answers based on the actual content — no copy-paste needed.
+Here's what makes it different: **the AI can see the web page you're on.** Ask "what's this page about?" and it answers based on the actual content — no copy-paste needed, no screenshots required.
 
-### 🎙️ Voice Control
+Want deeper analysis? Enable deep thinking mode and the AI shows its reasoning process before answering. Works with DeepSeek-R1, Claude 3.7+, and other reasoning models.
 
-Three speech engines:
-- **Web Speech API**: Built into Chrome, zero setup
-- **iFlytek**: High-accuracy Chinese recognition
-- **Volcengine**: ByteDance's speech service
+Sending messages is easy: paste images, URLs, or local file paths — it recognizes them all automatically. Images get OCR'd, PDFs and Word documents are read directly. Up to 100 messages of context by default, so long conversations stay in memory.
 
-Supports wake word ("Xiao Ling"), continuous conversation, and voice readback.
+### 🌐 Browser Automation — You say, it does
 
-**What voice can do**: Open websites, search, click buttons, type text, scroll, translate selections, generate notes — almost anything you can do with mouse and keyboard.
+This is LingBot's most powerful ability: **control web pages with natural language.**
 
-### 🌐 Smart Translation
+> "Open Google and search for today's tech news"
+> "Click the third search result"
+> "Download this page's table as Excel"
+> "Summarize this page"
 
-Three modes:
-- **Selection translate**: Select text to translate instantly
-- **Auto translate**: Translates as you scroll, using IntersectionObserver lazy loading
-- **Click translate**: Click any paragraph to translate
+It analyzes the page structure, generates commands, and executes them step by step. Errors trigger automatic retries — up to 50 steps. Up to 20 commands can run in a single batch.
 
-Automatically detects and skips code blocks during translation.
+It goes beyond simple clicks and typing — it can operate elements inside iframes and Shadow DOM, recognize rich text editors like CodeMirror, Monaco, and Quill, and auto-close popups from any framework. Page navigation? No problem — the task saves automatically and resumes on the new page.
 
-### 📝 Web Notes
+Plus 20+ slash commands: `/navigate` to open URLs, `/scroll` to scroll, `/summarize` to summarize, `/translate` to translate — type `/` to see them all.
 
-Select text on any page, bookmark it with one click. Notes preserve the original text, source URL, and scroll position — click to jump back to the exact spot. Organize by title, export as Markdown or ZIP.
+### 🎙️ Voice Control — Just speak
 
-### 📎 File Parsing
+Four speech engines to choose from:
+- **Web Speech API**: Built into Chrome, zero setup, works instantly
+- **iFlytek**: 20+ dialects, top-tier Chinese recognition
+- **Baidu**: Excellent Chinese, understands Cantonese, Sichuan, and Shanghai dialects
+- **Tencent**: Great Chinese recognition, strong Cantonese support
 
-Upload and parse:
-- **Documents**: PDF, Word (.docx), Excel (.xlsx)
-- **Images**: OCR for Chinese and English text
-- **Code**: 70+ languages with syntax highlighting
-- **Data**: CSV, JSON, Markdown
+Set a wake word (default: "Hello, LingBot"), then control everything by voice: open sites, search, click buttons, type text, translate, generate notes…
 
-AI reads file contents and answers questions. Can also generate new files (Excel, Word, PDF, charts).
+Supports continuous conversation — no need to repeat the wake word. AI replies can be read aloud automatically with adjustable speed and volume. Enable always-on mode and the assistant stays listening even when the sidebar is closed.
 
-### 🖥️ Browser Automation
+### 🌍 Smart Translation — Three modes, your choice
 
-AI understands page structure and executes actions:
-- Click buttons, links, menus
-- Fill in form fields
-- Scroll pages, navigate to new pages
-- Upload files, drag sliders
-- Control video playback
-- Cross-tab operations (auto-continues in new tabs after navigation)
+- **Selection translate**: Select text and a translation popup appears instantly — drag to reposition
+- **Auto translate**: Translates as you scroll, never re-translates the same text, lazy-loaded for performance
+- **Click translate**: Click any paragraph to translate, click again to hide, click a third time to see the cached result
 
-Technical highlight: Uses semantic skeleton extraction to understand pages. Supports Shadow DOM and cross-origin iframes. No reliance on fixed CSS selectors.
+Code blocks are automatically protected — three layers of defense keep `<code>` tags, code class names, and inline code snippets from being mangled. Supports 8 languages: Chinese, English, Japanese, Korean, French, German, Spanish, Russian. Turn off auto-translate and all translations revert to the original text instantly.
+
+### 📎 File Handling — Upload and ask
+
+Supports a wide range of formats:
+- **Images**: jpg, png, gif, webp — automatic OCR for Chinese and English, with progress bar
+- **Documents**: PDF (page-by-page extraction), Word (text extraction), Excel (CSV export)
+- **Code**: 60+ programming languages, auto-detection, syntax highlighting
+- **Data**: CSV, JSON, Markdown, TXT, and 30+ other text formats
+
+Upload by clicking the paperclip icon, pasting screenshots, pasting URLs, or pasting local file paths. Click any attachment to preview — full-size images, highlighted code, rendered Markdown, extracted PDF text.
+
+Then just ask: "What does this PDF say?" / "What's wrong with this code?" / "Visualize this Excel data as a chart" — it handles it all.
+
+### 📊 Charts & File Output — AI gives you the finished product
+
+Generate charts right in the conversation: bar charts, line charts, pie charts (solid and donut), radar charts. Download as PNG at 2x resolution, or export as JSON to re-import later.
+
+Generate files too: ask AI to save analysis as Excel, export notes as PDF, output config as JSON — all embedded in the conversation, one click to download.
+
+### 📝 Notes & Bookmarks — Save good content with one click
+
+Bookmark in multiple ways: right-click any AI reply to save, click ⭐ in translation results, or enable auto-notes to generate them automatically on page load.
+
+When saving, type a new title or pick from existing ones — auto-complete makes organizing easy.
+
+Open the notebook viewer (📓 icon in the sidebar): titles on the left, content in the middle (rendered Markdown), and a timeline on the right showing each note's source link and save time. Double-click to edit, click source links to jump back to the original page — it scrolls to the exact position and highlights the saved text.
+
+Export individual notes as `.md` files, or export everything as a `.zip` backup. Import merges and deduplicates automatically.
+
+---
+
+## ⚙️ Settings — Everything is customizable
+
+Click the ⚙️ gear icon in the sidebar to open settings. Four tabs, all adjustable:
+
+### AI Model Configuration
+
+10 one-click presets (OpenAI, Anthropic, DeepSeek, MiMo, Qwen, Kimi, Zhipu, Baidu, MiniMax, SiliconFlow) — one click and done. Or manually add any OpenAI-compatible API. Each model has its own URL and key. Export config as JSON for team sharing.
+
+### General Settings
+
+Switch between 10 themes, customize keyboard shortcuts, set translation target language, choose translation and note modes, toggle browser automation on or off — everything works your way.
+
+### Voice Settings
+
+Switch recognition engines, configure credentials, customize wake words, enable always-on voice, adjust readback speed and volume, set buffer and idle timeouts — fine-tuned to every parameter.
+
+### User Settings
+
+Adjust context message count (100–500), manage cache (up to 30MB), switch interface language (中文/English), view documentation and version info. Clearing cache only removes sessions and logs — your model configs, theme, and shortcuts stay safe.
+
+---
+
+## 🎨 10 Themes — Find your style
+
+**Dark collection**: Cyberpunk (cyan tech), Dark Gold (golden luxury), Amethyst (purple dream), Midnight (blue calm), Emerald (green fresh)
+
+**Light collection**: Classic (indigo default), Rose Gold (elegant), Sakura (pink soft), Pearl (dark gold refined), Sky Blue (bright clear)
+
+Click to switch instantly. Auto-adapts to your system's dark/light preference.
+
+---
+
+## ⌨️ Shortcuts
+
+| Shortcut | Action |
+|----------|--------|
+| `Ctrl+`` ` | Toggle sidebar |
+| `Enter` | Send message |
+| `Shift+Enter` | New line |
+| `↑` (empty input) | Browse history |
+| `Escape` | Close menu/preview |
 
 ---
 
 ## Who is it for
 
-| User | Use Case |
-|------|----------|
-| Developers | Quick browser control, translate technical docs, parse code files |
-| Content creators | Web clipping, note management, multilingual translation |
-| Cross-border e-commerce | Real-time translation, batch product info collection |
-| Researchers | Extract key info, organize literature notes |
-| Accessibility needs | Voice-controlled browsing, reduced mouse/keyboard dependency |
-
----
-
-## Technical Highlights
-
-- **Multi-model support**: No vendor lock-in, choose any AI provider
-- **Local speech recognition**: Sherpa-ONNX WASM engine, works offline, no voice data leaves your device
-- **Shadow DOM isolation**: Doesn't affect host page styles or functionality
-- **Cross-tab sync**: Settings, conversations, and drawer state sync across all tabs
-- **Manifest V3**: Compliant with latest Chrome extension security standards
-- **Dark mode**: 5 themes, auto-adapts to system preference
+| What you do | How LingBot helps |
+|-------------|-------------------|
+| Writing code | Voice-control the browser, translate technical docs, upload code for AI review |
+| Creating content | Web clipping, note management, multilingual translation |
+| Cross-border commerce | Real-time foreign page translation, batch product info collection |
+| Researching | Extract key info from pages, organize literature notes |
+| Accessibility needs | Voice-controlled browsing, less mouse and keyboard dependency |
 
 ---
 
 ## Installation
 
-### From Chrome Web Store
-
-Search "LingBot" on the Chrome Web Store and install.
-
-### Manual Install (Developer Mode)
+### Manual Install
 
 1. Download and extract `ai-browser.zip`
 2. Open Chrome, go to `chrome://extensions/`
@@ -109,63 +159,15 @@ Search "LingBot" on the Chrome Web Store and install.
 4. Click "Load unpacked" and select the extracted folder
 5. Done! A floating button appears in the bottom-right corner
 
----
+### Chrome Web Store
 
-## Quick Start
-
-1. **Set up AI**: Click floating button → Settings → AI Config → Add model (enter API Key)
-2. **Start chatting**: Type in the input box, or press `Ctrl+Shift+M` to toggle the panel
-3. **Try voice**: Switch to voice mode, say "Xiao Ling" to wake, then give your command
-4. **Translate**: Select any text, or enable auto-translate in settings
-5. **Save notes**: Select text and click the bookmark button
-
----
-
-## Free vs Pro
-
-| Feature | Free | Pro |
-|---------|------|-----|
-| AI Chat | ✅ 3 models | ✅ Unlimited models |
-| Web Translation | ✅ | ✅ |
-| Browser Automation | ✅ 50/day | ✅ Unlimited |
-| Voice (Web Speech) | ✅ | ✅ |
-| Voice (iFlytek/Volcengine) | ❌ | ✅ |
-| File Parsing | ✅ | ✅ |
-| Web Notes | ✅ | ✅ |
-| Priority Support | ❌ | ✅ |
-
----
-
-## Privacy
-
-- Your API keys are stored locally in the browser, never uploaded to any server
-- AI requests go directly from your browser to the AI provider — no middleman
-- Local speech recognition (Sherpa-ONNX) keeps voice data on your device
-- Page content is only sent to AI when you initiate a conversation — no background collection
-- All data stored in `chrome.storage.local`, cleared when you uninstall
-
----
-
-## FAQ
-
-**Q: Which browsers are supported?**
-A: Chrome 116+, Edge 116+, Brave, and other Chromium-based browsers.
-
-**Q: Do I need my own API key?**
-A: Yes. LingBot doesn't bundle AI models. Register with an AI provider to get a key. Recommended: DeepSeek (affordable) or Qwen (free tier available).
-
-**Q: Does voice recognition work offline?**
-A: Web Speech API requires internet (browser service). iFlytek and Volcengine require internet. Sherpa-ONNX works fully offline (requires downloading model files).
-
-**Q: Will it slow down my browser?**
-A: No. LingBot uses Shadow DOM isolation. The full UI only loads when you click the floating button. Translation uses lazy loading — only visible areas are translated.
-
-**Q: Is my data safe?**
-A: All data stays in your browser. AI requests use HTTPS directly to the provider. Nothing passes through our servers. No user data is collected.
+Search **LingBot** on the Chrome Web Store and install with one click.
 
 ---
 
 ## Contact
 
-- GitHub: https://github.com/zw123zw/ai-browser
-- Issues: https://github.com/zw123zw/ai-browser/issues
+- Website: https://xiaoling-5za.pages.dev/
+- Email: lingbot@outlook.com
+
+Questions or suggestions? We'd love to hear from you.

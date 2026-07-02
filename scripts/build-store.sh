@@ -70,10 +70,10 @@ echo "[4/7] Building extension..."
 cp docs/site/guide-zh.md public/guide-zh.md
 cp docs/site/guide-en.md public/guide-en.md
 BUILD_SEED_SHORT="${BUILD_SEED:0:8}"
-BUILD_DIR=".output-store/lingbot-v${NEW_VERSION}-${BUILD_TIME}-${BUILD_SEED_SHORT}"
+BUILD_DIR=".output/lingbot-v${NEW_VERSION}-${BUILD_TIME}-${BUILD_SEED_SHORT}"
 npx wxt build
-mkdir -p .output-store
-mv .output/chrome-mv3 "$BUILD_DIR"
+# Use node to rename (avoids permission issues on Windows)
+node -e "const fs=require('fs'); fs.renameSync('.output/chrome-mv3', '${BUILD_DIR}')"
 echo "  Extension build complete → $BUILD_DIR"
 
 # Step 5: Obfuscate JS (string encryption only, fast on large files)
@@ -97,7 +97,7 @@ if [ -d "$BUILD_DIR" ]; then
     const JSZip = require('jszip');
     const zip = new JSZip();
     const buildDir = '${BUILD_DIR}';
-    const zipPath = '.output-store/${ZIP_NAME}';
+    const zipPath = '.output/${ZIP_NAME}';
     function addDir(dir, prefix) {
       for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
         const fullPath = path.join(dir, entry.name);
