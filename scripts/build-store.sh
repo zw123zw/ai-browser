@@ -26,16 +26,23 @@ echo "=========================================="
 # Timestamp for this build
 BUILD_TIME=$(date +%Y%m%d-%H%M%S)
 
+# Step 0: Generate keys if not exists
+if [ ! -f "scripts/keys/ed25519-private.key" ]; then
+  echo "[0/7] Generating Ed25519 keys (first run)..."
+  node scripts/gen-license.js --generate-keys
+  echo ""
+fi
+
 # Step 1: Generate build seed
 echo ""
-echo "[1/6] Generating build seed..."
+echo "[1/7] Generating build seed..."
 BUILD_SEED=$(openssl rand -hex 32)
 echo "$BUILD_SEED" > .build-seed
 echo "  Build seed: ${BUILD_SEED:0:16}..."
 
 # Step 2: Increment patch version
 echo ""
-echo "[2/6] Incrementing version..."
+echo "[2/7] Incrementing version..."
 CURRENT_VERSION=$(node -p "require('./package.json').version")
 IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT_VERSION"
 NEW_PATCH=$((PATCH + 1))
@@ -52,7 +59,7 @@ echo "  Version: ${CURRENT_VERSION} → ${NEW_VERSION}"
 
 # Step 3: Build wasm
 echo ""
-echo "[3/6] Building wasm module..."
+echo "[3/7] Building wasm module..."
 cd wasm-license
 
 # Add cargo to PATH
@@ -70,7 +77,7 @@ echo "  Wasm build complete"
 
 # Step 4: Build extension
 echo ""
-echo "[4/6] Building extension..."
+echo "[4/7] Building extension..."
 cp docs/site/guide-zh.md public/guide-zh.md
 cp docs/site/guide-en.md public/guide-en.md
 BUILD_SEED_SHORT="${BUILD_SEED:0:8}"
@@ -82,7 +89,7 @@ echo "  Extension build complete → $BUILD_DIR"
 
 # Step 5: Obfuscate JS (string encryption only, fast on large files)
 echo ""
-echo "[5/6] Obfuscating JavaScript..."
+echo "[5/7] Obfuscating JavaScript..."
 if [ -d "$BUILD_DIR" ]; then
   node scripts/obfuscate.js --seed="$BUILD_SEED" --dir="$BUILD_DIR"
 else
@@ -91,7 +98,7 @@ fi
 
 # Step 6: Package zip
 echo ""
-echo "[6/6] Packaging zip..."
+echo "[6/7] Packaging zip..."
 ZIP_NAME="lingbot-v${NEW_VERSION}-${BUILD_SEED_SHORT}.zip"
 
 if [ -d "$BUILD_DIR" ]; then

@@ -2,6 +2,7 @@
 import { computed, ref, onMounted, onUnmounted, watch } from 'vue';
 import { useConversationsStore } from '@/src/stores/conversations';
 import { useSettingsStore } from '@/src/stores/settings';
+import { useLicenseStore } from '@/src/stores/license';
 import { useToast } from '@/src/composables/useToast';
 import { abortPipeline } from '@/src/composables/usePipeline';
 import { useI18n } from '@/src/i18n';
@@ -17,6 +18,7 @@ const emit = defineEmits<{
 
 const store = useConversationsStore();
 const settingsStore = useSettingsStore();
+const licenseStore = useLicenseStore();
 const toast = useToast();
 const { t, locale } = useI18n();
 const showConfirm = ref(false);
@@ -137,6 +139,9 @@ const drawerClass = computed(() => ({ 'aib-open': props.open }));
               <span class="aib-brand-shine" />
             </span>
             <span class="aib-brand-sub">{{ t('app.subtitle') }}</span>
+            <span v-if="licenseStore.isTrial" class="aib-license-tag aib-license-tag--trial">试用 {{ licenseStore.daysLeft }}天</span>
+            <span v-else-if="licenseStore.isActivated" class="aib-license-tag aib-license-tag--active">{{ licenseStore.daysLeft }}天</span>
+            <span v-else-if="licenseStore.status === 'expired'" class="aib-license-tag aib-license-tag--expired">已过期</span>
           </div>
         </template>
       </div>
@@ -251,5 +256,30 @@ const drawerClass = computed(() => ({ 'aib-open': props.open }));
   .aib-drag-handle {
     display: none;
   }
+}
+
+/* 授权状态标签 */
+.aib-license-tag {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 4px;
+  margin-left: 6px;
+  white-space: nowrap;
+}
+
+.aib-license-tag--trial {
+  background: var(--aib-primary-soft);
+  color: var(--aib-primary);
+}
+
+.aib-license-tag--active {
+  background: rgba(34, 197, 94, 0.15);
+  color: #22c55e;
+}
+
+.aib-license-tag--expired {
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
 }
 </style>

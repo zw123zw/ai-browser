@@ -51,7 +51,6 @@ for (const filePath of jsFiles) {
     target: 'es2020',
     format: 'iife',
     legalComments: 'none',
-    mangleProps: /^_/,
   });
 
   writeFileSync(filePath, result.code);

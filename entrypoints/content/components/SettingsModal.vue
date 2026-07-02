@@ -4,6 +4,7 @@ import { v4 as uuid } from 'uuid';
 import MarkdownIt from 'markdown-it';
 import { useSettingsStore } from '@/src/stores/settings';
 import { useConversationsStore } from '@/src/stores/conversations';
+import { useLicenseStore } from '@/src/stores/license';
 import { useToast } from '@/src/composables/useToast';
 import { abortPipeline } from '@/src/composables/usePipeline';
 import type { ModelConfig, NoteMode, Provider } from '@/src/types';
@@ -53,8 +54,20 @@ const cacheBarClass = computed(() => {
   return '';
 });
 
+const licenseStore = useLicenseStore();
+
 async function activateLicense() {
-  toast.info(t('settings.user.activateNotOpen'));
+  if (!licenseKey.value || licenseKey.value.trim().length < 10) {
+    toast.error(t('settings.user.licenseInvalid'));
+    return;
+  }
+  const result = await licenseStore.activate(licenseKey.value.trim());
+  if (result.success) {
+    toast.success(t('settings.user.activateSuccess'));
+    licenseKey.value = '';
+  } else {
+    toast.error(result.error || t('settings.user.activateFailed'));
+  }
 }
 
 async function handleClearCache() {
