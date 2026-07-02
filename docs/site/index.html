@@ -58,17 +58,14 @@ body.en .btn.lang-en{display:inline-block!important}
 .hero-brand{display:inline-block;font-size:clamp(14px,1.8vw,18px);color:var(--cyan);margin-bottom:20px;font-weight:600;letter-spacing:4px;padding:8px 24px;border:1px solid rgba(0,229,255,.4);border-radius:6px;background:rgba(0,229,255,.05);box-shadow:0 0 20px rgba(0,229,255,.1),inset 0 0 20px rgba(0,229,255,.03)}
 .hero-meta{display:flex;gap:16px;align-items:center;justify-content:center;flex-wrap:wrap;margin-bottom:48px}
 .hero-tag{padding:6px 18px;border:1px solid rgba(0,229,255,.3);border-radius:20px;font-size:15px;color:var(--cyan);background:rgba(0,229,255,.05)}
-.hero-buttons{display:flex;gap:16px;flex-wrap:wrap;justify-content:center;align-items:stretch}
-.hero-buttons .btn,.hero-buttons .btn-sm{min-width:160px;text-align:center;flex:0 0 auto}
-.btn{padding:16px 40px;border-radius:8px;font-size:18px;font-weight:600;cursor:pointer;border:none;transition:all .3s;position:relative;overflow:hidden}
+.hero-buttons{display:flex;gap:12px;flex-wrap:wrap;justify-content:center;align-items:center}
+.btn{padding:14px 32px;border-radius:8px;font-size:16px;font-weight:600;cursor:pointer;border:none;transition:all .3s;position:relative;overflow:hidden;text-decoration:none;display:inline-block;min-width:160px;text-align:center}
 .btn-primary{background:linear-gradient(135deg,var(--cyan),var(--blue));color:#000;box-shadow:var(--glow-cyan)}
 .btn-primary:hover{transform:translateY(-2px);box-shadow:0 0 30px rgba(0,229,255,.6),0 0 80px rgba(0,229,255,.2);color:#000}
-.btn-secondary{background:transparent;color:var(--cyan);border:1px solid var(--cyan);box-shadow:inset 0 0 20px rgba(0,229,255,.05)}
-.btn-secondary:hover{background:rgba(0,229,255,.1);transform:translateY(-2px);box-shadow:var(--glow-cyan);color:var(--cyan)}
+.btn-ghost{background:transparent;color:var(--cyan);border:1px solid rgba(0,229,255,.3)}
+.btn-ghost:hover{background:rgba(0,229,255,.1);border-color:var(--cyan);transform:translateY(-2px);color:var(--cyan)}
 .btn::after{content:'';position:absolute;top:-50%;left:-50%;width:200%;height:200%;background:linear-gradient(transparent,rgba(255,255,255,.05),transparent);transform:rotate(45deg);transition:left .5s}
 .btn:hover::after{left:100%}
-.btn-sm{padding:10px 24px;border-radius:8px;font-size:14px;font-weight:500;cursor:pointer;border:1px solid rgba(0,229,255,.3);background:rgba(0,229,255,.05);color:var(--cyan);transition:all .3s;position:relative;overflow:hidden;text-decoration:none;display:inline-block}
-.btn-sm:hover{background:rgba(0,229,255,.15);border-color:var(--cyan);transform:translateY(-2px);box-shadow:0 0 15px rgba(0,229,255,.2);color:var(--cyan)}
 
 /* ===== FEATURES ===== */
 .section{padding:80px 0}
@@ -176,17 +173,14 @@ body.en .btn.lang-en{display:inline-block!important}
     <span class="hero-tag">Manifest V3</span>
   </div>
   <div class="hero-buttons">
-    <!-- Chinese -->
     <a class="btn btn-primary lang-zh" href="https://xiaoling-5za.pages.dev/" target="_blank">⬇ 下载插件</a>
-    <a class="btn btn-sm lang-zh" href="https://www.lanzou.com/" target="_blank">蓝奏云</a>
-    <a class="btn btn-sm lang-zh" href="https://chrome.google.com/webstore" target="_blank">Chrome 商店</a>
-    <!-- English -->
+    <a class="btn btn-ghost lang-zh" href="https://www.lanzou.com/" target="_blank">蓝奏云</a>
+    <a class="btn btn-ghost lang-zh" href="https://chrome.google.com/webstore" target="_blank">Chrome 商店</a>
     <a class="btn btn-primary lang-en" href="https://chrome.google.com/webstore" target="_blank">⬇ Chrome Web Store</a>
-    <a class="btn btn-sm lang-en" href="https://xiaoling-5za.pages.dev/" target="_blank">Download ZIP</a>
-    <a class="btn btn-sm lang-en" href="https://www.lanzou.com/" target="_blank">Lanzou</a>
-    <!-- Guide -->
-    <a class="btn btn-secondary lang-zh" href="guide.html">📖 使用指南</a>
-    <a class="btn btn-secondary lang-en" href="guide.html">📖 User Guide</a>
+    <a class="btn btn-ghost lang-en" href="https://xiaoling-5za.pages.dev/" target="_blank">Download ZIP</a>
+    <a class="btn btn-ghost lang-en" href="https://www.lanzou.com/" target="_blank">Lanzou</a>
+    <a class="btn btn-ghost lang-zh" href="guide.html">📖 使用指南</a>
+    <a class="btn btn-ghost lang-en" href="guide.html">📖 User Guide</a>
   </div>
   <!-- Stats -->
   <div class="stats-bar">
