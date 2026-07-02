@@ -7,24 +7,27 @@ mod usage;
 use wasm_bindgen::prelude::*;
 
 /// Initialize 7-day trial period
+/// now: current timestamp in milliseconds (Date.now())
 /// Returns JSON: { blob, status, daysLeft }
 #[wasm_bindgen]
-pub fn init_trial(fingerprint: &str) -> String {
-    license::init_trial(fingerprint)
+pub fn init_trial(fingerprint: &str, now: u64) -> String {
+    license::init_trial(fingerprint, now)
 }
 
 /// Verify activation code (Ed25519 signature verification)
+/// now: current timestamp in milliseconds (Date.now())
 /// Returns JSON: { valid, blob, error }
 #[wasm_bindgen]
-pub fn verify_code(code: &str, fingerprint: &str) -> String {
-    license::verify_code(code, fingerprint)
+pub fn verify_code(code: &str, fingerprint: &str, now: u64) -> String {
+    license::verify_code(code, fingerprint, now)
 }
 
 /// Check license status (validity period only)
+/// now: current timestamp in milliseconds (Date.now())
 /// Returns JSON: { status, daysLeft, expired }
 #[wasm_bindgen]
-pub fn check_license(blob: &str) -> String {
-    license::check_license(blob)
+pub fn check_license(blob: &str, now: u64) -> String {
+    license::check_license(blob, now)
 }
 
 /// Track usage and check if stealth verification should trigger

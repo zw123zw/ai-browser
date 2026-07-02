@@ -117,6 +117,9 @@ if [ -d "$BUILD_DIR" ]; then
     zip.generateAsync({ type: 'nodebuffer' }).then(buf => {
       fs.writeFileSync(zipPath, buf);
       console.log('  Package: ' + zipPath + ' (' + (buf.length/1024/1024).toFixed(1) + 'MB)');
+      // 删除构建目录，只保留 zip
+      fs.rmSync(buildDir, { recursive: true, force: true });
+      console.log('  Cleaned: ' + buildDir);
     });
   "
 else

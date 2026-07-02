@@ -63,16 +63,8 @@ fn decrypt_blob(encrypted: &str) -> Option<LicenseBlob> {
     serde_json::from_slice(&plaintext).ok()
 }
 
-/// Get current timestamp in milliseconds
-/// Note: In wasm, this is passed from JS; we use a simple approximation
-fn now_ms() -> u64 {
-    // This will be overridden by JS passing Date.now()
-    0
-}
-
 /// Initialize 7-day trial period
-pub fn init_trial(fingerprint: &str) -> String {
-    let now = now_ms();
+pub fn init_trial(fingerprint: &str, now: u64) -> String {
     let blob = LicenseBlob {
         status: "trial".to_string(),
         fingerprint: fingerprint.to_string(),
@@ -85,11 +77,7 @@ pub fn init_trial(fingerprint: &str) -> String {
     signed_blob.signature = sign_blob(&signed_blob);
     let encrypted = encrypt_blob(&signed_blob);
 
-    let days_left = if now > 0 {
-        ((signed_blob.expire_ts.saturating_sub(now)) / (24 * 60 * 60 * 1000)) as u32
-    } else {
-        7
-    };
+    let days_left = ((signed_blob.expire_ts.saturating_sub(now)) / (24 * 60 * 60 * 1000)) as u32;
 
     format!(
         r#"{{"blob":"{}","status":"trial","daysLeft":{},"expired":false}}"#,
@@ -101,7 +89,7 @@ pub fn init_trial(fingerprint: &str) -> String {
 /// Verify activation code
 /// Code format: AIB-XXXX-XXXX-XXXX
 /// Signature uses Ed25519
-pub fn verify_code(code: &str, fingerprint: &str) -> String {
+pub fn verify_code(code: &str, fingerprint: &str, now: u64) -> String {
     // Parse code
     let normalized = code.trim().to_uppercase();
     let parts: Vec<&str> = normalized.split('-').collect();
@@ -175,7 +163,6 @@ pub fn verify_code(code: &str, fingerprint: &str) -> String {
     }
 
     // Create active license blob
-    let now = now_ms();
     let blob = LicenseBlob {
         status: "active".to_string(),
         fingerprint: fingerprint.to_string(),
@@ -195,7 +182,7 @@ pub fn verify_code(code: &str, fingerprint: &str) -> String {
 }
 
 /// Check license status (validity period only)
-pub fn check_license(blob: &str) -> String {
+pub fn check_license(blob: &str, now: u64) -> String {
     let license = match decrypt_blob(blob) {
         Some(l) => l,
         None => {
@@ -208,12 +195,7 @@ pub fn check_license(blob: &str) -> String {
         return r#"{"status":"corrupted","daysLeft":0,"expired":true}"#.to_string();
     }
 
-    let now = now_ms();
-    let expired = if now > 0 {
-        now > license.expire_ts
-    } else {
-        false // If no time available, assume not expired (will be checked by JS)
-    };
+    let expired = now > license.expire_ts;
 
     let status = if expired && license.status != "expired" {
         "expired"
@@ -221,17 +203,10 @@ pub fn check_license(blob: &str) -> String {
         &license.status
     };
 
-    let days_left = if now > 0 && !expired {
+    let days_left = if !expired {
         ((license.expire_ts.saturating_sub(now)) / (24 * 60 * 60 * 1000)) as u32
-    } else if expired {
-        0
     } else {
-        // If no time, estimate from status
-        match license.status.as_str() {
-            "trial" => 7,
-            "active" => 30,
-            _ => 0,
-        }
+        0
     };
 
     format!(

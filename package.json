@@ -2,7 +2,7 @@
   "name": "lingbot-browser",
   "description": "小灵 LingBot - AI 语音浏览器助手 | AI Voice Browser Assistant",
   "private": true,
-  "version": "1.8.25",
+  "version": "1.8.29",
   "type": "module",
   "author": {
     "name": "zw123zw",
@@ -71,7 +71,6 @@
     "@wxt-dev/module-vue": "^1.0.2",
     "cross-env": "^10.1.0",
     "happy-dom": "^20.10.6",
-    "javascript-obfuscator": "^4.2.2",
     "sharp": "^0.35.1",
     "terser": "^5.48.0",
     "typescript": "^5.7.2",

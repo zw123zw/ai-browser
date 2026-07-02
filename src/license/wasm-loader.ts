@@ -119,7 +119,7 @@ async function writeUsage(usage: string): Promise<void> {
 
 /**
  * Initialize trial period (first install)
- * Calls wasm.init_trial(fingerprint)
+ * Calls wasm.init_trial(fingerprint, now)
  */
 export async function initTrial(): Promise<{
   status: string;
@@ -128,8 +128,9 @@ export async function initTrial(): Promise<{
 }> {
   const wasm = getWasm();
   const fingerprint = await generateFingerprint(wasm);
+  const now = Date.now();
 
-  const resultJson = wasm.init_trial(fingerprint);
+  const resultJson = wasm.init_trial(fingerprint, now);
   const result = JSON.parse(resultJson);
 
   await writeBlob(result.blob);
@@ -146,7 +147,7 @@ export async function initTrial(): Promise<{
 
 /**
  * Verify activation code
- * Calls wasm.verify_code(code, fingerprint)
+ * Calls wasm.verify_code(code, fingerprint, now)
  */
 export async function activateCode(code: string): Promise<{
   valid: boolean;
@@ -156,8 +157,9 @@ export async function activateCode(code: string): Promise<{
 }> {
   const wasm = getWasm();
   const fingerprint = await generateFingerprint(wasm);
+  const now = Date.now();
 
-  const resultJson = wasm.verify_code(code, fingerprint);
+  const resultJson = wasm.verify_code(code, fingerprint, now);
   const result = JSON.parse(resultJson);
 
   if (result.valid) {
@@ -173,7 +175,7 @@ export async function activateCode(code: string): Promise<{
 
 /**
  * Check license status
- * Calls wasm.check_license(blob)
+ * Calls wasm.check_license(blob, now)
  * Returns { status, daysLeft, expired }
  */
 export async function checkLicense(): Promise<{
@@ -189,7 +191,8 @@ export async function checkLicense(): Promise<{
     return initTrial();
   }
 
-  const resultJson = wasm.check_license(blob);
+  const now = Date.now();
+  const resultJson = wasm.check_license(blob, now);
   const result = JSON.parse(resultJson);
 
   // Update blob if status changed (e.g., trial → expired)
