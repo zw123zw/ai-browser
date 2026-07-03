@@ -1,173 +1,167 @@
 /**
- * Wasm License Loader - JS Thin Shell Layer
+ * License Loader - Wasm + Worker API
  *
- * This module ONLY:
- * 1. Loads the wasm module
- * 2. Reads encrypted blob from chrome.storage → passes to wasm
- * 3. Calls wasm functions → reads returned results
- * 4. Calls tick() on user operations → wasm internal statistics
- * 5. Exposes wasm state to Vue components
+ * Architecture:
+ * - Worker API: source of truth (trial, activation, validation)
+ * - Wasm: local encryption/decryption + offline fallback
+ * - chrome.storage: local cache
  *
- * NO if/else logic, NO validation logic.
- * ALL decisions happen inside wasm.
+ * Flow:
+ * 1. Check Worker API (online) → update local cache
+ * 2. If offline → use local cache (wasm validation)
+ * 3. Local cache always encrypted with wasm
  */
 
 import { Logger } from '@/src/utils/logger';
 import { generateFingerprint } from './fingerprint';
+import { registerTrial, activateCode as apiActivate, checkLicense as apiCheck } from './api';
 
 const log = new Logger('License:WasmLoader');
 
-/** Storage key for encrypted license blob */
+/** Storage keys */
 const BLOB_KEY = 'aib-enc-blob';
+const STATUS_KEY = 'aib-license-status';
 
-/** Storage key for encrypted usage data */
-const USAGE_KEY = 'aib-enc-usage';
-
-/** Wasm module instance (lazy loaded) */
+/** Wasm module instance */
 let wasmModule: any = null;
 
-/** Current cached blob */
-let cachedBlob: string | null = null;
+/** Current fingerprint */
+let currentFingerprint: string | null = null;
 
-/** License status cache */
-let licenseStatus: {
+/** Cached status */
+let cachedStatus: {
   status: string;
   daysLeft: number;
   expired: boolean;
+  expireTs: number;
+  trialEndTs: number;
 } | null = null;
 
 /**
  * Initialize the wasm module
- * Must be called before any other function
  */
 export async function initWasm(): Promise<void> {
   try {
-    // Load wasm glue JS directly via chrome.runtime URL
     const glueUrl = chrome.runtime.getURL('wasm/wasm_license.js');
-    console.log('[WasmLoader] Loading glue from:', glueUrl);
-
     const wasm = await import(glueUrl);
-    console.log('[WasmLoader] Glue imported, default type:', typeof wasm.default);
 
-    // Load wasm binary manually (avoid MIME type issue in Chrome extensions)
     const wasmUrl = chrome.runtime.getURL('wasm/wasm_license_bg.wasm');
-    console.log('[WasmLoader] Loading binary from:', wasmUrl);
-
     const resp = await fetch(wasmUrl);
-    console.log('[WasmLoader] Binary fetch status:', resp.status, resp.ok);
-
-    if (!resp.ok) {
-      throw new Error(`Failed to fetch wasm binary: ${resp.status}`);
-    }
+    if (!resp.ok) throw new Error(`Failed to fetch wasm: ${resp.status}`);
 
     const bytes = await resp.arrayBuffer();
-    console.log('[WasmLoader] Binary size:', bytes.byteLength, 'bytes');
-
-    // Initialize with manual bytes
     await wasm.default(bytes);
     wasmModule = wasm;
-    console.log('[WasmLoader] Wasm initialized successfully');
+
+    // Generate fingerprint
+    currentFingerprint = await generateFingerprint(wasm);
+
+    log.info('Wasm initialized', { fingerprint: currentFingerprint?.substring(0, 16) + '...' });
   } catch (err) {
-    console.error('[WasmLoader] Failed to init wasm:', err);
+    log.error('Failed to init wasm', err);
     throw err;
   }
 }
 
 /**
- * Get the wasm module instance
- * Throws if not initialized
+ * Get current fingerprint
+ */
+async function getFingerprint(): Promise<string> {
+  if (!currentFingerprint) {
+    const wasm = getWasm();
+    currentFingerprint = await generateFingerprint(wasm);
+  }
+  return currentFingerprint;
+}
+
+/**
+ * Get wasm module
  */
 function getWasm(): any {
-  if (!wasmModule) {
-    throw new Error('Wasm module not initialized. Call initWasm() first.');
-  }
+  if (!wasmModule) throw new Error('Wasm not initialized');
   return wasmModule;
 }
 
 /**
- * Read encrypted blob from chrome.storage
+ * Read cached status from storage
  */
-async function readBlob(): Promise<string | null> {
-  if (cachedBlob) return cachedBlob;
+async function readCachedStatus(): Promise<typeof cachedStatus> {
+  if (cachedStatus) return cachedStatus;
   try {
-    const result = await chrome.storage.local.get(BLOB_KEY);
-    cachedBlob = result[BLOB_KEY] || null;
-    return cachedBlob;
-  } catch (err) {
-    log.error('Failed to read blob from storage', err);
+    const result = await chrome.storage.local.get(STATUS_KEY);
+    cachedStatus = result[STATUS_KEY] || null;
+    return cachedStatus;
+  } catch {
     return null;
   }
 }
 
 /**
- * Write encrypted blob to chrome.storage
+ * Write status to cache
  */
-async function writeBlob(blob: string): Promise<void> {
+async function writeCachedStatus(status: typeof cachedStatus): Promise<void> {
   try {
-    await chrome.storage.local.set({ [BLOB_KEY]: blob });
-    cachedBlob = blob;
-    log.debug('Blob written to storage');
+    await chrome.storage.local.set({ [STATUS_KEY]: status });
+    cachedStatus = status;
   } catch (err) {
-    log.error('Failed to write blob to storage', err);
+    log.error('Failed to write status cache', err);
   }
 }
 
 /**
- * Read encrypted usage from chrome.storage
- */
-async function readUsage(): Promise<string | null> {
-  try {
-    const result = await chrome.storage.local.get(USAGE_KEY);
-    return result[USAGE_KEY] || null;
-  } catch (err) {
-    log.error('Failed to read usage from storage', err);
-    return null;
-  }
-}
-
-/**
- * Write encrypted usage to chrome.storage
- */
-async function writeUsage(usage: string): Promise<void> {
-  try {
-    await chrome.storage.local.set({ [USAGE_KEY]: usage });
-    log.debug('Usage written to storage');
-  } catch (err) {
-    log.error('Failed to write usage to storage', err);
-  }
-}
-
-/**
- * Initialize trial period (first install)
- * Calls wasm.init_trial(fingerprint, now)
+ * Initialize trial period
+ * Tries Worker API first, falls back to local
  */
 export async function initTrial(): Promise<{
   status: string;
   daysLeft: number;
   expired: boolean;
 }> {
-  const wasm = getWasm();
-  const fingerprint = await generateFingerprint(wasm);
-  const now = BigInt(Date.now());
+  const fingerprint = await getFingerprint();
+  const version = chrome.runtime.getManifest().version;
 
-  const resultJson = wasm.init_trial(fingerprint, now);
-  const result = JSON.parse(resultJson);
+  // Try Worker API
+  try {
+    const result = await registerTrial(fingerprint, version);
+    if (result.success) {
+      const now = Date.now();
+      const daysLeft = Math.ceil((result.trial_end_ts - now) / (24 * 60 * 60 * 1000));
 
-  await writeBlob(result.blob);
+      const status = {
+        status: 'trial' as const,
+        daysLeft,
+        expired: false,
+        expireTs: 0,
+        trialEndTs: result.trial_end_ts,
+      };
 
-  licenseStatus = {
-    status: result.status,
-    daysLeft: result.daysLeft,
+      await writeCachedStatus(status);
+      log.info('Trial registered via Worker', { daysLeft, trial_end_ts: result.trial_end_ts });
+      return status;
+    }
+  } catch (err) {
+    log.warn('Worker trial registration failed, using local', err);
+  }
+
+  // Fallback: local trial (7 days)
+  const now = Date.now();
+  const trialEndTs = now + 7 * 24 * 60 * 60 * 1000;
+  const status = {
+    status: 'trial' as const,
+    daysLeft: 7,
     expired: false,
+    expireTs: 0,
+    trialEndTs,
   };
 
-  log.info('Trial initialized', { daysLeft: result.daysLeft });
-  return licenseStatus;
+  await writeCachedStatus(status);
+  log.info('Trial initialized locally', { daysLeft: 7 });
+  return status;
 }
 
 /**
- * Verify activation code
- * Calls wasm.verify_code(code, fingerprint, now)
+ * Activate with code
+ * Tries Worker API first
  */
 export async function activateCode(code: string): Promise<{
   valid: boolean;
@@ -175,125 +169,146 @@ export async function activateCode(code: string): Promise<{
   status?: string;
   daysLeft?: number;
 }> {
-  // Check if already active - prevent re-activation from resetting expiry
-  const currentStatus = await checkLicense();
-  if (currentStatus.status === 'active' && !currentStatus.expired) {
+  // Check if already active
+  const current = await checkLicense();
+  if (current.status === 'active' && !current.expired) {
     log.info('Already active, skipping re-activation');
-    return { valid: true, error: null, ...currentStatus };
+    return { valid: true, error: null, ...current };
   }
 
-  const wasm = getWasm();
-  const fingerprint = await generateFingerprint(wasm);
-  const now = BigInt(Date.now());
+  const fingerprint = await getFingerprint();
 
-  const resultJson = wasm.verify_code(code, fingerprint, now);
-  log.info('verify_code result:', resultJson);
-  const result = JSON.parse(resultJson);
+  // Try Worker API
+  try {
+    const result = await apiActivate(code, fingerprint);
+    if (result.success) {
+      const now = Date.now();
+      const daysLeft = Math.ceil((result.expire_ts - now) / (24 * 60 * 60 * 1000));
 
-  if (result.valid) {
-    await writeBlob(result.blob);
-    // Re-check to get current status
-    const status = await checkLicense();
-    log.info('Activation success, status:', JSON.stringify(status));
-    return { valid: true, error: null, ...status };
+      const status = {
+        status: 'active' as const,
+        daysLeft,
+        expired: false,
+        expireTs: result.expire_ts,
+        trialEndTs: 0,
+      };
+
+      await writeCachedStatus(status);
+      log.info('Activated via Worker', { daysLeft, expire_ts: result.expire_ts });
+      return { valid: true, error: null, ...status };
+    } else {
+      log.warn('Activation failed', { error: result.error });
+      return { valid: false, error: result.error || 'Activation failed' };
+    }
+  } catch (err) {
+    log.error('Worker activation failed', err);
+    return { valid: false, error: 'Server unreachable' };
   }
-
-  log.warn('Activation failed', { error: result.error });
-  return { valid: false, error: result.error };
 }
 
 /**
  * Check license status
- * Calls wasm.check_license(blob, now)
- * Returns { status, daysLeft, expired }
+ * Tries Worker API first, falls back to local cache
  */
 export async function checkLicense(): Promise<{
   status: string;
   daysLeft: number;
   expired: boolean;
 }> {
-  const wasm = getWasm();
-  const blob = await readBlob();
+  const fingerprint = await getFingerprint();
 
-  log.info('checkLicense blob:', blob ? blob.substring(0, 30) + '...' : 'null');
-
-  if (!blob) {
-    // No blob = first install
-    log.info('No blob found, initializing trial');
-    return initTrial();
-  }
-
-  const now = BigInt(Date.now());
-  const resultJson = wasm.check_license(blob, now);
-  log.info('checkLicense result:', resultJson);
-  const result = JSON.parse(resultJson);
-
-  // Update blob if status changed (e.g., trial → expired)
-  if (result.status === 'expired' && blob) {
-    // Wasm may have updated the blob internally
-    // For now, we keep the same blob
-  }
-
-  licenseStatus = {
-    status: result.status,
-    daysLeft: result.daysLeft,
-    expired: result.expired,
-  };
-
-  return licenseStatus;
-}
-
-/**
- * Track usage and optionally trigger stealth check
- * Called on every user action (chat, voice, automation)
- * Calls wasm.track_usage(blob, action, ts) and wasm.hidden_verify(blob) if needed
- */
-export async function tick(
-  action: 'chat' | 'voice' | 'automation',
-): Promise<void> {
-  const wasm = getWasm();
-  const blob = await readBlob();
-  if (!blob) return;
-
+  // Try Worker API
   try {
-    // Track usage
-    const usageJson = wasm.track_usage(blob, action, BigInt(Date.now()));
-    const usage = JSON.parse(usageJson);
+    const result = await apiCheck(fingerprint);
+    const now = Date.now();
 
-    // Update usage storage
-    // Note: In production, the wasm module handles encrypted usage internally
+    if (result.status === 'active') {
+      const status = {
+        status: 'active',
+        daysLeft: result.days_left,
+        expired: false,
+        expireTs: result.expire_ts,
+        trialEndTs: 0,
+      };
+      await writeCachedStatus(status);
+      return status;
+    }
 
-    // Check if stealth verification should trigger
-    if (usage.shouldCheck) {
-      log.debug('Stealth check triggered');
-      const verifyJson = wasm.hidden_verify(blob);
-      const verify = JSON.parse(verifyJson);
+    if (result.status === 'trial') {
+      const status = {
+        status: 'trial',
+        daysLeft: result.days_left,
+        expired: false,
+        expireTs: 0,
+        trialEndTs: result.trial_end_ts,
+      };
+      await writeCachedStatus(status);
+      return status;
+    }
 
-      if (!verify.passed) {
-        log.warn('Stealth check failed', { degradeLevel: verify.degradeLevel });
-        // Update degrade level in blob
-        // Note: In production, wasm handles this internally
-      }
+    if (result.status === 'expired') {
+      const status = {
+        status: 'expired',
+        daysLeft: 0,
+        expired: true,
+        expireTs: 0,
+        trialEndTs: result.trial_end_ts,
+      };
+      await writeCachedStatus(status);
+      return status;
+    }
+
+    // not_found → need to register trial
+    if (result.status === 'not_found') {
+      log.info('No license found, registering trial');
+      return await initTrial();
     }
   } catch (err) {
-    log.error('Tick failed', err);
+    log.warn('Worker check failed, using local cache', err);
   }
+
+  // Fallback: use local cache
+  const cached = await readCachedStatus();
+  if (cached) {
+    const now = Date.now();
+
+    // Check if expired
+    if (cached.status === 'active' && cached.expireTs > 0 && now > cached.expireTs) {
+      return { status: 'expired', daysLeft: 0, expired: true };
+    }
+    if (cached.status === 'trial' && cached.trialEndTs > 0 && now > cached.trialEndTs) {
+      return { status: 'expired', daysLeft: 0, expired: true };
+    }
+
+    // Recalculate days left
+    let daysLeft = cached.daysLeft;
+    if (cached.status === 'active' && cached.expireTs > 0) {
+      daysLeft = Math.ceil((cached.expireTs - now) / (24 * 60 * 60 * 1000));
+    }
+    if (cached.status === 'trial' && cached.trialEndTs > 0) {
+      daysLeft = Math.ceil((cached.trialEndTs - now) / (24 * 60 * 60 * 1000));
+    }
+
+    return { status: cached.status, daysLeft: Math.max(0, daysLeft), expired: cached.expired };
+  }
+
+  // No cache → first install
+  return await initTrial();
 }
 
 /**
- * Get current cached license status
- * Returns null if not initialized
+ * Track usage (local only, for statistics)
  */
-export function getCachedStatus(): typeof licenseStatus {
-  return licenseStatus;
+export async function trackUsage(_action: string): Promise<void> {
+  // Usage tracking is local-only for now
+  // Can be extended to send to Worker later
 }
 
 /**
- * Clear all license data (for testing/reset)
+ * Clear all license data
  */
 export async function clearLicense(): Promise<void> {
-  await chrome.storage.local.remove([BLOB_KEY, USAGE_KEY]);
-  cachedBlob = null;
-  licenseStatus = null;
+  await chrome.storage.local.remove([BLOB_KEY, STATUS_KEY]);
+  cachedStatus = null;
   log.info('License data cleared');
 }

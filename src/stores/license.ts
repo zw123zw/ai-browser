@@ -2,8 +2,7 @@
  * License Store - Pinia Setup Store
  *
  * Manages license state (status, daysLeft, expired).
- * All logic delegated to wasm via wasm-loader.
- * This store only exposes reactive state to Vue components.
+ * Delegated to Worker API + Wasm via wasm-loader.
  */
 
 import { defineStore } from 'pinia';
@@ -11,12 +10,9 @@ import { ref, computed } from 'vue';
 import { Logger } from '@/src/utils/logger';
 import {
   initWasm,
-  initTrial,
   checkLicense,
   activateCode,
-  tick,
   clearLicense,
-  getCachedStatus,
 } from '@/src/license/wasm-loader';
 
 const log = new Logger('Store:License');
@@ -140,16 +136,10 @@ export const useLicenseStore = defineStore('aib-license', () => {
   }
 
   /**
-   * Track user action
-   * Call this on every user operation (chat, voice, automation)
+   * Track user action (placeholder for future analytics)
    */
-  async function trackAction(action: 'chat' | 'voice' | 'automation'): Promise<void> {
-    if (!initialized.value) return;
-    try {
-      await tick(action);
-    } catch (err) {
-      log.error('Track action failed', err);
-    }
+  async function trackAction(_action: 'chat' | 'voice' | 'automation'): Promise<void> {
+    // No-op for now, can be extended to send to Worker later
   }
 
   /**
