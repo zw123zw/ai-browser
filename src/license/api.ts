@@ -10,7 +10,7 @@ import { Logger } from '@/src/utils/logger';
 const log = new Logger('License:API');
 
 /** Worker API base URL */
-const API_BASE = 'https://lingbot-license.lingbot.workers.dev';
+const API_BASE = 'https://lingbot-stats.lingbot.workers.dev';
 
 /** Request timeout in ms */
 const TIMEOUT = 10000;
