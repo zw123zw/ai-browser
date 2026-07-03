@@ -1,0 +1,15 @@
+name = "lingbot-license"
+main = "src/index.ts"
+compatibility_date = "2024-01-01"
+
+# KV namespace for license storage
+[[kv_namespaces]]
+binding = "LICENSE_KV"
+id = "YOUR_KV_NAMESPACE_ID"
+preview_id = "YOUR_KV_PREVIEW_ID"
+
+# Environment variables
+[vars]
+MASTER_SECRET = "YOUR_MASTER_SECRET_HERE"
+TRIAL_DAYS = "7"
+DEFAULT_ACTIVATION_DAYS = "30"

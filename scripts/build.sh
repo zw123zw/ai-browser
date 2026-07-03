@@ -1,13 +1,12 @@
 #!/bin/bash
-# build-all.sh - Build both test and production packages
+# build.sh - Unified build script
 #
-# Usage: npm run build
-# Output:
-#   .output/release-v{version}-{timestamp}-{seed}/
-#   ├── lingbot-v{version}-{seed}.zip          ← 生产包（无日志）
-#   ├── lingbot-debug-v{version}-{timestamp}.zip ← 测试包（有日志）
-#   ├── licenses-v{version}.csv                ← 激活码
-#   └── .build-seed                            ← BUILD_SEED
+# Usage:
+#   bash scripts/build.sh          # Build both test and prod
+#   bash scripts/build.sh test     # Build test only (with logging)
+#   bash scripts/build.sh prod     # Build prod only (no logging)
+#
+# Output: .output/release-v{version}-{timestamp}-{seed}/
 
 set -e
 
@@ -18,9 +17,10 @@ cd "$PROJECT_DIR"
 
 BUILD_TIME=$(date +%Y%m%d-%H%M%S)
 VERSION=$(node -p "require('./package.json').version")
+BUILD_MODE="${1:-all}"  # all, test, prod
 
 echo "=========================================="
-echo "  AI Browser - Full Build"
+echo "  AI Browser Build (${BUILD_MODE})"
 echo "=========================================="
 echo "  Version: ${VERSION}"
 echo "  Time: ${BUILD_TIME}"
@@ -43,29 +43,45 @@ echo ""
 echo "[2/6] Building wasm module..."
 cd wasm-license
 export PATH="$HOME/.cargo/bin:$PATH"
+rm -rf pkg
 wasm-pack build --target web --release --no-opt 2>&1 | tail -3
 cd "$PROJECT_DIR"
+# Copy wasm output to public/wasm
+cp wasm-license/pkg/wasm_license.js public/wasm/
+cp wasm-license/pkg/wasm_license_bg.wasm public/wasm/
+cp wasm-license/pkg/wasm_license.d.ts public/wasm/
+cp wasm-license/pkg/wasm_license_bg.wasm.d.ts public/wasm/
 echo "  Wasm build complete"
 
-# Step 4: Build production version (no logging)
-echo ""
-echo "[3/6] Building production version..."
-rm -rf .output/chrome-mv3
-npx wxt build 2>&1 | tail -5
-PROD_DIR=".output/prod-v${VERSION}-${BUILD_TIME}"
-node -e "const fs=require('fs'); fs.renameSync('.output/chrome-mv3', '${PROD_DIR}')"
-echo "  Production build complete"
+# Step 4: Build prod version
+if [ "$BUILD_MODE" = "all" ] || [ "$BUILD_MODE" = "prod" ]; then
+  echo ""
+  echo "[3/6] Building production version..."
+  rm -rf .output/chrome-mv3
+  npx wxt build 2>&1 | tail -5
+  PROD_DIR=".output/prod-v${VERSION}-${BUILD_TIME}"
+  node -e "const fs=require('fs'); fs.renameSync('.output/chrome-mv3', '${PROD_DIR}')"
+  echo "  Production build complete"
+else
+  echo ""
+  echo "[3/6] Skipping production build"
+fi
 
-# Step 5: Build test version (with logging)
-echo ""
-echo "[4/6] Building test version..."
-rm -rf .output/chrome-mv3
-cross-env VITE_LOG_ENABLED=true wxt build 2>&1 | tail -5
-TEST_DIR=".output/test-v${VERSION}-${BUILD_TIME}"
-node -e "const fs=require('fs'); fs.renameSync('.output/chrome-mv3', '${TEST_DIR}')"
-echo "  Test build complete"
+# Step 5: Build test version
+if [ "$BUILD_MODE" = "all" ] || [ "$BUILD_MODE" = "test" ]; then
+  echo ""
+  echo "[4/6] Building test version..."
+  rm -rf .output/chrome-mv3
+  cross-env VITE_LOG_ENABLED=true wxt build 2>&1 | tail -5
+  TEST_DIR=".output/test-v${VERSION}-${BUILD_TIME}"
+  node -e "const fs=require('fs'); fs.renameSync('.output/chrome-mv3', '${TEST_DIR}')"
+  echo "  Test build complete"
+else
+  echo ""
+  echo "[4/6] Skipping test build"
+fi
 
-# Step 6: Package both zips
+# Step 6: Package zips
 echo ""
 echo "[5/6] Packaging zips..."
 PROD_ZIP="lingbot-v${VERSION}-${BUILD_TIME}.zip"
@@ -77,6 +93,7 @@ node -e "
   const JSZip = require('jszip');
 
   async function packDir(srcDir, zipPath) {
+    if (!fs.existsSync(srcDir)) return 0;
     const zip = new JSZip();
     function addDir(dir, prefix) {
       for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -95,16 +112,25 @@ node -e "
     return buf.length;
   }
 
+  const releaseDir = '${RELEASE_DIR}';
+  const prodDir = '${PROD_DIR:-}';
+  const testDir = '${TEST_DIR:-}';
+  const prodZip = '${PROD_ZIP}';
+  const testZip = '${TEST_ZIP}';
+
+  fs.mkdirSync(releaseDir, { recursive: true });
+
   (async () => {
-    const prodSize = await packDir('${PROD_DIR}', '${RELEASE_DIR}/${PROD_ZIP}');
-    console.log('  Production: ${RELEASE_DIR}/${PROD_ZIP} (' + (prodSize/1024/1024).toFixed(1) + 'MB)');
-
-    const testSize = await packDir('${TEST_DIR}', '${RELEASE_DIR}/${TEST_ZIP}');
-    console.log('  Test: ${RELEASE_DIR}/${TEST_ZIP} (' + (testSize/1024/1024).toFixed(1) + 'MB)');
-
-    // Clean build directories
-    fs.rmSync('${PROD_DIR}', { recursive: true, force: true });
-    fs.rmSync('${TEST_DIR}', { recursive: true, force: true });
+    if (prodDir) {
+      const prodSize = await packDir(prodDir, releaseDir + '/' + prodZip);
+      if (prodSize) console.log('  Production: ' + prodZip + ' (' + (prodSize/1024/1024).toFixed(1) + 'MB)');
+      fs.rmSync(prodDir, { recursive: true, force: true });
+    }
+    if (testDir) {
+      const testSize = await packDir(testDir, releaseDir + '/' + testZip);
+      if (testSize) console.log('  Test: ' + testZip + ' (' + (testSize/1024/1024).toFixed(1) + 'MB)');
+      fs.rmSync(testDir, { recursive: true, force: true });
+    }
     console.log('  Cleaned build directories');
   })();
 "
@@ -122,7 +148,4 @@ echo "=========================================="
 echo "  Version: ${VERSION}"
 echo "  Build seed: ${BUILD_SEED_SHORT}"
 echo "  Release: ${RELEASE_DIR}/"
-echo "    ├── ${PROD_ZIP}          ← 上传 Chrome Web Store"
-echo "    ├── ${TEST_ZIP}           ← 本地测试（带日志）"
-echo "    ├── licenses-v${VERSION}.csv  ← 上传 Gumroad/爱发电"
-echo "    └── .build-seed"
+ls -1 "$RELEASE_DIR" | while read f; do echo "    ├── $f"; done

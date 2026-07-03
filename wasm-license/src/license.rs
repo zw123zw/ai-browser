@@ -58,9 +58,28 @@ fn encrypt_blob(blob: &LicenseBlob) -> String {
 /// Decrypt and deserialize a license blob
 fn decrypt_blob(encrypted: &str) -> Option<LicenseBlob> {
     let key = license_key();
-    let data = crypto::base64_decode(encrypted)?;
-    let plaintext = crypto::decrypt(&data, &key).ok()?;
-    serde_json::from_slice(&plaintext).ok()
+    let key_hex = hex_encode(&key);
+    let data = match crypto::base64_decode(encrypted) {
+        Some(d) => d,
+        None => {
+            web_sys::console::log_1(&format!("[Wasm] decrypt: base64 decode failed, input len: {}", encrypted.len()).into());
+            return None;
+        }
+    };
+    let plaintext = match crypto::decrypt(&data, &key) {
+        Ok(p) => p,
+        Err(e) => {
+            web_sys::console::log_1(&format!("[Wasm] decrypt: AES failed, key_hex: {}, data_len: {}, error: {}", key_hex, data.len(), e).into());
+            return None;
+        }
+    };
+    match serde_json::from_slice(&plaintext) {
+        Ok(blob) => Some(blob),
+        Err(e) => {
+            web_sys::console::log_1(&format!("[Wasm] decrypt: JSON parse failed, plaintext: {:?}", String::from_utf8_lossy(&plaintext)).into());
+            None
+        }
+    }
 }
 
 /// Initialize 7-day trial period
@@ -195,13 +214,13 @@ pub fn check_license(blob: &str, now: u64) -> String {
     let license = match decrypt_blob(blob) {
         Some(l) => l,
         None => {
-            return r#"{"status":"corrupted","daysLeft":0,"expired":true}"#.to_string();
+            return r#"{"status":"decryption_failed","daysLeft":0,"expired":true}"#.to_string();
         }
     };
 
     // Verify signature
     if !verify_blob_signature(&license) {
-        return r#"{"status":"corrupted","daysLeft":0,"expired":true}"#.to_string();
+        return r#"{"status":"signature_invalid","daysLeft":0,"expired":true}"#.to_string();
     }
 
     let expired = now > license.expire_ts;

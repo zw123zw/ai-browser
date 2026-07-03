@@ -140,7 +140,7 @@ const drawerClass = computed(() => ({ 'aib-open': props.open }));
                 <span class="aib-brand-shine" />
               </span>
               <span v-if="licenseStore.isTrial" class="aib-license-tag aib-license-tag--trial">试用 {{ licenseStore.daysLeft }}天</span>
-              <span v-else-if="licenseStore.isActivated" class="aib-license-tag aib-license-tag--active">{{ licenseStore.daysLeft }}天</span>
+              <span v-else-if="licenseStore.isActivated" class="aib-license-tag aib-license-tag--active">有效期 {{ licenseStore.daysLeft }}天</span>
               <span v-else-if="licenseStore.status === 'expired'" class="aib-license-tag aib-license-tag--expired">已过期</span>
             </div>
             <span class="aib-brand-sub">{{ t('app.subtitle') }}</span>

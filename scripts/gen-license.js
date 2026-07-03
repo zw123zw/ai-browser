@@ -13,16 +13,13 @@
  * - Part 3: fingerprint_hash low 4 bytes + HMAC signature (base32)
  */
 
-import { createHash, createHmac, randomBytes, pbkdf2Sync } from 'crypto';
+import { createHash, createHmac, randomBytes } from 'crypto';
 import { writeFileSync, readFileSync, existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
 
-// Must match wasm crypto.rs constants
-const PBKDF2_ITERATIONS = 100000;
-const PBKDF2_SALT = 'aib-license-salt-v1';
-
+// Must match wasm crypto.rs - use SHA-256 for key derivation
 function deriveKey(seed) {
-  return pbkdf2Sync(seed, PBKDF2_SALT, PBKDF2_ITERATIONS, 32, 'sha256');
+  return createHash('sha256').update(seed).digest();
 }
 
 // ── Constants ──

@@ -175,18 +175,26 @@ export async function activateCode(code: string): Promise<{
   status?: string;
   daysLeft?: number;
 }> {
+  // Check if already active - prevent re-activation from resetting expiry
+  const currentStatus = await checkLicense();
+  if (currentStatus.status === 'active' && !currentStatus.expired) {
+    log.info('Already active, skipping re-activation');
+    return { valid: true, error: null, ...currentStatus };
+  }
+
   const wasm = getWasm();
   const fingerprint = await generateFingerprint(wasm);
   const now = BigInt(Date.now());
 
   const resultJson = wasm.verify_code(code, fingerprint, now);
-  console.log('[WasmLoader] verify_code result:', resultJson);
+  log.info('verify_code result:', resultJson);
   const result = JSON.parse(resultJson);
 
   if (result.valid) {
     await writeBlob(result.blob);
     // Re-check to get current status
     const status = await checkLicense();
+    log.info('Activation success, status:', JSON.stringify(status));
     return { valid: true, error: null, ...status };
   }
 
@@ -207,13 +215,17 @@ export async function checkLicense(): Promise<{
   const wasm = getWasm();
   const blob = await readBlob();
 
+  log.info('checkLicense blob:', blob ? blob.substring(0, 30) + '...' : 'null');
+
   if (!blob) {
     // No blob = first install
+    log.info('No blob found, initializing trial');
     return initTrial();
   }
 
   const now = BigInt(Date.now());
   const resultJson = wasm.check_license(blob, now);
+  log.info('checkLicense result:', resultJson);
   const result = JSON.parse(resultJson);
 
   // Update blob if status changed (e.g., trial → expired)

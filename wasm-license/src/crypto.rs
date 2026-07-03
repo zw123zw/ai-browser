@@ -9,11 +9,9 @@ type Aes256CbcDec = cbc::Decryptor<aes::Aes256>;
 const PBKDF2_ITERATIONS: u32 = 100_000;
 const SALT: &[u8] = b"aib-license-salt-v1";
 
-/// Derive a 32-byte key from a seed string using PBKDF2
+/// Derive a 32-byte key from a seed string using SHA-256
 pub fn derive_key(seed: &str) -> [u8; 32] {
-    let mut key = [0u8; 32];
-    pbkdf2::<Hmac<Sha256>>(seed.as_bytes(), SALT, PBKDF2_ITERATIONS, &mut key);
-    key
+    sha256(seed.as_bytes())
 }
 
 /// Derive a 16-byte IV from key + context
@@ -30,26 +28,24 @@ pub fn derive_iv(key: &[u8; 32], context: &[u8]) -> [u8; 16] {
 pub fn encrypt(data: &[u8], key: &[u8; 32]) -> Vec<u8> {
     let iv = derive_iv(key, b"encrypt-iv");
     let encryptor = Aes256CbcEnc::new(key.into(), &iv.into());
-    let mut buf = data.to_vec();
-    // Pad to block size
-    let block_size = 16;
-    let pad_len = block_size - (buf.len() % block_size);
-    buf.extend(std::iter::repeat(pad_len as u8).take(pad_len));
-    let msg_len = data.len();
-    encryptor.encrypt_padded_mut::<Pkcs7>(&mut buf, msg_len)
-        .expect("encryption failed")
-        .to_vec()
+    // Allocate buffer with space for padding
+    let mut buf = vec![0u8; data.len() + 16];
+    buf[..data.len()].copy_from_slice(data);
+    let ct = encryptor.encrypt_padded_mut::<Pkcs7>(&mut buf, data.len())
+        .expect("encryption failed");
+    ct.to_vec()
 }
 
 /// AES-256-CBC decrypt with PKCS7 padding
 pub fn decrypt(data: &[u8], key: &[u8; 32]) -> Result<Vec<u8>, &'static str> {
     let iv = derive_iv(key, b"encrypt-iv");
     let decryptor = Aes256CbcDec::new(key.into(), &iv.into());
-    let mut buf = data.to_vec();
-    decryptor
-        .decrypt_padded_mut::<Pkcs7>(&mut buf)
-        .map_err(|_| "decryption failed")
-        .map(|p| p.to_vec())
+    // Create buffer with exact ciphertext size
+    let mut buf = vec![0u8; data.len()];
+    buf.copy_from_slice(data);
+    let pt = decryptor.decrypt_padded_mut::<Pkcs7>(&mut buf)
+        .map_err(|_| "decryption failed")?;
+    Ok(pt.to_vec())
 }
 
 /// HMAC-SHA256 sign
@@ -91,63 +87,14 @@ pub fn decrypt_data(encrypted: &str, key_seed: &str) -> String {
     }
 }
 
-/// Simple base64 encode (using base32 crate as fallback, or manual)
+/// Base64 encode using standard crate
 pub fn base64_encode(data: &[u8]) -> String {
-    // Use standard base64 via manual implementation
-    const CHARS: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    let mut result = String::new();
-    for chunk in data.chunks(3) {
-        let b0 = chunk[0] as u32;
-        let b1 = if chunk.len() > 1 { chunk[1] as u32 } else { 0 };
-        let b2 = if chunk.len() > 2 { chunk[2] as u32 } else { 0 };
-        let triple = (b0 << 16) | (b1 << 8) | b2;
-        result.push(CHARS[((triple >> 18) & 0x3F) as usize] as char);
-        result.push(CHARS[((triple >> 12) & 0x3F) as usize] as char);
-        if chunk.len() > 1 {
-            result.push(CHARS[((triple >> 6) & 0x3F) as usize] as char);
-        } else {
-            result.push('=');
-        }
-        if chunk.len() > 2 {
-            result.push(CHARS[(triple & 0x3F) as usize] as char);
-        } else {
-            result.push('=');
-        }
-    }
-    result
+    use base64::Engine;
+    base64::engine::general_purpose::STANDARD.encode(data)
 }
 
-/// Simple base64 decode
+/// Base64 decode using standard crate
 pub fn base64_decode(data: &str) -> Option<Vec<u8>> {
-    let data: String = data.chars().filter(|c| *c != '=').collect();
-    let mut result = Vec::new();
-    let chars: Vec<u8> = data
-        .bytes()
-        .map(|b| match b {
-            b'A'..=b'Z' => b - b'A',
-            b'a'..=b'z' => b - b'a' + 26,
-            b'0'..=b'9' => b - b'0' + 52,
-            b'+' => 62,
-            b'/' => 63,
-            _ => 0,
-        })
-        .collect();
-
-    for chunk in chars.chunks(4) {
-        if chunk.len() < 2 {
-            break;
-        }
-        let b0 = chunk[0] as u32;
-        let b1 = chunk[1] as u32;
-        let b2 = if chunk.len() > 2 { chunk[2] as u32 } else { 0 };
-        let triple = (b0 << 18) | (b1 << 12) | (b2 << 6);
-        result.push((triple >> 16) as u8);
-        if chunk.len() > 2 {
-            result.push(((triple >> 8) & 0xFF) as u8);
-        }
-        if chunk.len() > 3 {
-            result.push((triple & 0xFF) as u8);
-        }
-    }
-    Some(result)
+    use base64::Engine;
+    base64::engine::general_purpose::STANDARD.decode(data).ok()
 }

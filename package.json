@@ -30,9 +30,9 @@
   ],
   "scripts": {
     "dev": "bash -c \"cp docs/site/guide-zh.md public/guide-zh.md && cp docs/site/guide-en.md public/guide-en.md && wxt\"",
-    "build": "bash scripts/build-all.sh",
-    "build:test": "bash scripts/build-debug.sh",
-    "build:prod": "bash scripts/build-store.sh",
+    "build": "bash scripts/build.sh",
+    "build:test": "bash scripts/build.sh test",
+    "build:prod": "bash scripts/build.sh prod",
     "gen-license": "node scripts/gen-license.js",
     "compile": "vue-tsc --noEmit",
     "test": "vitest run",
