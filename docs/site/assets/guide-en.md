@@ -26,15 +26,27 @@
 
 ## 1. 🚀 Quick Start
 
-📸 Screenshot: [Extension installation and initial setup flow]
-
 ### 1.1 Installation
 
-1. Download the latest CRX package
+**Method 1: Drag & Drop (Recommended)**
+
+1. Download the latest ZIP package
+2. Open Chrome and go to `chrome://extensions/`
+3. Enable "Developer mode" in the top-right corner
+4. Drag the ZIP file directly into the browser window — it auto-extracts and installs
+
+![Extension install - Developer mode & drag install](assets/img/扩展安装1.png)
+
+**Method 2: Manual Load**
+
+1. Download and extract the latest ZIP package
 2. Open Chrome and go to `chrome://extensions/`
 3. Enable "Developer mode" in the top-right corner
 4. Click "Load unpacked" and select the extracted folder
-5. The toolbar icon and a floating button will appear after installation
+
+The toolbar icon and a floating button will appear after installation.
+
+![Extension install - Success state](assets/img/扩展安装2.png)
 
 ### 1.2 Initial Model Setup
 
@@ -62,6 +74,8 @@
 - **Drag** — Drag to any position (3px threshold)
 - **Position memory** — Auto-saved, persists across refresh
 
+![Floating button](assets/img/悬浮球.png)
+
 ### 1.5 Resize Sidebar
 
 Drag the left edge handle of the sidebar (min 60px, max 95% viewport width). Width is auto-synced across all tabs.
@@ -69,8 +83,6 @@ Drag the left edge handle of the sidebar (min 60px, max 95% viewport width). Wid
 ---
 
 ## 2. 💬 AI Chat
-
-📸 Screenshot: [AI chat interface with model selector and message thread]
 
 ### 2.1 Supported AI Providers (14)
 
@@ -94,6 +106,8 @@ Drag the left edge handle of the sidebar (min 60px, max 95% viewport width). Wid
 ### 2.2 Sending Messages
 
 Type your message and press **Enter** to send, **Shift+Enter** for a new line. AI responses stream in real-time; click ⏹ to stop.
+
+![AI chat main interface](assets/img/主界面.png)
 
 > **💡 Try saying:**
 >
@@ -137,6 +151,10 @@ Click the 💡 lightbulb icon to enable (only for reasoning-capable models like 
 
 > **Note:** Scanned PDFs (image-only) will show a warning. Multi-sheet Excel files are labeled per sheet. Image attachments show an OCR progress bar.
 
+![File attachment upload](assets/img/文件附件1.png)
+
+![File attachment preview](assets/img/文件附件2.png)
+
 > **💡 Try saying:**
 >
 > - (After uploading a screenshot) "Extract the text from this image and translate it to English"
@@ -150,6 +168,8 @@ Click the 💡 lightbulb icon to enable (only for reasoning-capable models like 
 | **Auto** (default) | Send directly to AI |
 | **Manual** | Fill input box, confirm manually |
 | **Off** | No action |
+
+![Auto-send selected text](assets/img/选中文字自动发送.png)
 
 ### 2.7 Message Management
 
@@ -205,8 +225,6 @@ When AI executes web operations, real-time feedback appears in the chat:
 
 ## 3. 🌐 Web Automation
 
-📸 Screenshot: [Web automation commands and natural language page interaction]
-
 ### 3.1 How It Works
 
 AI analyzes page structure → generates action commands → executes step by step → auto-retries on error (max 50 steps) → up to 20 batch commands.
@@ -224,6 +242,10 @@ AI analyzes page structure → generates action commands → executes step by st
 > - "Help me log in, username admin, password 123456"
 > - "Click the third search result"
 > - "Open a new tab and go to GitHub"
+
+![Web automation - Natural language operations](assets/img/网页自动化1.png)
+
+![Web automation - Command execution](assets/img/网页自动化2.png)
 
 ### 3.3 Quick Commands (Instant)
 
@@ -257,14 +279,21 @@ AI analyzes page structure → generates action commands → executes step by st
 | `/translate` | Translate page | Translate current page content |
 | `/note` | Generate note | Generate AI note from page content |
 
+![Web automation - Page operations](assets/img/网页自动化3.png)
+
 ### 3.5 Control Commands
 
 | Command | Description |
 |------|------|
 | `/stop` | Stop current operation |
+| `/pause` | Pause current operation (auto-scroll, AI execution, etc.) |
+| `/resume` | Resume a paused operation |
+| `/list` | Show queued task list |
 | `/help` | Show available commands |
 
 ### 3.6 Scroll Control
+
+![Scroll control](assets/img/滚动控制.png)
 
 | Direction | Description | Example |
 |------|------|------|
@@ -315,6 +344,8 @@ Page summary uses a 3-layer progressive analysis framework, outputting structure
 > - "Organize the product info on this page into a table"
 > - "Download this page's data as Excel"
 
+![Web automation - Data extraction](assets/img/网页自动化4.png)
+
 ### 3.10 Rich Editor Support
 
 AI can automatically detect and type into these rich editors: CodeMirror 5/6, Monaco Editor, Ace Editor, Quill, TinyMCE, CKEditor, ProseMirror/TipTap, Draft.js, WangEditor, and generic contenteditable elements.
@@ -326,6 +357,8 @@ Progress is auto-saved on page navigation and restored on the new page (30-secon
 ### 3.12 Batch Commands
 
 AI can return multiple commands (up to 20) in one response, executed in sequence. A single failure does not block subsequent commands.
+
+![Web automation - Batch commands](assets/img/网页自动化5.png)
 
 ### 3.13 iframe & Shadow DOM Element Interaction
 
@@ -339,15 +372,17 @@ AI can automatically close page modals/dialogs, supporting native dialogs, ARIA 
 
 AI can programmatically upload files to page file inputs, with smart detection of hidden upload components used by frameworks like Element UI and Ant Design.
 
+![Web automation - Execution results](assets/img/网页自动化6.png)
+
 ---
 
 ## 4. 🎤 Voice Control
 
-📸 Screenshot: [Voice control panel with microphone button and status indicators]
-
 ### 4.1 Getting Started
 
 Click the 🎙️ icon to the left of the input box → Voice panel → Click the large microphone button to start.
+
+![Voice control panel](assets/img/语音控制.png)
 
 ### 4.2 Voice Engines (4)
 
@@ -417,8 +452,6 @@ Click the 📖 guide button in the voice panel to open a 5-tab guide: Quick Star
 
 ## 5. 🌍 Smart Translation
 
-📸 Screenshot: [Translation modes selection and popup translation example]
-
 ### 5.1 Translation Modes
 
 | Mode | Best for |
@@ -434,13 +467,19 @@ Configure in Settings → General → Translation Mode.
 
 Select text → popup appears automatically → shows translation → copy button → click outside to close. The popup supports dragging to reposition and resizing from all edges.
 
+![Selection translation](assets/img/划词翻译.png)
+
 ### 5.3 Auto Translation
 
 All visible text is auto-translated; identical text is translated only once; `<code>` elements are preserved; dynamically loaded content is also translated. A loading spinner shows during translation. Disabling auto-translate restores all original text.
 
+![Auto translation](assets/img/自动翻译.png)
+
 ### 5.4 Click Translation
 
 Click a paragraph to translate, click again to hide, click a third time to show the cached result. Supports paragraphs, lists, tables, headings, etc. Click a table row to translate the entire table.
+
+![Click translation](assets/img/点击翻译.png)
 
 ### 5.5 Target Languages (8)
 
@@ -457,8 +496,6 @@ Three-layer protection ensures code is not mistranslated:
 ---
 
 ## 6. 📎 File Processing
-
-📸 Screenshot: [File upload interface and preview panel]
 
 ### 6.1 Upload Methods
 
@@ -485,8 +522,6 @@ Smart format handling: prefers original file, otherwise regenerates (xlsx/docx/p
 
 ## 7. 📊 Charts & File Output
 
-📸 Screenshot: [Chart types and AI-generated file download examples]
-
 ### 7.1 AI File Generation
 
 AI embeds downloadable files via `[FILE]` tags: text, CSV, Excel, JSON, PDF, charts.
@@ -497,6 +532,8 @@ AI embeds downloadable files via `[FILE]` tags: text, CSV, Excel, JSON, PDF, cha
 > - "Save the analysis results as an Excel spreadsheet"
 > - "Generate a project report in PDF format"
 > - "Output a JSON configuration file"
+
+![Charts & file download](assets/img/图表生成与文件下载.png)
 
 ### 7.2 Chart Types
 
@@ -516,8 +553,6 @@ Bar chart · Line chart · Pie chart (solid/doughnut) · Radar chart
 ---
 
 ## 8. 📝 Notes & Bookmarks
-
-📸 Screenshot: [Note bookmark and viewer interface]
 
 ### 8.1 What Is the Note System
 
@@ -541,6 +576,12 @@ A dialog appears for entering or selecting an existing title. Title autocomplete
 > - "Summarize this page" (then bookmark the generated note)
 > - "Translate this text" (then bookmark the translation)
 
+![Selection bookmark](assets/img/划词笔记.png)
+
+![Click bookmark](assets/img/点击笔记.png)
+
+![Auto bookmark](assets/img/自动笔记.png)
+
 ### 8.3 Viewing Notes
 
 Click the 📓 notebook icon in the sidebar header to open the note viewer:
@@ -548,6 +589,8 @@ Click the 📓 notebook icon in the sidebar header to open the note viewer:
 - **Left sidebar** — Note title list, click to switch
 - **Center area** — Note content with Markdown rendering
 - **Right sidebar** — Timeline showing source links and timestamps for each note
+
+![Note viewer dialog](assets/img/笔记弹框.png)
 
 ### 8.4 Editing Notes
 
@@ -575,8 +618,6 @@ Hover a title to reveal the delete button, or click delete at the bottom of a no
 
 ## 9. ⚙️ Settings
 
-📸 Screenshot: [Settings panel with model configuration and general options]
-
 Click the ⚙️ gear icon in the top-right corner of the sidebar to open settings. Settings contain 4 tabs.
 
 ### 9.1 Model Configuration
@@ -589,6 +630,8 @@ Click the ⚙️ gear icon in the top-right corner of the sidebar to open settin
 - 4 authentication methods: Bearer Token, API Key, Access Token, Authorization Header
 - Each model has its own API URL and Key
 
+![Settings - Model configuration](assets/img/设置-模型配置.png)
+
 ### 9.2 General Settings
 
 | Setting | Description |
@@ -600,6 +643,8 @@ Click the ⚙️ gear icon in the top-right corner of the sidebar to open settin
 | Translate target | 8 languages dropdown |
 | Translate mode | Selection / Auto / Click / Off |
 | Note mode | Selection / Auto / Click / Off |
+
+![Settings - General](assets/img/设置-通用配置.png)
 
 ### 9.3 Voice Settings
 
@@ -616,6 +661,8 @@ Click the ⚙️ gear icon in the top-right corner of the sidebar to open settin
 | Buffer timeout | 0.5s – 5.0s (speech segmentation interval) |
 | Idle timeout | 2s – 15s (auto-return to wake word listening) |
 
+![Settings - Voice](assets/img/设置-语音配置.png)
+
 ### 9.4 User Settings
 
 | Setting | Description |
@@ -628,11 +675,11 @@ Click the ⚙️ gear icon in the top-right corner of the sidebar to open settin
 
 Clear cache: removes sessions/logs/history, preserves model configs/themes/shortcuts and other personalized settings.
 
+![Settings - User](assets/img/设置-用户配置.png)
+
 ---
 
 ## 10. 🎨 Themes
-
-📸 Screenshot: [Theme grid showing dark and light theme options]
 
 ### Dark (5)
 
@@ -660,11 +707,11 @@ Settings → General → click a theme in the grid to switch instantly.
 
 ## 11. ⌨️ Quick Commands
 
-📸 Screenshot: [Command selector popup and keyboard shortcut reference]
-
 ### Command Selector
 
 Type `/` → menu appears → ↑↓ to navigate → Tab/Enter to select → Escape to close. Supports input filtering to show only matching commands.
+
+![Quick commands](assets/img/快速命令.png)
 
 > **Note:** Only available when "Web Automation" is enabled.
 
@@ -684,7 +731,8 @@ Type `/` → menu appears → ↑↓ to navigate → Tab/Enter to select → Esc
 | `/search` | Web search | `/download` | Extract data |
 | `/summarize` | Summarize page | `/translate` | Translate page |
 | `/note` | Generate note | `/stop` | Stop operation |
-| `/help` | Show help | | |
+| `/pause` | Pause operation | `/resume` | Resume operation |
+| `/list` | Task list | `/help` | Show help |
 
 ### Keyboard Shortcuts
 
@@ -700,8 +748,6 @@ Type `/` → menu appears → ↑↓ to navigate → Tab/Enter to select → Esc
 ---
 
 ## 12. 💡 Tips
-
-📸 Screenshot: [Tips and best practices overview]
 
 ### Chat Efficiency
 
@@ -747,8 +793,6 @@ Type `/` → menu appears → ↑↓ to navigate → Tab/Enter to select → Esc
 ---
 
 ## 13. ❓ FAQ
-
-📸 Screenshot: [FAQ section with expandable question cards]
 
 **Q: Sidebar doesn't open?** Check if a model is configured, API Key is correct, and network is available.
 

@@ -8,7 +8,7 @@
 
 import { Logger } from '@/src/utils/logger';
 import { generateFingerprint } from './fingerprint';
-import { TRIAL_DAYS, ACTIVATION_DAYS, CACHE_TTL_HOURS } from './config';
+import { TRIAL_DAYS, ACTIVATION_DAYS } from './config';
 
 const log = new Logger('License:WasmLoader');
 

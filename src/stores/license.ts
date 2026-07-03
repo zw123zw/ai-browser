@@ -23,8 +23,8 @@ export const useLicenseStore = defineStore('aib-license', () => {
   /** Current license status */
   const status = ref<string>('unknown');
 
-  /** Days remaining */
-  const daysLeft = ref<number>(0);
+  /** Current timestamp (updated every minute for real-time calculation) */
+  const now = ref<number>(Date.now());
 
   /** Trial end timestamp */
   const trialEndTs = ref<number>(0);
@@ -42,6 +42,14 @@ export const useLicenseStore = defineStore('aib-license', () => {
   const error = ref<string | null>(null);
 
   // ── Computed ──
+
+  /** Days remaining - real-time calculation based on current timestamp */
+  const daysLeft = computed(() => {
+    const endTs = status.value === 'trial' ? trialEndTs.value : expireTs.value;
+    if (!endTs || endTs <= 0) return 0;
+    const remaining = Math.ceil((endTs - now.value) / (24 * 60 * 60 * 1000));
+    return Math.max(0, remaining);
+  });
 
   /** Whether license is active (trial or activated) */
   const isActive = computed(() => status.value === 'trial' || status.value === 'active');
@@ -69,6 +77,27 @@ export const useLicenseStore = defineStore('aib-license', () => {
     }
   });
 
+  // ── Timer ──
+
+  /** Timer ID for periodic now update */
+  let nowTimer: ReturnType<typeof setInterval> | null = null;
+
+  /** Start periodic timer to keep daysLeft real-time */
+  function startNowTimer(): void {
+    if (nowTimer) return;
+    nowTimer = setInterval(() => {
+      now.value = Date.now();
+    }, 60_000); // Update every minute
+  }
+
+  /** Stop periodic timer */
+  function stopNowTimer(): void {
+    if (nowTimer) {
+      clearInterval(nowTimer);
+      nowTimer = null;
+    }
+  }
+
   // ── Actions ──
 
   /**
@@ -94,15 +123,15 @@ export const useLicenseStore = defineStore('aib-license', () => {
         await clearLicense();
         const trial = await checkLicense();
         status.value = trial.status;
-        daysLeft.value = trial.daysLeft;
         trialEndTs.value = trial.trialEndTs;
         expireTs.value = trial.expireTs;
       } else {
         status.value = result.status;
-        daysLeft.value = result.daysLeft;
         trialEndTs.value = result.trialEndTs;
         expireTs.value = result.expireTs;
       }
+      now.value = Date.now();
+      startNowTimer();
       initialized.value = true;
 
       log.info('License initialized', { status: status.value, daysLeft: daysLeft.value, trialEndTs: trialEndTs.value });
@@ -111,7 +140,9 @@ export const useLicenseStore = defineStore('aib-license', () => {
       log.error('License initialization failed', err);
       // Wasm failed to load - don't block the app, allow trial
       status.value = 'trial';
-      daysLeft.value = 7;
+      trialEndTs.value = Date.now() + 7 * 24 * 60 * 60 * 1000;
+      now.value = Date.now();
+      startNowTimer();
       initialized.value = true;
     } finally {
       loading.value = false;
@@ -130,8 +161,12 @@ export const useLicenseStore = defineStore('aib-license', () => {
 
       if (result.valid) {
         status.value = result.status || 'active';
-        daysLeft.value = result.daysLeft || 0;
-        log.info('License activated', { daysLeft: result.daysLeft });
+        // expireTs is already set by activateCode in wasm-loader
+        const license = await checkLicense();
+        trialEndTs.value = license.trialEndTs;
+        expireTs.value = license.expireTs;
+        now.value = Date.now();
+        log.info('License activated', { daysLeft: daysLeft.value });
         return { success: true };
       } else {
         error.value = result.error || '激活失败';
@@ -160,7 +195,9 @@ export const useLicenseStore = defineStore('aib-license', () => {
     try {
       const result = await checkLicense();
       status.value = result.status;
-      daysLeft.value = result.daysLeft;
+      trialEndTs.value = result.trialEndTs;
+      expireTs.value = result.expireTs;
+      now.value = Date.now();
     } catch (err) {
       log.error('Refresh failed', err);
     }
@@ -172,7 +209,9 @@ export const useLicenseStore = defineStore('aib-license', () => {
   async function reset(): Promise<void> {
     await clearLicense();
     status.value = 'unknown';
-    daysLeft.value = 0;
+    trialEndTs.value = 0;
+    expireTs.value = 0;
+    stopNowTimer();
     initialized.value = false;
   }
 
@@ -199,5 +238,6 @@ export const useLicenseStore = defineStore('aib-license', () => {
     trackAction,
     refresh,
     reset,
+    stopNowTimer,
   };
 });

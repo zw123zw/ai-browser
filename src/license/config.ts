@@ -3,10 +3,7 @@
  */
 
 /** Trial period in days */
-export const TRIAL_DAYS = 0.00347;
+export const TRIAL_DAYS = 7;
 
 /** Activation period in days */
-export const ACTIVATION_DAYS = 0.00347;
-
-/** Cache TTL in hours */
-export const CACHE_TTL_HOURS = 24;
+export const ACTIVATION_DAYS = 30;

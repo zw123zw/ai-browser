@@ -79,9 +79,6 @@ export const TRIAL_DAYS = ${TRIAL_DAYS};
 
 /** Activation period in days */
 export const ACTIVATION_DAYS = ${ACTIVATION_DAYS};
-
-/** Cache TTL in hours */
-export const CACHE_TTL_HOURS = 24;
 EOF
 
 # Step 4: Build prod version
