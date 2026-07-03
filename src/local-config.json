@@ -25,14 +25,5 @@
     "apiKey": "47b9388dfc724dd7a4393744e2a44866.ftIIIvuoKtdlNE3U",
     "baseUrl": "https://open.bigmodel.cn/api/paas/v4/chat/completions",
     "website": "https://open.bigmodel.cn/"
-  },
-  {
-    "id": "doubao-seed-2.0-code",
-    "label": "豆包 Seed 2.0 Code",
-    "modelName": "ark-code-latest",
-    "provider": "doubao",
-    "apiKey": "ark-0936f708-6fe8-4c2d-8fee-ea44c71aa813-067a2",
-    "baseUrl": "https://ark.cn-beijing.volces.com/api/coding/v3",
-    "website": "https://console.volcengine.com/ark"
   }
 ]

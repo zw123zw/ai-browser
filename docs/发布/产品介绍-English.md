@@ -171,3 +171,5 @@ Search **LingBot** on the Chrome Web Store and install with one click.
 - Email: xiaoling6668882026@outlook.com
 
 Questions or suggestions? We'd love to hear from you.
+
+Having issues or need an activation code? Feel free to reach out via email or DM.

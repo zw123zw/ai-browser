@@ -152,27 +152,36 @@ export class TencentEngine implements VoiceEngine {
     const { appId, apiKey, apiSecret } = this.tencentConfig
     const timestamp = Math.floor(Date.now() / 1000)
     const expired = timestamp + 86400 // 24小时过期
-    const nonce = Math.floor(Math.random() * 100000)
+    const nonce = Math.floor(Math.random() * 10000000)
     const voiceId = crypto.randomUUID().replace(/-/g, '')
     this.voiceId = voiceId
 
-    // 构建签名原文
+    // 构建签名原文（参数按字典序排序）
     const signUrl = `asr.cloud.tencent.com/asr/v2/${appId}`
-    const signString = `app_id=${appId}&expired=${expired}&nonce=${nonce}&secret_id=${apiKey}&timestamp=${timestamp}&voice_id=${voiceId}`
+    const params = [
+      `engine_model_type=16k_zh`,
+      `expired=${expired}`,
+      `nonce=${nonce}`,
+      `secretid=${apiKey}`,
+      `timestamp=${timestamp}`,
+      `voice_format=1`,
+      `voice_id=${voiceId}`,
+    ].join('&')
+    const signString = `${signUrl}?${params}`
 
-    // HMAC-SHA256 签名
-    const signature = await this.hmacSha256(signString, apiSecret)
+    // HMAC-SHA1 签名（腾讯云用 SHA1，不是 SHA256）
+    const signature = await this.hmacSha1(signString, apiSecret)
 
-    const url = `wss://${signUrl}?app_id=${appId}&expired=${expired}&nonce=${nonce}&secret_id=${apiKey}&timestamp=${timestamp}&voice_id=${voiceId}&signature=${encodeURIComponent(signature)}`
+    const url = `wss://${signUrl}?${params}&signature=${encodeURIComponent(signature)}`
     return url
   }
 
-  /** HMAC-SHA256 签名 */
-  private async hmacSha256(message: string, secret: string): Promise<string> {
+  /** HMAC-SHA1 签名（腾讯云要求） */
+  private async hmacSha1(message: string, secret: string): Promise<string> {
     const encoder = new TextEncoder()
     const keyData = encoder.encode(secret)
     const msgData = encoder.encode(message)
-    const cryptoKey = await crypto.subtle.importKey('raw', keyData, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
+    const cryptoKey = await crypto.subtle.importKey('raw', keyData, { name: 'HMAC', hash: 'SHA-1' }, false, ['sign'])
     const signature = await crypto.subtle.sign('HMAC', cryptoKey, msgData)
     return btoa(String.fromCharCode(...new Uint8Array(signature)))
   }

@@ -57,6 +57,7 @@ async function fetchWithTimeout(url: string, options: RequestInit = {}): Promise
 
 /**
  * Register trial for a device
+ * Returns error if server unreachable (prevents trial reset)
  */
 export async function registerTrial(fingerprint: string, version: string): Promise<TrialResponse> {
   try {
@@ -70,11 +71,11 @@ export async function registerTrial(fingerprint: string, version: string): Promi
     return data;
   } catch (err) {
     log.error('Failed to register trial', err);
-    // Fallback: allow local trial if server unreachable
+    // DO NOT fallback to local trial - prevents trial reset on reinstall
     return {
-      success: true,
-      trial_end_ts: Date.now() + 7 * 24 * 60 * 60 * 1000,
-      message: 'Offline trial (server unreachable)',
+      success: false,
+      trial_end_ts: 0,
+      message: 'Server unreachable. Please check your internet connection.',
     };
   }
 }
@@ -105,6 +106,7 @@ export async function activateCode(code: string, fingerprint: string): Promise<A
 
 /**
  * Check license status
+ * Returns error status if server unreachable
  */
 export async function checkLicense(fingerprint: string): Promise<CheckResponse> {
   try {
@@ -114,9 +116,9 @@ export async function checkLicense(fingerprint: string): Promise<CheckResponse> 
     return data;
   } catch (err) {
     log.error('Failed to check license', err);
-    // Fallback: return unknown status if server unreachable
+    // Return error status - don't fallback to local
     return {
-      status: 'not_found',
+      status: 'error',
       trial_end_ts: 0,
       expire_ts: 0,
       days_left: 0,
