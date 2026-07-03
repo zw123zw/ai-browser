@@ -26,6 +26,12 @@ export const useLicenseStore = defineStore('aib-license', () => {
   /** Days remaining */
   const daysLeft = ref<number>(0);
 
+  /** Trial end timestamp */
+  const trialEndTs = ref<number>(0);
+
+  /** Activation expire timestamp */
+  const expireTs = ref<number>(0);
+
   /** Whether wasm module is loaded */
   const initialized = ref<boolean>(false);
 
@@ -86,16 +92,20 @@ export const useLicenseStore = defineStore('aib-license', () => {
       if (result.status === 'corrupted') {
         log.warn('License data corrupted, reinitializing trial');
         await clearLicense();
-        const trial = await checkLicense(); // Will call initTrial
+        const trial = await checkLicense();
         status.value = trial.status;
         daysLeft.value = trial.daysLeft;
+        trialEndTs.value = trial.trialEndTs;
+        expireTs.value = trial.expireTs;
       } else {
         status.value = result.status;
         daysLeft.value = result.daysLeft;
+        trialEndTs.value = result.trialEndTs;
+        expireTs.value = result.expireTs;
       }
       initialized.value = true;
 
-      log.info('License initialized', { status: status.value, daysLeft: daysLeft.value });
+      log.info('License initialized', { status: status.value, daysLeft: daysLeft.value, trialEndTs: trialEndTs.value });
     } catch (err) {
       error.value = String(err);
       log.error('License initialization failed', err);
@@ -170,6 +180,8 @@ export const useLicenseStore = defineStore('aib-license', () => {
     // State
     status,
     daysLeft,
+    trialEndTs,
+    expireTs,
     initialized,
     loading,
     error,

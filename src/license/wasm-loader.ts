@@ -8,6 +8,7 @@
 
 import { Logger } from '@/src/utils/logger';
 import { generateFingerprint } from './fingerprint';
+import { TRIAL_DAYS, ACTIVATION_DAYS, CACHE_TTL_HOURS } from './config';
 
 const log = new Logger('License:WasmLoader');
 
@@ -101,6 +102,8 @@ export async function checkLicense(): Promise<{
   status: string;
   daysLeft: number;
   expired: boolean;
+  trialEndTs: number;
+  expireTs: number;
 }> {
   const now = Date.now();
   const license = await readLicense();
@@ -112,10 +115,10 @@ export async function checkLicense(): Promise<{
 
   // Check if expired
   if (license.status === 'trial' && license.trialEndTs > 0 && now > license.trialEndTs) {
-    return { status: 'expired', daysLeft: 0, expired: true };
+    return { status: 'expired', daysLeft: 0, expired: true, trialEndTs: license.trialEndTs, expireTs: 0 };
   }
   if (license.status === 'active' && license.expireTs > 0 && now > license.expireTs) {
-    return { status: 'expired', daysLeft: 0, expired: true };
+    return { status: 'expired', daysLeft: 0, expired: true, trialEndTs: 0, expireTs: license.expireTs };
   }
 
   // Calculate days left
@@ -127,24 +130,34 @@ export async function checkLicense(): Promise<{
     daysLeft = Math.ceil((license.expireTs - now) / (24 * 60 * 60 * 1000));
   }
 
+  log.info('checkLicense result', { status: license.status, daysLeft, trialEndTs: license.trialEndTs, now });
+
   return {
     status: license.status,
     daysLeft: Math.max(0, daysLeft),
     expired: false,
+    trialEndTs: license.trialEndTs || 0,
+    expireTs: license.expireTs || 0,
   };
 }
 
 /**
- * Init trial period (7 days)
+ * Init trial period
  */
 export async function initTrial(): Promise<{
   status: string;
   daysLeft: number;
   expired: boolean;
+  trialEndTs: number;
+  expireTs: number;
 }> {
   const fingerprint = await getFingerprint();
   const now = Date.now();
-  const trialEndTs = now + 7 * 24 * 60 * 60 * 1000;
+
+  log.info('initTrial config', { TRIAL_DAYS, ACTIVATION_DAYS });
+
+  const trialEndTs = now + TRIAL_DAYS * 24 * 60 * 60 * 1000;
+  const daysLeft = Math.ceil(TRIAL_DAYS);
 
   const license: LicenseData = {
     status: 'trial',
@@ -155,9 +168,9 @@ export async function initTrial(): Promise<{
   };
 
   await writeLicense(license);
-  log.info('Trial initialized', { trialEndTs });
+  log.info('Trial initialized', { trialEndTs, daysLeft });
 
-  return { status: 'trial', daysLeft: 7, expired: false };
+  return { status: 'trial', daysLeft, expired: false, trialEndTs, expireTs: 0 };
 }
 
 /**
@@ -189,7 +202,7 @@ export async function activateCode(code: string): Promise<{
   }
 
   // Code valid - activate
-  const expireTs = Date.now() + 30 * 24 * 60 * 60 * 1000; // 30 days
+  const expireTs = Date.now() + ACTIVATION_DAYS * 24 * 60 * 60 * 1000;
   const license: LicenseData = {
     status: 'active',
     fingerprint,
@@ -199,13 +212,13 @@ export async function activateCode(code: string): Promise<{
   };
 
   await writeLicense(license);
-  log.info('Activated', { expireTs });
+  log.info('Activated', { expireTs, days: ACTIVATION_DAYS });
 
   return {
     valid: true,
     error: null,
     status: 'active',
-    daysLeft: 30,
+    daysLeft: ACTIVATION_DAYS,
   };
 }
 

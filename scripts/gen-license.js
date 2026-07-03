@@ -181,22 +181,29 @@ if (hasFlag('reset')) {
   process.exit(0);
 }
 
-const version = JSON.parse(readFileSync(join(import.meta.dirname, '..', 'package.json'), 'utf-8')).version;
-const count = parseInt(getArg('count') || '1');
-const days = parseInt(getArg('days') || '30');
-const fingerprint = getArg('fingerprint');
-const output = getArg('output');
 const releaseDir = getArg('release');
 
-console.log(`Version: ${version} (package.json)`);
-if (releaseDir) console.log(`Release dir: ${releaseDir}`);
+if (!releaseDir) {
+  console.error('Error: --release parameter is required');
+  console.error('Usage: npm run gen-license -- --release=.output/release-v2.0.2-... --count=100');
+  console.error('');
+  console.error('This ensures activation codes match the specific build.');
+  process.exit(1);
+}
 
+// Read version from package.json
+const version = JSON.parse(readFileSync(join(import.meta.dirname, '..', 'package.json'), 'utf-8')).version;
+const count = parseInt(getArg('count') || '1');
+const fingerprint = getArg('fingerprint');
+const days = 30; // Fixed: activation period is set at build time
+
+// Read .build-seed from release directory
 const buildSeed = loadBuildSeed(releaseDir);
 const privateKey = loadPrivateKey();
 
+console.log(`Version: ${version} (package.json)`);
+console.log(`Release dir: ${releaseDir}`);
 console.log(`Generating ${count} activation codes...`);
-console.log(`  Version: ${version}`);
-console.log(`  Days: ${days}`);
 console.log(`  Build seed: ${buildSeed.substring(0, 8)}...`);
 
 const codes = [];
@@ -205,8 +212,8 @@ for (let i = 0; i < count; i++) {
   codes.push(code);
 }
 
-// Default output: docs/发布/licenses-v{version}.csv
-const outputFile = output || `docs/发布/licenses-v${version}.csv`;
+// Output to release directory
+const outputFile = join(releaseDir, `licenses-v${version}.csv`);
 
 const csv = ['code,version,expire', ...codes.map(c => {
   const expireDate = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString().split('T')[0];

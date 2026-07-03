@@ -23,6 +23,28 @@ const toast = useToast();
 const { t, locale } = useI18n();
 const showConfirm = ref(false);
 
+/** 格式化剩余时间：精确到分 */
+const formattedTimeLeft = computed(() => {
+  // 从 licenseStore 获取结束时间戳
+  const endTs = licenseStore.trialEndTs || licenseStore.expireTs;
+  if (!endTs || endTs <= 0) return `${licenseStore.daysLeft}天`;
+
+  const diffMs = Math.max(0, endTs - Date.now());
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMins / 60);
+  const diffDays = Math.floor(diffHours / 24);
+
+  if (diffDays > 0) {
+    const h = diffHours % 24;
+    return h > 0 ? `${diffDays}天${h}小时` : `${diffDays}天`;
+  }
+  if (diffHours > 0) {
+    const m = diffMins % 60;
+    return m > 0 ? `${diffHours}小时${m}分` : `${diffHours}小时`;
+  }
+  return `${Math.max(1, diffMins)}分`;
+});
+
 /** 笔记模式是否开启 */
 const noteModeEnabled = computed(() => {
   const mode = settingsStore.settings.noteMode;
@@ -139,8 +161,8 @@ const drawerClass = computed(() => ({ 'aib-open': props.open }));
                 <span class="aib-brand-ai">{{ locale === 'zh-CN' ? t('app.name') : t('app.fullName') }}</span>
                 <span class="aib-brand-shine" />
               </span>
-              <span v-if="licenseStore.isTrial" class="aib-license-tag aib-license-tag--trial">试用 {{ licenseStore.daysLeft }}天</span>
-              <span v-else-if="licenseStore.isActivated" class="aib-license-tag aib-license-tag--active">有效期 {{ licenseStore.daysLeft }}天</span>
+              <span v-if="licenseStore.isTrial" class="aib-license-tag aib-license-tag--trial">试用 {{ formattedTimeLeft }}</span>
+              <span v-else-if="licenseStore.isActivated" class="aib-license-tag aib-license-tag--active">有效期 {{ formattedTimeLeft }}</span>
               <span v-else-if="licenseStore.status === 'expired'" class="aib-license-tag aib-license-tag--expired">已过期</span>
             </div>
             <span class="aib-brand-sub">{{ t('app.subtitle') }}</span>
