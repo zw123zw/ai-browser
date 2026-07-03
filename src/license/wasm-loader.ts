@@ -1,16 +1,18 @@
 /**
- * License Loader - Simple Worker API approach
+ * License Loader - Pure Local Approach
  *
- * - Worker API is the only source of truth
- * - Memory cache only (1 hour), not in storage
- * - User can't modify license status
+ * - Trial: chrome.storage, 7 days, fingerprint-based
+ * - Activation: local wasm HMAC verification
+ * - No network dependency
  */
 
 import { Logger } from '@/src/utils/logger';
 import { generateFingerprint } from './fingerprint';
-import { registerTrial, activateCode as apiActivate, checkLicense as apiCheck } from './api';
 
 const log = new Logger('License:WasmLoader');
+
+/** Storage keys */
+const LICENSE_KEY = 'aib-license';
 
 /** Wasm module instance */
 let wasmModule: any = null;
@@ -19,40 +21,14 @@ let wasmModule: any = null;
 let currentFingerprint: string | null = null;
 
 /** Memory cache */
-let cachedStatus: {
-  status: string;
-  daysLeft: number;
-  expired: boolean;
-  expireTs: number;
-  trialEndTs: number;
-} | null = null;
+let cachedLicense: LicenseData | null = null;
 
-/** Last check timestamp */
-let lastCheckTs = 0;
-
-/** Cache valid for 1 hour */
-const CACHE_TTL = 60 * 60 * 1000;
-
-/** Storage key for offline cache */
-const CACHE_KEY = 'aib-license-cache';
-
-/** Read offline cache from storage */
-async function readOfflineCache(): Promise<typeof cachedStatus> {
-  try {
-    const result = await chrome.storage.local.get(CACHE_KEY);
-    return result[CACHE_KEY] || null;
-  } catch {
-    return null;
-  }
-}
-
-/** Write cache to storage (for offline fallback) */
-async function writeOfflineCache(status: typeof cachedStatus): Promise<void> {
-  try {
-    await chrome.storage.local.set({ [CACHE_KEY]: status });
-  } catch (err) {
-    log.error('Failed to write cache', err);
-  }
+interface LicenseData {
+  status: 'trial' | 'active' | 'expired';
+  fingerprint: string;
+  expireTs: number;    // 0 for trial
+  trialEndTs: number;  // 0 for active
+  activatedAt: number;
 }
 
 /**
@@ -92,8 +68,34 @@ async function getFingerprint(): Promise<string> {
 }
 
 /**
- * Check license
- * Priority: memory cache > Worker API > offline cache
+ * Read license from chrome.storage
+ */
+async function readLicense(): Promise<LicenseData | null> {
+  if (cachedLicense) return cachedLicense;
+  try {
+    const result = await chrome.storage.local.get(LICENSE_KEY);
+    cachedLicense = result[LICENSE_KEY] || null;
+    return cachedLicense;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Write license to chrome.storage
+ */
+async function writeLicense(data: LicenseData): Promise<void> {
+  try {
+    await chrome.storage.local.set({ [LICENSE_KEY]: data });
+    cachedLicense = data;
+    log.info('License saved', { status: data.status });
+  } catch (err) {
+    log.error('Failed to save license', err);
+  }
+}
+
+/**
+ * Check license status
  */
 export async function checkLicense(): Promise<{
   status: string;
@@ -101,73 +103,39 @@ export async function checkLicense(): Promise<{
   expired: boolean;
 }> {
   const now = Date.now();
+  const license = await readLicense();
 
-  // 1. Memory cache (1 hour)
-  if (cachedStatus && (now - lastCheckTs) < CACHE_TTL) {
-    return { status: cachedStatus.status, daysLeft: cachedStatus.daysLeft, expired: cachedStatus.expired };
+  if (!license) {
+    // First install - register trial
+    return await initTrial();
   }
 
-  // 2. Try Worker API
-  const fingerprint = await getFingerprint();
-  log.info('Checking license via API', { fingerprint: fingerprint?.substring(0, 16) });
-
-  try {
-    const result = await apiCheck(fingerprint);
-    log.info('API result:', JSON.stringify(result));
-    lastCheckTs = now;
-
-    if (result.status === 'active') {
-      cachedStatus = { status: 'active', daysLeft: result.days_left, expired: false, expireTs: result.expire_ts, trialEndTs: 0 };
-      await writeOfflineCache(cachedStatus);
-      return cachedStatus;
-    }
-
-    if (result.status === 'trial') {
-      cachedStatus = { status: 'trial', daysLeft: result.days_left, expired: false, expireTs: 0, trialEndTs: result.trial_end_ts };
-      await writeOfflineCache(cachedStatus);
-      return cachedStatus;
-    }
-
-    if (result.status === 'expired') {
-      cachedStatus = { status: 'expired', daysLeft: 0, expired: true, expireTs: 0, trialEndTs: result.trial_end_ts };
-      await writeOfflineCache(cachedStatus);
-      return cachedStatus;
-    }
-
-    // not_found → register trial
-    if (result.status === 'not_found') {
-      return await initTrial();
-    }
-  } catch (err) {
-    log.warn('API unreachable, trying offline cache', err);
+  // Check if expired
+  if (license.status === 'trial' && license.trialEndTs > 0 && now > license.trialEndTs) {
+    return { status: 'expired', daysLeft: 0, expired: true };
+  }
+  if (license.status === 'active' && license.expireTs > 0 && now > license.expireTs) {
+    return { status: 'expired', daysLeft: 0, expired: true };
   }
 
-  // 3. API failed → use offline cache
-  const offlineCache = await readOfflineCache();
-  if (offlineCache) {
-    log.info('Using offline cache', { status: offlineCache.status, daysLeft: offlineCache.daysLeft });
-    cachedStatus = offlineCache;
-    lastCheckTs = now;
-
-    // Recalculate days left
-    let daysLeft = offlineCache.daysLeft;
-    if (offlineCache.status === 'active' && offlineCache.expireTs > 0) {
-      daysLeft = Math.ceil((offlineCache.expireTs - now) / (24 * 60 * 60 * 1000));
-    }
-    if (offlineCache.status === 'trial' && offlineCache.trialEndTs > 0) {
-      daysLeft = Math.ceil((offlineCache.trialEndTs - now) / (24 * 60 * 60 * 1000));
-    }
-
-    return { status: offlineCache.status, daysLeft: Math.max(0, daysLeft), expired: offlineCache.expired };
+  // Calculate days left
+  let daysLeft = 0;
+  if (license.status === 'trial' && license.trialEndTs > 0) {
+    daysLeft = Math.ceil((license.trialEndTs - now) / (24 * 60 * 60 * 1000));
+  }
+  if (license.status === 'active' && license.expireTs > 0) {
+    daysLeft = Math.ceil((license.expireTs - now) / (24 * 60 * 60 * 1000));
   }
 
-  // 4. No cache, no API → error
-  log.error('No cache and API unreachable');
-  return { status: 'error', daysLeft: 0, expired: true };
+  return {
+    status: license.status,
+    daysLeft: Math.max(0, daysLeft),
+    expired: false,
+  };
 }
 
 /**
- * Init trial - via Worker API
+ * Init trial period (7 days)
  */
 export async function initTrial(): Promise<{
   status: string;
@@ -175,30 +143,25 @@ export async function initTrial(): Promise<{
   expired: boolean;
 }> {
   const fingerprint = await getFingerprint();
-  const version = chrome.runtime.getManifest().version;
+  const now = Date.now();
+  const trialEndTs = now + 7 * 24 * 60 * 60 * 1000;
 
-  log.info('Registering trial', { fingerprint: fingerprint?.substring(0, 16) });
+  const license: LicenseData = {
+    status: 'trial',
+    fingerprint,
+    expireTs: 0,
+    trialEndTs,
+    activatedAt: now,
+  };
 
-  try {
-    const result = await registerTrial(fingerprint, version);
-    if (result.success) {
-      const daysLeft = Math.ceil((result.trial_end_ts - Date.now()) / (24 * 60 * 60 * 1000));
-      cachedStatus = { status: 'trial', daysLeft, expired: false, expireTs: 0, trialEndTs: result.trial_end_ts };
-      lastCheckTs = Date.now();
-      log.info('Trial registered', { daysLeft });
-      return cachedStatus;
-    } else {
-      log.error('Trial registration failed', { message: result.message });
-      return { status: 'error', daysLeft: 0, expired: true };
-    }
-  } catch (err) {
-    log.error('Trial registration error', err);
-    return { status: 'error', daysLeft: 0, expired: true };
-  }
+  await writeLicense(license);
+  log.info('Trial initialized', { trialEndTs });
+
+  return { status: 'trial', daysLeft: 7, expired: false };
 }
 
 /**
- * Activate with code
+ * Activate with code (local HMAC verification)
  */
 export async function activateCode(code: string): Promise<{
   valid: boolean;
@@ -207,46 +170,60 @@ export async function activateCode(code: string): Promise<{
   daysLeft?: number;
 }> {
   // Already active?
-  if (cachedStatus?.status === 'active' && !cachedStatus.expired) {
-    return { valid: true, error: null, ...cachedStatus };
+  const current = await checkLicense();
+  if (current.status === 'active' && !current.expired) {
+    return { valid: true, error: null, ...current };
   }
 
   const fingerprint = await getFingerprint();
+  const wasm = getWasm();
 
-  try {
-    const result = await apiActivate(code, fingerprint);
-    if (result.success) {
-      const daysLeft = Math.ceil((result.expire_ts - Date.now()) / (24 * 60 * 60 * 1000));
-      cachedStatus = { status: 'active', daysLeft, expired: false, expireTs: result.expire_ts, trialEndTs: 0 };
-      lastCheckTs = Date.now();
-      log.info('Activated', { daysLeft });
-      return { valid: true, error: null, ...cachedStatus };
-    } else {
-      log.warn('Activation failed', { error: result.error });
-      return { valid: false, error: result.error || 'Activation failed' };
-    }
-  } catch (err) {
-    log.error('Activation error', err);
-    return { valid: false, error: 'Server unreachable' };
+  // Verify code using wasm (local HMAC verification)
+  const now = BigInt(Date.now());
+  const resultJson = wasm.verify_code(code, fingerprint, now);
+  log.info('verify_code result:', resultJson);
+
+  const result = JSON.parse(resultJson);
+  if (!result.valid) {
+    return { valid: false, error: result.error || 'Invalid code' };
   }
+
+  // Code valid - activate
+  const expireTs = Date.now() + 30 * 24 * 60 * 60 * 1000; // 30 days
+  const license: LicenseData = {
+    status: 'active',
+    fingerprint,
+    expireTs,
+    trialEndTs: 0,
+    activatedAt: Date.now(),
+  };
+
+  await writeLicense(license);
+  log.info('Activated', { expireTs });
+
+  return {
+    valid: true,
+    error: null,
+    status: 'active',
+    daysLeft: 30,
+  };
 }
 
 /**
- * Clear cache (for testing)
+ * Clear license (for testing)
  */
 export async function clearLicense(): Promise<void> {
-  cachedStatus = null;
-  lastCheckTs = 0;
-  log.info('Cache cleared');
+  await chrome.storage.local.remove(LICENSE_KEY);
+  cachedLicense = null;
+  log.info('License cleared');
 }
 
 /**
  * Require valid license - throws if expired
- * Call this before using any feature
  */
 export async function requireLicense(): Promise<void> {
   const status = await checkLicense();
-  if (status.expired || status.status === 'expired' || status.status === 'error') {
+  if (status.expired || status.status === 'expired') {
     throw new Error('License expired');
   }
 }

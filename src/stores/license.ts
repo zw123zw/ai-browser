@@ -2,7 +2,7 @@
  * License Store - Pinia Setup Store
  *
  * Manages license state (status, daysLeft, expired).
- * Delegated to Worker API + Wasm via wasm-loader.
+ * Pure local approach via wasm-loader.
  */
 
 import { defineStore } from 'pinia';

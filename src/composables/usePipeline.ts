@@ -109,16 +109,6 @@ export function usePipeline() {
    */
   async function processInput(text: string, reasoning?: boolean): Promise<void> {
     log.info('═══ processInput 开始 ═══', { text })
-
-    // Check license before processing
-    try {
-      const { requireLicense } = await import('@/src/license/wasm-loader')
-      await requireLicense()
-    } catch {
-      addSystemMessage('试用期已过，请激活后继续使用')
-      return
-    }
-
     isProcessing.value = true
     currentStreamingMsg = null
     const ac = new AbortController()
