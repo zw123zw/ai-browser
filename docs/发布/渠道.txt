@@ -65,7 +65,6 @@
 - Product Hunt   https://www.producthunt.com/（全球最大，发布当日大量曝光）
 - Microlaunch    https://microlaunch.net/
 - Uneed          https://uneed.best/
-- Altern.ai      https://altern.ai/
 
 【AI 工具收录站】
 - FutureTools    https://www.futuretools.io/（AI 垂直最强，永久入库）
