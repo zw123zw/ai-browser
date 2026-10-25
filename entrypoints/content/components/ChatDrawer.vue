@@ -2,7 +2,6 @@
 import { computed, ref, onMounted, onUnmounted, watch } from 'vue';
 import { useConversationsStore } from '@/src/stores/conversations';
 import { useSettingsStore } from '@/src/stores/settings';
-import { useLicenseStore } from '@/src/stores/license';
 import { useToast } from '@/src/composables/useToast';
 import { abortPipeline } from '@/src/composables/usePipeline';
 import { useI18n } from '@/src/i18n';
@@ -18,32 +17,11 @@ const emit = defineEmits<{
 
 const store = useConversationsStore();
 const settingsStore = useSettingsStore();
-const licenseStore = useLicenseStore();
+
 const toast = useToast();
+
 const { t, locale } = useI18n();
 const showConfirm = ref(false);
-
-/** 格式化剩余时间：精确到分 */
-const formattedTimeLeft = computed(() => {
-  // 从 licenseStore 获取结束时间戳
-  const endTs = licenseStore.trialEndTs || licenseStore.expireTs;
-  if (!endTs || endTs <= 0) return `${licenseStore.daysLeft}天`;
-
-  const diffMs = Math.max(0, endTs - Date.now());
-  const diffMins = Math.floor(diffMs / 60000);
-  const diffHours = Math.floor(diffMins / 60);
-  const diffDays = Math.floor(diffHours / 24);
-
-  if (diffDays > 0) {
-    const h = diffHours % 24;
-    return h > 0 ? `${diffDays}天${h}小时` : `${diffDays}天`;
-  }
-  if (diffHours > 0) {
-    const m = diffMins % 60;
-    return m > 0 ? `${diffHours}小时${m}分` : `${diffHours}小时`;
-  }
-  return `${Math.max(1, diffMins)}分`;
-});
 
 /** 笔记模式是否开启 */
 const noteModeEnabled = computed(() => {
@@ -161,9 +139,7 @@ const drawerClass = computed(() => ({ 'aib-open': props.open }));
                 <span class="aib-brand-ai">{{ locale === 'zh-CN' ? t('app.name') : t('app.fullName') }}</span>
                 <span class="aib-brand-shine" />
               </span>
-              <span v-if="licenseStore.isTrial" class="aib-license-tag aib-license-tag--trial">试用 {{ formattedTimeLeft }}</span>
-              <span v-else-if="licenseStore.isActivated" class="aib-license-tag aib-license-tag--active">有效期 {{ formattedTimeLeft }}</span>
-              <span v-else-if="licenseStore.status === 'expired'" class="aib-license-tag aib-license-tag--expired">已过期</span>
+
             </div>
             <span class="aib-brand-sub">{{ t('app.subtitle') }}</span>
           </div>
@@ -282,36 +258,5 @@ const drawerClass = computed(() => ({ 'aib-open': props.open }));
   }
 }
 
-/* 授权状态标签 */
-.aib-license-tag {
-  display: inline-flex;
-  align-items: center;
-  font-size: 10px;
-  font-weight: 600;
-  padding: 2px 8px;
-  border-radius: 10px;
-  margin-left: 8px;
-  white-space: nowrap;
-  line-height: 1;
-  letter-spacing: 0.3px;
-  vertical-align: middle;
-}
 
-.aib-license-tag--trial {
-  background: linear-gradient(135deg, rgba(139, 92, 246, 0.12) 0%, rgba(139, 92, 246, 0.06) 100%);
-  color: #7c3aed;
-  border: 1px solid rgba(139, 92, 246, 0.2);
-}
-
-.aib-license-tag--active {
-  background: linear-gradient(135deg, rgba(34, 197, 94, 0.12) 0%, rgba(34, 197, 94, 0.06) 100%);
-  color: #16a34a;
-  border: 1px solid rgba(34, 197, 94, 0.2);
-}
-
-.aib-license-tag--expired {
-  background: linear-gradient(135deg, rgba(239, 68, 68, 0.12) 0%, rgba(239, 68, 68, 0.06) 100%);
-  color: #dc2626;
-  border: 1px solid rgba(239, 68, 68, 0.2);
-}
 </style>

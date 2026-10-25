@@ -97,7 +97,6 @@ graph TB
 | File Processing | `src/file-parsers.ts` | File parsing for PDF/DOCX/XLSX and image OCR | [file-parsing.md](./file-parsing.md) |
 | Voice Automation | `src/automation/` | Voice-triggered web automation for click, input, scroll, and other operations | [automation.md](./automation.md) |
 | Internationalization | `src/i18n/` | Internationalization module supporting Chinese and English | [i18n.md](./i18n.md) |
-| License System | `wasm-license/` + `src/license/` | License system with Wasm hardening, activation code verification, feature gating, and stealth anti-piracy | [license-system.md](./license-system.md) |
 | Utilities | `src/utils/` | Utility functions including Logger, shortcut matching, and storage sync | [utils.md](./utils.md) |
 
 ## Data Flow Overview

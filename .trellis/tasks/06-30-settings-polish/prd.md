@@ -8,7 +8,7 @@
 
 - 设置弹框结构：header → settings-body(sidebar tabs + pane)
 - 每个 tab 内有自己的 `.aib-tab-footer`(保存/取消)，随内容滚动
-- 用户配置 tab 有：激活码、上下文消息数、缓存管理、日志管理、语言、使用文档、版本号
+- 用户配置 tab 有：上下文消息数、缓存管理、日志管理、语言、使用文档、版本号
 - 语音配置 tab 右上角已加"📖 使用指南"按钮
 - 有 docs-modal 全屏弹框（markdown 渲染使用文档）
 - 有 VoiceGuideModal 弹框（5 tab 语音指南）

@@ -33,7 +33,6 @@
     "build": "bash scripts/build.sh",
     "build:test": "bash scripts/build.sh test",
     "build:prod": "bash scripts/build.sh prod",
-    "gen-license": "node scripts/gen-license.js",
     "compile": "vue-tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",

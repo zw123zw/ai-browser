@@ -28,8 +28,7 @@ src/stores/
 ├── settings.ts         # useSettingsStore (global settings + voice config + input history)
 ├── conversations.ts    # useConversationsStore (single conversation management)
 ├── notes.ts            # useNotesStore (notes management)
-├── voice.ts            # useVoiceStore (voice runtime state only)
-└── license.ts          # useLicenseStore (license state management)
+└── voice.ts            # useVoiceStore (voice runtime state only)
 
 src/utils/
 └── storage-sync.ts     # defineStorageSync + plain()
@@ -54,7 +53,6 @@ graph TB
         CS["useConversationsStore<br/>aib-conversations"]
         NS["useNotesStore<br/>aib-notes"]
         VS["useVoiceStore<br/>aib-voice<br/>(runtime state only)"]
-        LS["useLicenseStore<br/>aib-license<br/>(license state)"]
     end
 
     subgraph Sync["Persistence Sync Layer"]
@@ -1142,96 +1140,6 @@ function bumpSettingsVersion() {
 **bumpSettingsVersion**: Called externally when voice settings change, increments `settingsVersion`. App.vue watches this value to rebuild the VoiceManager instance.
 
 ---
-
-### useLicenseStore — License State Management
-
-Source: `src/stores/license.ts`
-
-**Store ID**: `aib-license`
-
-**Design Principle**: This store is a pure state exposure layer — all license logic is delegated to the Wasm module (via `wasm-loader.ts`). The store itself contains no decision logic, only providing reactive state for Vue components to consume.
-
-**Relationship with Other Stores**: Completely independent, does not depend on `useSettingsStore` or other stores. Internally interacts with the Wasm module through `src/license/wasm-loader.ts`.
-
-#### State
-
-```typescript
-const status = ref<string>('unknown');     // Current license status
-const daysLeft = ref<number>(0);           // Days remaining
-const initialized = ref<boolean>(false);   // Whether Wasm module is loaded
-const loading = ref<boolean>(false);       // Loading state
-const error = ref<string | null>(null);    // Error message
-```
-
-#### Computed Properties
-
-```typescript
-const isActive = computed(() => status.value === 'trial' || status.value === 'active');
-const isTrial = computed(() => status.value === 'trial');
-const isActivated = computed(() => status.value === 'active');
-const isExpired = computed(() => status.value === 'expired');
-const statusText = computed(() => { /* Returns localized display text based on status */ });
-```
-
-#### init(): Promise<void>
-
-Initialization flow:
-
-```typescript
-async function init() {
-  if (initialized.value) return;
-  loading.value = true;
-  try {
-    await initWasm();                    // Load Wasm module
-    const result = await checkLicense(); // Check existing license or init trial
-    if (result.status === 'corrupted') {
-      await clearLicense();              // Data corrupted, clear and re-init
-      const trial = await checkLicense();
-      status.value = trial.status;
-      daysLeft.value = trial.daysLeft;
-    } else {
-      status.value = result.status;
-      daysLeft.value = result.daysLeft;
-    }
-    initialized.value = true;
-  } catch (err) {
-    // Wasm load failure doesn't block the app, allow trial
-    status.value = 'trial';
-    daysLeft.value = 7;
-    initialized.value = true;
-  } finally {
-    loading.value = false;
-  }
-}
-```
-
-**Fault Tolerance**: When Wasm fails to load (network issues, CSP restrictions), the app is not blocked — a 7-day trial is granted by default.
-
-#### activate(code): Promise<{ success, error? }>
-
-```typescript
-async function activate(code: string): Promise<{ success: boolean; error?: string }> {
-  const result = await activateCode(code);
-  if (result.valid) {
-    status.value = result.status || 'active';
-    daysLeft.value = result.daysLeft || 0;
-    return { success: true };
-  }
-  return { success: false, error: result.error || '激活失败' };
-}
-```
-
-#### trackAction(action): Promise<void>
-
-Called on every user action (chat, voice, automation), triggers Wasm internal usage statistics and stealth verification.
-
-#### refresh(): Promise<void>
-
-Re-checks license status, updates `status` and `daysLeft`.
-
-#### reset(): Promise<void>
-
-Clears all license data (for testing), resets state to `unknown`.
 
 ---
 

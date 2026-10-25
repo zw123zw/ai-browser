@@ -95,7 +95,6 @@ graph TB
 | File Processing | `src/file-parsers.ts` | 文件解析处理，PDF/DOCX/XLSX/图片 OCR | [file-parsing.md](./file-parsing.md) |
 | Voice Automation | `src/automation/` | 语音触发的网页自动化，点击/输入/滚动等操作 | [automation.md](./automation.md) |
 | Internationalization | `src/i18n/` | 国际化模块，支持中文/英文 | [i18n.md](./i18n.md) |
-| License System | `wasm-license/` + `src/license/` | 授权系统，Wasm 加固 + 激活码验证 + 功能门控 + 隐性防破解 | [license-system.md](./license-system.md) |
 | Utilities | `src/utils/` | 工具函数，Logger、快捷键匹配、存储同步 | [utils.md](./utils.md) |
 
 ## 数据流概览

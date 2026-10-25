@@ -13,7 +13,6 @@ import { useVoiceStore } from '@/src/stores/voice';
 import { usePipeline } from '@/src/composables/usePipeline';
 import { VoiceManager } from '@/src/voice/voice-manager';
 import { useNotesStore } from '@/src/stores/notes';
-import { useLicenseStore } from '@/src/stores/license';
 import { matchShortcut } from '@/src/utils/shortcut';
 import { getThemeById } from '@/src/themes';
 import { drawerOpenStorage } from '@/src/storage';
@@ -33,7 +32,6 @@ const settingsStore = useSettingsStore();
 const convStore = useConversationsStore();
 const notesStore = useNotesStore();
 const voiceStore = useVoiceStore();
-const licenseStore = useLicenseStore();
 const pipeline = usePipeline();
 const { setLocale } = useI18n();
 
@@ -217,32 +215,8 @@ function closeDrawer() {
   open.value = false;
 }
 
-const showExpired = ref(false);
-const activateCodeInput = ref('');
-const activateError = ref('');
-
 function toggle() {
-  // 过期时点击悬浮球，显示激活弹框
-  if (licenseStore.status === 'expired') {
-    showExpired.value = true;
-    return;
-  }
   open.value = !open.value;
-}
-
-async function handleActivate() {
-  activateError.value = '';
-  if (!activateCodeInput.value || activateCodeInput.value.trim().length < 10) {
-    activateError.value = '请输入有效的激活码';
-    return;
-  }
-  const result = await licenseStore.activate(activateCodeInput.value.trim());
-  if (result.success) {
-    showExpired.value = false;
-    activateCodeInput.value = '';
-  } else {
-    activateError.value = result.error || '激活失败';
-  }
 }
 
 function onMessage(msg: any, sender: chrome.runtime.MessageSender, sendResponse: (response?: any) => void) {
@@ -504,21 +478,6 @@ onMounted(async () => {
     log.error('Store 初始化失败:', error);
   }
 
-  // 初始化授权系统
-  setTimeout(async () => {
-    try {
-      await licenseStore.init();
-      log.info('授权系统初始化完成', { status: licenseStore.status, daysLeft: licenseStore.daysLeft });
-    } catch (error) {
-      log.error('授权系统初始化失败:', error);
-    }
-  }, 500);
-
-  // 监听过期事件（发消息时触发）
-  window.addEventListener('aib-show-expired', () => {
-    showExpired.value = true;
-  });
-
   initI18n(settingsStore.settings.locale || 'zh-CN');
   applyTheme();
 
@@ -606,26 +565,5 @@ onUnmounted(() => {
     />
     <VoiceGuideModal v-if="showVoiceGuide" @close="showVoiceGuide = false" />
     <ToastContainer />
-
-    <!-- 授权过期提示（可关闭，发消息时再检查） -->
-    <div v-if="showExpired" class="aib-expired-overlay">
-      <div class="aib-expired-card">
-        <button class="aib-expired-close" @click="showExpired = false">✕</button>
-        <div class="aib-expired-icon">⏰</div>
-        <h3>试用期已过</h3>
-        <p>请激活以继续使用全部功能</p>
-        <div class="aib-expired-input-group">
-          <input
-            v-model="activateCodeInput"
-            class="aib-expired-input"
-            placeholder="输入激活码 AIB-XXXX-XXXX-XXXX"
-          />
-          <button class="aib-expired-btn" @click="handleActivate">
-            激活
-          </button>
-        </div>
-        <p v-if="activateError" class="aib-expired-error">{{ activateError }}</p>
-      </div>
-    </div>
   </div>
 </template>

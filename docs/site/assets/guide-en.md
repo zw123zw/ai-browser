@@ -832,4 +832,4 @@ Type `/` → menu appears → ↑↓ to navigate → Tab/Enter to select → Esc
 
 > **LingBot** | MIT License
 >
-> Having issues or need an activation code? Feel free to reach out via email or DM.
+> Having issues? Feel free to reach out via email or DM.

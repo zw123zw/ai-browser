@@ -172,4 +172,4 @@ Search **LingBot** on the Chrome Web Store and install with one click.
 
 Questions or suggestions? We'd love to hear from you.
 
-Having issues or need an activation code? Feel free to reach out via email or DM.
+Having issues? Feel free to reach out via email or DM.

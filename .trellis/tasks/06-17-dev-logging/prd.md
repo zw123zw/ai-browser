@@ -44,28 +44,9 @@
 
 ### 设置弹框 — UI 设计
 
-在「通用配置」tab 底部（保存按钮之前）新增两个区块，复用现有 `.aib-form-row` + `.aib-section-title` 布局体系。
+在「通用配置」tab 底部（保存按钮之前）新增日志区块，复用现有 `.aib-form-row` + `.aib-section-title` 布局体系。
 
-#### 区块 1：License 激活码（始终显示）
-
-```
-┌─────────────────────────────────────────────┐
-│  License                                    │  ← .aib-section-title
-│                                             │
-│  激活码                        [激活]        │  ← .aib-form-row
-│  ┌─────────────────────────┐ ┌──────────┐   │
-│  │ 请输入激活码...          │ │   激活   │   │  ← .aib-input + .aib-btn-primary
-│  └─────────────────────────┘ └──────────┘   │
-│                                             │
-└─────────────────────────────────────────────┘
-```
-
-- 输入框：复用 `.aib-input` 样式，`placeholder="请输入激活码"`
-- 激活按钮：复用 `.aib-btn .aib-btn-primary` 样式
-- 按钮点击暂无响应（占位）
-- 输入框和按钮用 `.aib-input-group` 组合（与 API Key 行相同的输入框+按钮组合样式）
-
-#### 区块 2：日志管理（仅 debug 包可见）
+#### 日志管理（仅 debug 包可见）
 
 ```
 ┌─────────────────────────────────────────────┐
@@ -103,7 +84,6 @@
 
 - 下载日志：点击后通过 `<a download>` 触发浏览器下载，生成 `frontend-{日期}.log` 和 `api-{日期}.log`
 - 清除日志：点击后弹出 `confirm()` 确认框，确认后清空 storage 中的日志，显示 toast 提示「日志已清除」
-- License 激活：点击无响应，仅占位
 
 ## Acceptance Criteria
 
@@ -114,7 +94,6 @@
 - [ ] 点击下载日志，浏览器下载两个 `.log` 文件
 - [ ] 点击清除日志，弹出确认框，确认后清空所有日志
 - [ ] 日志超过 10000 条时自动轮转，不超出 storage 限制
-- [ ] License 输入框始终显示，激活按钮点击无响应（占位）
 
 ## Definition of Done
 
@@ -125,7 +104,6 @@
 
 ## Out of Scope
 
-- License 激活码的实际验证逻辑
 - 生产环境日志收集
 - 日志上传到远程服务器
 - 日志实时查看（仅支持导出文件查看）
@@ -156,7 +134,7 @@ if (import.meta.env.VITE_LOG_ENABLED) {
 
 - `src/utils/logger.ts` — Logger 类增加写 storage 逻辑
 - `src/adapters/proxy.ts` — proxyFetch / proxyFetchStream 增加日志记录
-- `entrypoints/content/components/SettingsModal.vue` — 新增 License 和日志区域
+- `entrypoints/content/components/SettingsModal.vue` — 新增日志区域
 
 ### 新增文件
 

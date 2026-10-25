@@ -172,13 +172,6 @@
       "automationConfirm": "确认"
     },
     "user": {
-      "license": "激活码",
-      "licensePlaceholder": "请输入激活码",
-      "activate": "激活",
-      "activateNotOpen": "激活功能暂未开放",
-      "licenseInvalid": "请输入有效的激活码",
-      "activateSuccess": "激活成功",
-      "activateFailed": "激活失败",
       "maxContext": "上下文消息数",
       "maxContextPlaceholder": "100",
       "maxContextHint": "AI 每次请求携带的历史消息条数（100-500），影响对话连贯性和 token 消耗。达到上限时自动清理最早消息。",

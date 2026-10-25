@@ -51,10 +51,7 @@ export default defineConfig({
         resources: ['tesseract/*.gz'],
         matches: ['<all_urls>'],
       },
-      {
-        resources: ['wasm/*.js', 'wasm/*.wasm'],
-        matches: ['<all_urls>'],
-      },
+
     ],
     commands: {
       'toggle-chat': {

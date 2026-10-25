@@ -172,10 +172,6 @@
       "automationConfirm": "Confirm"
     },
     "user": {
-      "license": "License Key",
-      "licensePlaceholder": "Enter license key",
-      "activate": "Activate",
-      "activateNotOpen": "Activation not available yet",
       "maxContext": "Context Messages",
       "maxContextPlaceholder": "100",
       "maxContextHint": "Number of history messages per AI request (100-500). Affects conversation continuity and token usage. Oldest messages are auto-cleaned when limit is reached.",

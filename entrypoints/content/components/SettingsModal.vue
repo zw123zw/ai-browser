@@ -4,7 +4,6 @@ import { v4 as uuid } from 'uuid';
 import MarkdownIt from 'markdown-it';
 import { useSettingsStore } from '@/src/stores/settings';
 import { useConversationsStore } from '@/src/stores/conversations';
-import { useLicenseStore } from '@/src/stores/license';
 import { useToast } from '@/src/composables/useToast';
 import { abortPipeline } from '@/src/composables/usePipeline';
 import type { ModelConfig, NoteMode, Provider } from '@/src/types';
@@ -23,8 +22,7 @@ const { t, locale, setLocale } = useI18n();
 
 const appVersion = __APP_VERSION__;
 
-// ========== License & 缓存 ==========
-const licenseKey = ref('');
+// ========== 缓存 ==========
 const logEnabled = !!import.meta.env.VITE_LOG_ENABLED;
 const showClearCacheConfirm = ref(false);
 const showAutomationConfirm = ref(false);
@@ -53,22 +51,6 @@ const cacheBarClass = computed(() => {
   if (cachePercent.value >= 60) return 'aib-cache-bar--warn';
   return '';
 });
-
-const licenseStore = useLicenseStore();
-
-async function activateLicense() {
-  if (!licenseKey.value || licenseKey.value.trim().length < 10) {
-    toast.error(t('settings.user.licenseInvalid'));
-    return;
-  }
-  const result = await licenseStore.activate(licenseKey.value.trim());
-  if (result.success) {
-    toast.success(t('settings.user.activateSuccess'));
-    licenseKey.value = '';
-  } else {
-    toast.error(result.error || t('settings.user.activateFailed'));
-  }
-}
 
 async function handleClearCache() {
   showClearCacheConfirm.value = true;
@@ -1104,19 +1086,6 @@ function importModels(e: Event) {
           <!-- ========== 用户配置 ========== -->
           <div v-show="tab === 'user'" class="aib-modal-body">
 
-            <div class="aib-form-row">
-              <label>{{ t('settings.user.license') }}</label>
-              <div class="aib-input-group">
-                <input
-                  v-model="licenseKey"
-                  class="aib-input aib-input-with-btn"
-                  :placeholder="t('settings.user.licensePlaceholder')"
-                />
-                <button class="aib-btn-activate" @click="activateLicense">
-                  {{ t('settings.user.activate') }}
-                </button>
-              </div>
-            </div>
 
             <!-- 上下文消息数 -->
             <div class="aib-form-row">
@@ -1132,7 +1101,7 @@ function importModels(e: Event) {
                   placeholder="100"
                   @change="generalForm.maxContext = Math.max(100, Math.min(500, Math.round(generalForm.maxContext || 100)))"
                 />
-                <button class="aib-btn-activate" @click="saveMaxContext">{{ t('settings.general.save') }}</button>
+                <button class="aib-btn-suffix" @click="saveMaxContext">{{ t('settings.general.save') }}</button>
               </div>
               <span class="aib-text-faint">{{ t('settings.user.maxContextHint') }}</span>
             </div>
@@ -1614,8 +1583,8 @@ function importModels(e: Event) {
   color: var(--aib-text);
 }
 
-/* 激活按钮 — 与 chip/preset 统一风格 */
-.aib-btn-activate {
+/* 输入框尾部按钮 — 与 chip/preset 统一风格 */
+.aib-btn-suffix {
   padding: 0 18px;
   height: 36px;
   border: none;
@@ -1633,79 +1602,11 @@ function importModels(e: Event) {
   white-space: nowrap;
 }
 
-.aib-btn-activate:hover {
+.aib-btn-suffix:hover {
   filter: brightness(1.15);
   box-shadow: 0 2px 8px var(--aib-primary-glow);
 }
 
-/* 授权卡片 */
-.aib-license-card {
-  background: linear-gradient(135deg, var(--aib-primary-soft) 0%, transparent 60%);
-  border: 1px solid var(--aib-border);
-  border-radius: 12px;
-  padding: 16px;
-  margin-bottom: 16px;
-}
-
-.aib-license-header {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 10px;
-}
-
-.aib-license-logo {
-  width: 40px;
-  height: 40px;
-  border-radius: 10px;
-}
-
-.aib-license-title {
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--aib-text);
-}
-
-.aib-license-status {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 4px;
-}
-
-.aib-license-badge {
-  font-size: 11px;
-  font-weight: 600;
-  padding: 2px 8px;
-  border-radius: 6px;
-}
-
-.aib-license-badge--trial {
-  background: var(--aib-primary-soft);
-  color: var(--aib-primary);
-}
-
-.aib-license-badge--active {
-  background: rgba(34, 197, 94, 0.15);
-  color: #22c55e;
-}
-
-.aib-license-badge--expired {
-  background: rgba(239, 68, 68, 0.15);
-  color: #ef4444;
-}
-
-.aib-license-days {
-  font-size: 12px;
-  color: var(--aib-text-faint);
-}
-
-.aib-license-desc {
-  font-size: 12px;
-  color: var(--aib-text-faint);
-  line-height: 1.5;
-  margin: 0;
-}
 
 /* 缓存管理按钮组 */
 .aib-cache-actions {

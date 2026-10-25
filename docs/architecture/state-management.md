@@ -28,8 +28,7 @@ src/stores/
 ├── settings.ts         # useSettingsStore（全局设置 + 语音配置 + 输入历史）
 ├── conversations.ts    # useConversationsStore（单会话对话管理）
 ├── notes.ts            # useNotesStore（笔记管理）
-├── voice.ts            # useVoiceStore（语音运行时状态）
-└── license.ts          # useLicenseStore（授权状态管理）
+└── voice.ts            # useVoiceStore（语音运行时状态）
 
 src/utils/
 └── storage-sync.ts     # defineStorageSync + plain()
@@ -54,7 +53,6 @@ graph TB
         CS["useConversationsStore<br/>aib-conversations"]
         NS["useNotesStore<br/>aib-notes"]
         VS["useVoiceStore<br/>aib-voice<br/>（仅运行时状态）"]
-        LS["useLicenseStore<br/>aib-license<br/>（授权状态）"]
     end
 
     subgraph Sync["持久化同步层"]
@@ -116,7 +114,6 @@ graph LR
     CS -->|"pushInputHistory()"| SS
     CS -->|"checkAndAutoClear()"| Cache["缓存管理"]
     VS["useVoiceStore"] -->|"getVoiceSettings()"| SS
-    LS["useLicenseStore"] -.->|"独立"| WL["wasm-loader"]
     SS -.->|"独立"| NS["useNotesStore"]
 ```
 
@@ -126,7 +123,6 @@ graph LR
 - `useConversationsStore` 在 `send()` 中调用 `pushInputHistory()` 记录输入历史（该函数内部操作 `useSettingsStore`）
 - `useConversationsStore` 在 `saveConversation()` 后调用 `checkAndAutoClear()` 检查缓存大小
 - `useVoiceStore` 通过 `getVoiceSettings()` 从 `useSettingsStore` 读取所有语音配置
-- `useLicenseStore` 完全独立，不依赖其他 store，内部通过 `wasm-loader` 与 Wasm 模块交互
 - `useNotesStore` 完全独立，不依赖其他 store
 
 ---
@@ -1144,96 +1140,6 @@ function bumpSettingsVersion() {
 **bumpSettingsVersion**：语音设置变更时由外部调用，递增 `settingsVersion`，App.vue 通过 watch 此值来重建 VoiceManager 实例。
 
 ---
-
-### useLicenseStore —— 授权状态管理
-
-源码：`src/stores/license.ts`
-
-**Store ID**: `aib-license`
-
-**设计原则**：此 store 是纯状态暴露层，所有授权逻辑委托给 Wasm 模块（通过 `wasm-loader.ts`）。Store 本身不包含任何判断逻辑，仅提供响应式状态给 Vue 组件消费。
-
-**与其他 store 的关系**：完全独立，不依赖 `useSettingsStore` 或其他 store。内部通过 `src/license/wasm-loader.ts` 与 Wasm 模块交互。
-
-#### 状态
-
-```typescript
-const status = ref<string>('unknown');     // 当前授权状态
-const daysLeft = ref<number>(0);           // 剩余天数
-const initialized = ref<boolean>(false);   // Wasm 模块是否已加载
-const loading = ref<boolean>(false);       // 加载中状态
-const error = ref<string | null>(null);    // 错误信息
-```
-
-#### 计算属性
-
-```typescript
-const isActive = computed(() => status.value === 'trial' || status.value === 'active');
-const isTrial = computed(() => status.value === 'trial');
-const isActivated = computed(() => status.value === 'active');
-const isExpired = computed(() => status.value === 'expired');
-const statusText = computed(() => { /* 根据 status 返回中文显示文本 */ });
-```
-
-#### init(): Promise<void>
-
-初始化流程：
-
-```typescript
-async function init() {
-  if (initialized.value) return;
-  loading.value = true;
-  try {
-    await initWasm();                    // 加载 Wasm 模块
-    const result = await checkLicense(); // 检查现有授权或初始化试用期
-    if (result.status === 'corrupted') {
-      await clearLicense();              // 数据损坏，清除后重新初始化
-      const trial = await checkLicense();
-      status.value = trial.status;
-      daysLeft.value = trial.daysLeft;
-    } else {
-      status.value = result.status;
-      daysLeft.value = result.daysLeft;
-    }
-    initialized.value = true;
-  } catch (err) {
-    // Wasm 加载失败时不阻塞应用，允许试用
-    status.value = 'trial';
-    daysLeft.value = 7;
-    initialized.value = true;
-  } finally {
-    loading.value = false;
-  }
-}
-```
-
-**容错设计**：Wasm 加载失败时（如网络问题、CSP 限制），不阻塞应用运行，默认给予 7 天试用期。
-
-#### activate(code): Promise<{ success, error? }>
-
-```typescript
-async function activate(code: string): Promise<{ success: boolean; error?: string }> {
-  const result = await activateCode(code);
-  if (result.valid) {
-    status.value = result.status || 'active';
-    daysLeft.value = result.daysLeft || 0;
-    return { success: true };
-  }
-  return { success: false, error: result.error || '激活失败' };
-}
-```
-
-#### trackAction(action): Promise<void>
-
-每次用户操作（聊天、语音、自动化）时调用，触发 Wasm 内部的使用统计和隐性校验。
-
-#### refresh(): Promise<void>
-
-重新检查授权状态，更新 `status` 和 `daysLeft`。
-
-#### reset(): Promise<void>
-
-清除所有授权数据（测试用），重置状态为 `unknown`。
 
 ---
 

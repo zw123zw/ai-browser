@@ -835,4 +835,4 @@ AI 通过 `[FILE]` 标签嵌入可下载文件：文本、CSV、Excel、JSON、P
 
 > **小灵 LingBot** | MIT License
 >
-> 遇到使用问题或需要激活码？请发送邮件至 xiaoling6668882026@outlook.com 或私信联系。
+> 遇到使用问题？请发送邮件至 xiaoling6668882026@outlook.com 或私信联系。

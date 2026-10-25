@@ -4,7 +4,7 @@
  * Applies additional mangling/compression to built JS files.
  * Uses esbuild (fast, handles any file size).
  *
- * vendor.js and wasm/*.js are skipped.
+ * vendor.js is skipped.
  */
 
 import { readFileSync, writeFileSync, readdirSync, statSync } from 'fs';
@@ -15,7 +15,7 @@ const args = process.argv.slice(2);
 const dirArg = args.find(a => a.startsWith('--dir='));
 const outputDir = dirArg ? dirArg.split('=')[1] : join(process.cwd(), '.output', 'chrome-mv3');
 
-// Find JS files to process (skip vendor, wasm glue)
+// Find JS files to process (skip vendor)
 function findJsFiles(dir) {
   const files = [];
   try {
@@ -24,7 +24,6 @@ function findJsFiles(dir) {
       const fullPath = join(dir, entry);
       const stat = statSync(fullPath);
       if (stat.isDirectory()) {
-        if (entry === 'wasm') continue;
         files.push(...findJsFiles(fullPath));
       } else if (extname(entry) === '.js') {
         if (basename(entry) === 'vendor.js') continue;
